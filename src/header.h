@@ -6,6 +6,8 @@
 #include <map>
 #include <cstdint>
 
+namespace bgen {
+
 class BgenHeader {
   std::uint32_t offset;
   std::uint32_t header_length;
@@ -20,3 +22,5 @@ public:
   int layout;
   bool has_sample_ids;
 };
+
+} // namespace bgen

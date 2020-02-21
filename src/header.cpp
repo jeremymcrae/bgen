@@ -6,6 +6,8 @@
 
 #include "header.h"
 
+namespace bgen {
+
 unsigned char reverse(unsigned char b) {
    b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
    b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
@@ -56,3 +58,5 @@ BgenHeader::BgenHeader(std::ifstream & handle) {
   
   int layout = _flags[2] + _flags[3] + _flags[4] + _flags[5];
 }
+
+} // namespace bgen
