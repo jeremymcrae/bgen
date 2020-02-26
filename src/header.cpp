@@ -16,16 +16,16 @@ unsigned char reverse(unsigned char b) {
 }
 
 std::bitset<32> read_flags(std::ifstream & handle) {
-  std::bitset<32> _flags;
+  std::bitset<32> flags;
   for (int i=0; i < 4; i++) {
     char a;
     handle.read(&a, 1);
     std::bitset<8> tmp(reverse(a));
     for (int j = 0; j < 8; j++){
-        _flags[(i * 8) + j] = tmp[j];
+        flags[(i * 8) + j] = tmp[j];
       }
   }
-  return _flags;
+  return flags;
 }
 
 BgenHeader::BgenHeader(std::ifstream & handle) {
@@ -45,18 +45,12 @@ BgenHeader::BgenHeader(std::ifstream & handle) {
   }
   
   // read flags data
-  std::bitset<32> _flags = read_flags(handle);
+  std::bitset<32> flags = read_flags(handle);
   
-  int _compress = _flags[0] + _flags[1];
-  if (_compress == 0) {
-    compression = "none";
-  } else if (_compress == 1) {
-    compression = "zlib";
-  } else {
-    compression = "zstd";
-  }
-  
-  int layout = _flags[2] + _flags[3] + _flags[4] + _flags[5];
+  // compression, where 0=no_compression, 1=zlib, 2=zstd
+  compression = flags[0] + flags[1];
+  layout = flags[2] + flags[3] + flags[4] + flags[5];
+  has_sample_ids = flags[31];
 }
 
 } // namespace bgen

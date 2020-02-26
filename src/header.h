@@ -18,7 +18,7 @@ public:
   BgenHeader() {};
   std::uint32_t nvariants;
   std::uint32_t nsamples = 5;
-  std::string compression;
+  int compression;
   int layout;
   bool has_sample_ids;
 };
