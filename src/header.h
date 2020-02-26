@@ -8,14 +8,14 @@
 
 namespace bgen {
 
-class BgenHeader {
+class Header {
   std::uint32_t offset;
   std::uint32_t header_length;
   std::string magic;
   std::string extra;
 public:
-  BgenHeader(std::ifstream & handle);
-  BgenHeader() {};
+  Header(std::ifstream & handle);
+  Header() {};
   std::uint32_t nvariants;
   std::uint32_t nsamples = 5;
   int compression;

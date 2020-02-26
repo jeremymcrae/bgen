@@ -6,11 +6,11 @@
 
 namespace bgen {
 
-class BgenSamples {
+class Samples {
 public:
-  BgenSamples(std::ifstream & handle, int n_samples);
-  BgenSamples(std::string path, int n_samples);
-  BgenSamples() {};
+  Samples(std::ifstream & handle, int n_samples);
+  Samples(std::string path, int n_samples);
+  Samples() {};
   std::vector<std::string> samples;
 };
 

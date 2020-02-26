@@ -28,7 +28,7 @@ std::bitset<32> read_flags(std::ifstream & handle) {
   return flags;
 }
 
-BgenHeader::BgenHeader(std::ifstream & handle) {
+Header::Header(std::ifstream & handle) {
   handle.read(reinterpret_cast<char*>(&offset), sizeof(std::uint32_t));
   handle.read(reinterpret_cast<char*>(&header_length), sizeof(std::uint32_t));
   handle.read(reinterpret_cast<char*>(&nvariants), sizeof(std::uint32_t));

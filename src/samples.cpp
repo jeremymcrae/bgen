@@ -8,7 +8,7 @@
 
 namespace bgen {
 
-BgenSamples::BgenSamples(std::ifstream & handle, int n_samples) {
+Samples::Samples(std::ifstream & handle, int n_samples) {
   /* initialize sample list if present in the bgen file
   */
   std::uint32_t sample_header_length;
@@ -41,7 +41,7 @@ std::vector<std::string> split(const std::string &s, char delim) {
   return elems;
 }
 
-BgenSamples::BgenSamples(std::string path, int n_samples) {
+Samples::Samples(std::string path, int n_samples) {
   /* initialize from external sample file
   */
   std::ifstream handle(path, std::ios::in);
