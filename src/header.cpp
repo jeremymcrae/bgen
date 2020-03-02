@@ -8,26 +8,6 @@
 
 namespace bgen {
 
-unsigned char reverse(unsigned char b) {
-  b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
-  b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
-  b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
-  return b;
-}
-
-std::bitset<32> read_flags(std::ifstream & handle) {
-  std::bitset<32> flags;
-  for (int i=0; i < 4; i++) {
-    char a;
-    handle.read(&a, 1);
-    std::bitset<8> tmp(reverse(a));
-    for (int j = 0; j < 8; j++){
-        flags[(i * 8) + j] = tmp[j];
-      }
-  }
-  return flags;
-}
-
 Header::Header(std::ifstream & handle) {
   handle.read(reinterpret_cast<char*>(&offset), sizeof(std::uint32_t));
   handle.read(reinterpret_cast<char*>(&header_length), sizeof(std::uint32_t));
@@ -36,7 +16,9 @@ Header::Header(std::ifstream & handle) {
   std::copy_n(std::istream_iterator<char>(handle), sizeof(std::uint32_t), std::back_inserter(magic));
   
   // make sure we are reading a bgen file
-  assert (magic == "bgen" | magic == "0000");
+  if (magic != "bgen" & magic != "0000") {
+    throw std::invalid_argument("doesn't appear to be a bgen file");
+  }
   
   // read any extra data contained in the header
   int size = header_length - 20;
@@ -46,11 +28,12 @@ Header::Header(std::ifstream & handle) {
   
   // read flags data
   std::bitset<32> flags = read_flags(handle);
+  std::bitset<32> compr_mask(0b110000000000000000000000000000);
+  std::bitset<32> layout_mask(0b001111000000000000000000000000);
   
-  // compression, where 0=no_compression, 1=zlib, 2=zstd
-  compression = flags[0] + flags[1];
-  layout = flags[2] + flags[3] + flags[4] + flags[5];
-  has_sample_ids = flags[31];
+  compression = (int) ((flags & compr_mask) >> 30).to_ulong();
+  layout = (int) ((flags & layout_mask) >> 26).to_ulong();
+  has_sample_ids = flags[0];
 }
 
 } // namespace bgen
