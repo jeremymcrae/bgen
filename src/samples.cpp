@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "samples.h"
+#include "utils.h"
 
 namespace bgen {
 
@@ -21,24 +22,12 @@ Samples::Samples(std::ifstream & handle, int n_samples) {
   }
   
   std::uint16_t id_len;
-  for (int i=0; i<n_samples; i++){
+  for (int i=0; i<n_samples; i++) {
     handle.read(reinterpret_cast<char*>(&id_len), sizeof(id_len));
     std::string sample_id;
     std::copy_n(std::istream_iterator<char>(handle), id_len, std::back_inserter(sample_id));
     samples.push_back(sample_id);
   }
-}
-
-std::vector<std::string> split(const std::string &s, char delim) {
-  /* split a string by delimiter into a vector of elements
-  */
-  std::vector<std::string> elems;
-  std::istringstream iss(s);
-  std::string item;
-  while (std::getline(iss, item, delim)) {
-    elems.push_back(item);
-  }
-  return elems;
 }
 
 Samples::Samples(std::string path, int n_samples) {
@@ -55,6 +44,14 @@ Samples::Samples(std::string path, int n_samples) {
   }
   if (n_samples != (int)samples.size()) {
     throw std::invalid_argument("inconsistent number of samples");
+  }
+}
+
+Samples::Samples(int n_samples) {
+  /* initialize with integer IDs if no sample list available
+  */
+  for (int i=0; i<n_samples; i++) {
+    samples.push_back(std::to_string(i));
   }
 }
 
