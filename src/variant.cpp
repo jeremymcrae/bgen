@@ -5,7 +5,7 @@
 
 namespace bgen {
 
-Variant::Variant(std::ifstream & handle, int layout, int compression) {
+Variant::Variant(std::ifstream & handle, int layout, int compression, int expected_n) {
   /* initialise a single variant with chrom, pos, rsID identifiers
   
   This starts a Genotypes object, but this doesn't parse the genotypes until
@@ -15,6 +15,12 @@ Variant::Variant(std::ifstream & handle, int layout, int compression) {
   offset = handle.tellg();
   if (layout == 1) {
     handle.read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
+  } else {
+    n_samples = expected_n;
+  }
+  
+  if (n_samples != expected_n) {
+    throw std::invalid_argument("number of samples doesn't match");
   }
   
   // get the variant ID (first need to know how long the field is)
