@@ -10,10 +10,7 @@
 
 namespace bgen {
 
-unsigned char reverse(unsigned char b);
-std::bitset<32> read_flags(std::ifstream & handle);
 std::vector<std::string> split(const std::string &s, char delim);
-int n_choose_k(int n, int k);
 
 class BinomialCoefficient {
   std::map<std::vector<int>, int> cached;
