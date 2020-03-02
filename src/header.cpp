@@ -27,13 +27,14 @@ Header::Header(std::ifstream & handle) {
   }
   
   // read flags data
-  std::bitset<32> flags = read_flags(handle);
-  std::bitset<32> compr_mask(0b110000000000000000000000000000);
-  std::bitset<32> layout_mask(0b001111000000000000000000000000);
+  std::bitset<32> flags;
+  handle.read(reinterpret_cast<char*>(&flags), sizeof(std::uint32_t));
   
-  compression = (int) ((flags & compr_mask) >> 30).to_ulong();
-  layout = (int) ((flags & layout_mask) >> 26).to_ulong();
-  has_sample_ids = flags[0];
+  std::bitset<32> compr_mask(0b000000000000000000000000000011);
+  std::bitset<32> layout_mask(0b000000000000000000000000111100);
+  compression = (int) (flags & compr_mask).to_ulong();
+  layout = (int) ((flags & layout_mask) >> 2).to_ulong();
+  has_sample_ids = flags[31];
 }
 
 } // namespace bgen
