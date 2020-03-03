@@ -26,7 +26,6 @@ Bgen::Bgen(std::string path, std::string sample_path) {
       break;
     }
     Variant variant(handle, header.layout, header.compression, header.nsamples);
-    handle.seekg(variant.next_variant_offset());
     variants.push_back(variant);
   }
 }

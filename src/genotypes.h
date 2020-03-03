@@ -24,6 +24,7 @@ public:
       handle->read(reinterpret_cast<char*>(&length), sizeof(length));
       offset = handle->tellg();
       next_var_offset = offset + length;
+      handle->seekg(next_var_offset);
   };
   Genotypes() {};
   // std::vector<char> decompress(std::vector<char> bytes, int length);
