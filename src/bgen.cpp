@@ -4,7 +4,7 @@
 namespace bgen {
 
 Bgen::Bgen(std::string path, std::string sample_path) {
-  std::ifstream handle(path, std::ios::binary);
+  handle.open(path, std::ios::binary);
   std::uint64_t fsize = handle.tellg();
   header = Header(handle);
   if (header.has_sample_ids) {
