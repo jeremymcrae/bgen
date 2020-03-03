@@ -126,10 +126,12 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   float divisor = (float) (std::pow(2, (int) bit_depth)) - 1;
   
   // get genotype/allele probabilities
+  parsed.reserve(n_samples);  // preallocate memory for probabilities (faster)
   int bit_len = (int) bit_depth / 8;
   std::uint32_t n_probs;
   float prob;
   float remainder;
+  std::vector<float> sample;
   int end;
   for (int start=0; start < n_samples; start++) {
     // calculate the number of probabilities per sample (depends on whether the
@@ -141,7 +143,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
     }
     end = n_probs * bit_len;
     remainder = 1.0;
-    std::vector<float> sample;
+    sample = {};
     for (int x=0; x<end; x++) {
       if (bit_depth == 8) {
         prob = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) / divisor;
