@@ -32,7 +32,7 @@ public:
   void parse_layout1(std::vector<char>);
   void parse_layout2(std::vector<char>);
   std::vector<std::vector<double>> genotypes();
-  std::vector<int> ploidy;
+  std::vector<std::uint8_t> ploidy;
   std::vector<std::vector<double>> parsed;
   std::uint64_t next_var_offset;
 };

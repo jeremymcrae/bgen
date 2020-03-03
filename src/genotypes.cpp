@@ -99,15 +99,15 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   int max_ploidy = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
   idx += sizeof(std::uint8_t);
   
-  // get ploidy and missing states
+  // get ploidy and missing states. this uses 30 milliseconds for 500k samples
   std::vector<bool> missing;
-  std::bitset<8> mask(0b00111111);
-  std::bitset<8> flags;
+  std::uint8_t flags;
+  std::uint8_t mask = 63;
   for (int x=0; x < n_samples; x++) {
     flags = uncompressed[idx];
-    idx += sizeof(std::uint8_t);
-    ploidy.push_back((int) (flags & mask).to_ulong());
-    missing.push_back(flags[8]);
+    ploidy.push_back(mask & flags);
+    missing.push_back(flags >> 7);
+    idx += 1;
   }
   
   int phased = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
@@ -129,7 +129,6 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   std::uint32_t n_probs;
   double prob;
   double remainder;
-  BinomialCoefficient bincoef;
   int end;
   for (int start=0; start < n_samples; start++) {
     // calculate the number of probabilities per sample (depends on whether the
@@ -137,7 +136,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
     if (phased) {
       n_probs = ploidy[start] * (n_alleles - 1);
     } else {
-      n_probs = bincoef.n_choose_k(ploidy[start] + n_alleles - 1, n_alleles - 1) - 1;
+      n_probs = n_choose_k(ploidy[start] + n_alleles - 1, n_alleles - 1) - 1;
     }
     end = n_probs * bit_len;
     remainder = 1.0;
@@ -165,7 +164,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
 std::vector<std::vector<double>> Genotypes::genotypes() {
   /* parse genotype data for a single variant
   */
-  handle->seekg(offset);
+  handle->seekg(offset);  // about 1 microsecond
   
   bool decompressed_field = false;
   std:uint32_t decompressed_len;
@@ -180,8 +179,8 @@ std::vector<std::vector<double>> Genotypes::genotypes() {
   
   std::uint32_t compressed_len = next_var_offset - offset - decompressed_field * 4;
   char geno[compressed_len];
-  handle->read(&geno[0], compressed_len);
-  auto uncompressed = decompress(geno, (int) compressed_len, (int) decompressed_len);
+  handle->read(&geno[0], compressed_len); // about 70 microseconds
+  auto uncompressed = decompress(geno, (int) compressed_len, (int) decompressed_len);  // about 2-3 milliseconds
   
   switch (layout) {
     case 1: {
