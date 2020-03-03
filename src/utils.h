@@ -11,13 +11,7 @@
 namespace bgen {
 
 std::vector<std::string> split(const std::string &s, char delim);
-
-class BinomialCoefficient {
-  std::map<std::vector<int>, int> cached;
-public:
-  BinomialCoefficient() {};
-  int n_choose_k(int n, int k);
-};
+int n_choose_k(int n, int k);
 
 } // namespace bgen
 

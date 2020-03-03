@@ -15,31 +15,22 @@ std::vector<std::string> split(const std::string &s, char delim) {
   return elems;
 }
 
-int BinomialCoefficient::n_choose_k(int n, int k) {
-  /* calculate value of binomial coefficient, but only if it's not cached already
-  
-  This function depends on the ploidy and allele number, which will mostly be
-  < 3, so this just caches the result after the first time it's computed for
-  quick lookup.
-  */
+// Returns value of Binomial Coefficient C(n, k)
+int n_choose_k(int n, int k) {
+  int res = 1;
+
+  // Since C(n, k) = C(n, n-k)
   if ( k > n - k ) {
     k = n - k;
   }
-  std::vector<int> pair = {n, k};
-  if (cached.count(pair) == 1) {
-    return cached[pair];
-  }
-  
-  int res = 1;
-  
+
   // Calculate value of
   // [n * (n-1) *---* (n-k+1)] / [k * (k-1) *----* 1]
   for (int i = 0; i < k; ++i) {
     res *= (n - i);
     res /= (i + 1);
   }
-  cached[pair] = res;
-  
+
   return res;
 }
 
