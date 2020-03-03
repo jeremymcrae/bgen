@@ -65,11 +65,11 @@ std::string Variant::alt() {
   throw std::invalid_argument("haven't completed alt() fucntion yet");
 }
 
-std::vector<std::vector<double>> Variant::genotypes() {
+std::vector<std::vector<float>> Variant::genotypes() {
   return geno.genotypes();
 }
 
-std::vector<double> Variant::alt_dosage() {
+std::vector<float> Variant::alt_dosage() {
   throw std::invalid_argument("haven't completed alt_dosage() fucntion yet");
 }
 

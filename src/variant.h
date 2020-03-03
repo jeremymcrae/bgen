@@ -19,8 +19,8 @@ public:
   Variant(std::ifstream & handle, int layout, int compression, int expected_n);
   std::uint64_t next_variant_offset();
   std::string alt();
-  std::vector<std::vector<double>> genotypes();
-  std::vector<double> alt_dosage();
+  std::vector<std::vector<float>> genotypes();
+  std::vector<float> alt_dosage();
   
   std::uint32_t n_samples;
   std::string varid;

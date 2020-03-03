@@ -63,12 +63,13 @@ void Genotypes::parse_layout1(std::vector<char> probs) {
   ploidy = {};
   parsed = {};
   int end;
+  std::vector<float> sample;
+  float prob;
   for (int start=0; start < n_samples; start++) {
     end = start + 6;
-    std::vector<double> sample;
     for (int x=start; x<end; x+2) {
       std::uint16_t value = *reinterpret_cast<const std::uint16_t*>(&probs[x]);
-      double prob = (double)value / 32768;
+      prob = (float) value / 32768;
       sample.push_back(prob);
     }
     if ((sample[0] == 0.0) & (sample[1] == 0.0) & (sample[2] == 0.0)) {
@@ -122,13 +123,13 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   }
   
   idx += sizeof(std::uint8_t);
-  double divisor = (double) (std::pow(2, (int) bit_depth)) - 1;
+  float divisor = (float) (std::pow(2, (int) bit_depth)) - 1;
   
   // get genotype/allele probabilities
   int bit_len = (int) bit_depth / 8;
   std::uint32_t n_probs;
-  double prob;
-  double remainder;
+  float prob;
+  float remainder;
   int end;
   for (int start=0; start < n_samples; start++) {
     // calculate the number of probabilities per sample (depends on whether the
@@ -140,7 +141,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
     }
     end = n_probs * bit_len;
     remainder = 1.0;
-    std::vector<double> sample;
+    std::vector<float> sample;
     for (int x=0; x<end; x++) {
       if (bit_depth == 8) {
         prob = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) / divisor;
@@ -161,7 +162,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   }
 }
 
-std::vector<std::vector<double>> Genotypes::genotypes() {
+std::vector<std::vector<float>> Genotypes::genotypes() {
   /* parse genotype data for a single variant
   */
   handle->seekg(offset);  // about 1 microsecond
