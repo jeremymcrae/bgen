@@ -172,8 +172,7 @@ std::vector<std::vector<double>> Genotypes::genotypes() {
   if (compression != 0) {
     if (layout == 1) {
       decompressed_len = n_samples * 6;
-    }
-    else if (layout == 2) {
+    } else if (layout == 2) {
       decompressed_field = true;
       handle->read(reinterpret_cast<char*>(&decompressed_len), sizeof(std::uint32_t));
     }
