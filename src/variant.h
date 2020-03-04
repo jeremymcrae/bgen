@@ -18,9 +18,12 @@ class Variant {
 public:
   Variant(std::ifstream & handle, int layout, int compression, int expected_n);
   std::uint64_t next_variant_offset();
-  std::string alt();
   std::vector<std::vector<float>> & probabilities();
-  std::vector<float> alt_dosage();
+  int alt_index(std::vector<std::vector<float>> & dose);
+  void dosages(std::vector<std::vector<float>> & dose);
+  std::vector<float> & alt_dosage();
+  std::vector<float> alt_dose;
+  std::vector<std::vector<float>> dose;
   
   std::uint32_t n_samples;
   std::string varid;

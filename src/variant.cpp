@@ -61,16 +61,58 @@ std::uint64_t Variant::next_variant_offset() {
   return geno.next_var_offset;
 }
 
-std::string Variant::alt() {
-  throw std::invalid_argument("haven't completed alt() fucntion yet");
+int Variant::alt_index(std::vector<std::vector<float>> & dose) {
+  /* find the index offset for the alt allele (second most frequent allele)
+  */
+  // get the per column sums. Assumes only two alleles, probably ok in practise
+  std::vector<double> sums(2);
+  for (int n=0; n<n_samples; n++) {
+    sums[0] += dose[n][0];
+    sums[1] += dose[n][1];
+  }
+  
+  if (sums[0] > sums[1]) {
+    return 0;
+  } else if (sums[1] > sums[0]) {
+    return 1;
+  } else {
+    return 1; // pick the first if the alelles are 50:50
+  }
 }
 
 std::vector<std::vector<float>> & Variant::probabilities() {
   return geno.probabilities();
 }
 
-std::vector<float> Variant::alt_dosage() {
-  throw std::invalid_argument("haven't completed alt_dosage() fucntion yet");
+void Variant::dosages(std::vector<std::vector<float>> & dose) {
+  /* get allele dosages (assumes biallelic variant)
+  */
+  if (n_alleles != 2) {
+    throw std::invalid_argument("can't get allele dosages for non-biallelic var.");
+  }
+  
+  auto & probs = probabilities();
+  
+  std::uint8_t ploidy;
+  for (int n=0; n<n_samples; n++) {
+    ploidy = geno.ploidy[n];
+    float halved = probs[n][1] * ((float) ploidy / 2);
+    dose[n][0] = (probs[n][0] * ploidy) + halved;
+    dose[n][1] = (probs[n][2] * ploidy) + halved;
+  }
+}
+
+std::vector<float> & Variant::alt_dosage() {
+  dose = std::vector<std::vector<float>>(n_samples, std::vector<float>(2, 0));
+  dosages(dose);
+  int idx = alt_index(dose);
+  
+  alt_dose = std::vector<float>(n_samples);
+  for (int n=0; n<n_samples; n++) {
+    alt_dose[n] = dose[n][idx];
+  }
+  
+  return alt_dose;
 }
 
 } // namespace bgen
