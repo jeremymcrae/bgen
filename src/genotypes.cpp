@@ -98,17 +98,15 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   int max_ploidy = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
   idx += sizeof(std::uint8_t);
   
-  // get ploidy and missing states. this uses 30 milliseconds for 500k samples
-  ploidy = {};
-  std::vector<bool> missing;
-  ploidy.reserve(n_samples);
-  missing.reserve(n_samples);
+  // get ploidy and missing states. this uses 15 milliseconds for 500k samples
+  ploidy = std::vector<std::uint8_t>(n_samples);
+  std::vector<bool> missing(n_samples);
   std::uint8_t flags;
   std::uint8_t mask = 63;
   for (int x=0; x < n_samples; x++) {
     flags = uncompressed[idx];
-    ploidy.push_back(mask & flags);
-    missing.push_back(flags >> 7);
+    ploidy[x] = mask & flags;
+    missing[x] = flags >> 7;
     idx += 1;
   }
   
