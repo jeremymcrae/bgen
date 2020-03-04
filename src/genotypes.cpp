@@ -126,15 +126,22 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   idx += sizeof(std::uint8_t);
   float divisor = (float) (std::pow(2, (int) bit_depth)) - 1;
   
+  // figure out the maximum number of probabilities across the individuals. This
+  // allows preallocating the probs vector rather than clearing at each sample.
+  int max_sample_len;
+  if (phased) {
+    max_sample_len = max_ploidy * (n_alleles - 1);
+  } else {
+    max_sample_len = n_choose_k(max_ploidy + n_alleles - 1, n_alleles - 1) - 1;
+  }
+  
   // get genotype/allele probabilities
-  parsed = {};
-  parsed.reserve(n_samples);  // preallocate memory for probabilities (faster)
   int bit_len = (int) bit_depth / 8;
   std::uint32_t n_probs;
   float prob;
   float remainder;
-  std::vector<float> sample;
-  int end;
+  std::vector<float> sample(max_sample_len + 1);
+  parsed = std::vector<std::vector<float>>(n_samples, sample);
   for (int start=0; start < n_samples; start++) {
     // calculate the number of probabilities per sample (depends on whether the
     // data is phased, the sample ploidy and the number of alleles)
@@ -143,10 +150,8 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
     } else {
       n_probs = n_choose_k(ploidy[start] + n_alleles - 1, n_alleles - 1) - 1;
     }
-    end = n_probs * bit_len;
     remainder = 1.0;
-    sample = {};
-    for (int x=0; x<end; x++) {
+    for (int x=0; x<n_probs; x++) {
       if (bit_depth == 8) {
         prob = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) / divisor;
       } else if (bit_depth == 16) {
@@ -156,13 +161,16 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
       }
       idx += bit_len;
       remainder -= prob;
-      sample.push_back(prob);
+      parsed[start][x] = prob;
     }
+    parsed[start][n_probs] = remainder;
+    
+    // if the sample has missing data, just set values to NA
     if (missing[start]) {
-      sample = {std::nan("1"), std::nan("1"), std::nan("1")};
+      for (int x=0; x<(n_probs + 1); x++) {
+        parsed[start][x] = std::nan("1");
+      }
     }
-    sample.push_back(remainder);
-    parsed.push_back(sample);
   }
 }
 
