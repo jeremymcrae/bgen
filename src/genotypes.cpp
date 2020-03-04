@@ -84,8 +84,6 @@ void Genotypes::parse_layout1(std::vector<char> probs) {
 void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   /* parse probabilities for layout2
   */
-  ploidy = {};
-  parsed = {};
   int idx = 0;
   std::uint32_t nn_samples = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]);
   idx += sizeof(std::uint32_t);
@@ -101,7 +99,10 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   idx += sizeof(std::uint8_t);
   
   // get ploidy and missing states. this uses 30 milliseconds for 500k samples
+  ploidy = {};
   std::vector<bool> missing;
+  ploidy.reserve(n_samples);
+  missing.reserve(n_samples);
   std::uint8_t flags;
   std::uint8_t mask = 63;
   for (int x=0; x < n_samples; x++) {
@@ -126,6 +127,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   float divisor = (float) (std::pow(2, (int) bit_depth)) - 1;
   
   // get genotype/allele probabilities
+  parsed = {};
   parsed.reserve(n_samples);  // preallocate memory for probabilities (faster)
   int bit_len = (int) bit_depth / 8;
   std::uint32_t n_probs;
