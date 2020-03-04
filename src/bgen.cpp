@@ -30,4 +30,34 @@ Bgen::Bgen(std::string path, std::string sample_path) {
   }
 }
 
+std::vector<std::string> Bgen::rsids() {
+  /* get all the rsIDs for the variants in the bgen file
+  */
+  std::vector<std::string> rsid(variants.size());
+  for (int x=0; x<variants.size(); x++) {
+    rsid[x] = variants[x].rsid;
+  }
+  return rsid;
+}
+
+std::vector<std::string> Bgen::chroms() {
+  /* get all the rsIDs for the variants in the bgen file
+  */
+  std::vector<std::string> chrom(variants.size());
+  for (int x=0; x<variants.size(); x++) {
+    chrom[x] = variants[x].chrom;
+  }
+  return chrom;
+}
+
+std::vector<std::uint32_t> Bgen::positions() {
+  /* get all the rsIDs for the variants in the bgen file
+  */
+  std::vector<std::uint32_t> position(variants.size());
+  for (int x=0; x<variants.size(); x++) {
+    position[x] = variants[x].pos;
+  }
+  return position;
+}
+
 } // namespace bgen

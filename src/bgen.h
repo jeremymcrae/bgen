@@ -15,6 +15,9 @@ class Bgen {
 public:
   Bgen(std::string path, std::string sample_path="");
   Variant next_var();
+  std::vector<std::string> rsids();
+  std::vector<std::string> chroms();
+  std::vector<std::uint32_t> positions();
   std::vector<Variant> variants;
   Header header;
   Samples samples;
