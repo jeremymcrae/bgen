@@ -31,7 +31,7 @@ public:
   std::vector<char> decompress(char * bytes, int compressed_len, int decompressed_len);
   void parse_layout1(std::vector<char>);
   void parse_layout2(std::vector<char>);
-  std::vector<std::vector<float>> & genotypes();
+  std::vector<std::vector<float>> & probabilities();
   std::vector<std::uint8_t> ploidy;
   std::vector<std::vector<float>> parsed;
   std::uint64_t next_var_offset;

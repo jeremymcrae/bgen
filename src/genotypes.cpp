@@ -172,7 +172,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   }
 }
 
-std::vector<std::vector<float>> & Genotypes::genotypes() {
+std::vector<std::vector<float>> & Genotypes::probabilities() {
   /* parse genotype data for a single variant
   */
   handle->seekg(offset);  // about 1 microsecond
