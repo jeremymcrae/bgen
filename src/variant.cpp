@@ -65,7 +65,7 @@ std::string Variant::alt() {
   throw std::invalid_argument("haven't completed alt() fucntion yet");
 }
 
-std::vector<std::vector<float>> Variant::genotypes() {
+std::vector<std::vector<float>> & Variant::genotypes() {
   return geno.genotypes();
 }
 
