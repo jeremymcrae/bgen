@@ -19,7 +19,7 @@ public:
   Variant(std::ifstream & handle, int layout, int compression, int expected_n);
   std::uint64_t next_variant_offset();
   std::string alt();
-  std::vector<std::vector<float>> & probabilty();
+  std::vector<std::vector<float>> & probabilities();
   std::vector<float> alt_dosage();
   
   std::uint32_t n_samples;
