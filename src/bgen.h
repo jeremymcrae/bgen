@@ -20,6 +20,7 @@ public:
   std::vector<std::string> rsids();
   std::vector<std::string> chroms();
   std::vector<std::uint32_t> positions();
+  Variant & operator[](std::size_t idx) { return variants[idx]; }
   std::vector<Variant> variants;
   Header header;
   Samples samples;
