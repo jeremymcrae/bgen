@@ -2,6 +2,7 @@
 #define BGEN_BGEN_H_
 
 #include <fstream>
+#include <stdexcept>
 #include <vector>
 
 #include "header.h"
@@ -15,6 +16,7 @@ class Bgen {
 public:
   Bgen(std::string path, std::string sample_path="");
   Variant next_var();
+  void drop_variants(std::vector<int> indices);
   std::vector<std::string> rsids();
   std::vector<std::string> chroms();
   std::vector<std::uint32_t> positions();

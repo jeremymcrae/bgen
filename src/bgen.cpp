@@ -30,6 +30,23 @@ Bgen::Bgen(std::string path, std::string sample_path) {
   }
 }
 
+void Bgen::drop_variants(std::vector<int> indices) {
+  /* drop a subset of variants passed in by indexes
+  */
+  // sort indices in descending order, so dropping elemtns doesn't affect later items
+  std::sort(indices.rbegin(), indices.rend());
+  
+  auto it = std::unique(indices.begin(), indices.end());
+  if (it != indices.end()) {
+    throw std::invalid_argument("can't drop variants with duplicate indices");
+  }
+  
+  std::vector<Variant>::iterator begin = variants.begin();
+  for (auto idx : indices) {
+    variants.erase(begin + idx);
+  }
+}
+
 std::vector<std::string> Bgen::rsids() {
   /* get all the rsIDs for the variants in the bgen file
   */
@@ -41,7 +58,7 @@ std::vector<std::string> Bgen::rsids() {
 }
 
 std::vector<std::string> Bgen::chroms() {
-  /* get all the rsIDs for the variants in the bgen file
+  /* get all the chroms for the variants in the bgen file
   */
   std::vector<std::string> chrom(variants.size());
   for (int x=0; x<variants.size(); x++) {
@@ -51,7 +68,7 @@ std::vector<std::string> Bgen::chroms() {
 }
 
 std::vector<std::uint32_t> Bgen::positions() {
-  /* get all the rsIDs for the variants in the bgen file
+  /* get all the positions for the variants in the bgen file
   */
   std::vector<std::uint32_t> position(variants.size());
   for (int x=0; x<variants.size(); x++) {
