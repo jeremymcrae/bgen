@@ -57,27 +57,32 @@ std::vector<char> Genotypes::decompress(char * bytes, int compressed_len, int de
   return decompressed;
 }
 
-void Genotypes::parse_layout1(std::vector<char> probs) {
+void Genotypes::parse_layout1(std::vector<char> uncompressed) {
   /* parse probabilities for layout1
   */
-  ploidy = {};
-  parsed = {};
-  int end;
-  std::vector<float> sample;
+  ploidy = std::vector<std::uint8_t>(n_samples);
+  max_probs = 3;
+  probs = new float*[max_probs];
+  for (int i=0; i<max_probs; i++) {
+    probs[i] = new float[n_samples];
+  }
+  
+  int idx = 0;
+  int bit_len = 2;
+  float divisor = 32768;
   float prob;
-  for (int start=0; start < n_samples; start++) {
-    end = start + 6;
-    for (int x=start; x<end; x+2) {
-      std::uint16_t value = *reinterpret_cast<const std::uint16_t*>(&probs[x]);
-      prob = (float) value / 32768;
-      sample.push_back(prob);
+  for (int n=0; n<n_samples; n++) {
+    for (int x=0; x<3; x++) {
+      prob = (float) *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) / divisor;
+      probs[x][n] = prob;
+      idx += bit_len;
     }
-    if ((sample[0] == 0.0) & (sample[1] == 0.0) & (sample[2] == 0.0)) {
-      sample = {std::nan("1"), std::nan("1"), std::nan("1")};
+    if ((probs[0][n] == 0.0) & (probs[1][n] == 0.0) & (probs[2][n] == 0.0)) {
+      probs[0][n] = std::nan("1");
+      probs[1][n] = std::nan("1");
+      probs[2][n] = std::nan("1");
     }
-    
-    parsed.push_back(sample);
-    ploidy.push_back(2);
+    ploidy[n] = (std::uint8_t) 2;
   }
 }
 
@@ -98,9 +103,9 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   int max_ploidy = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
   idx += sizeof(std::uint8_t);
   
-  // get ploidy and missing states. this uses 15 milliseconds for 500k samples
+  // get ploidy and missing states. this uses 3 milliseconds for 500k samples
   ploidy = std::vector<std::uint8_t>(n_samples);
-  std::vector<bool> missing(n_samples);
+  bool missing[n_samples];
   std::uint8_t flags;
   std::uint8_t mask = 63;
   for (int x=0; x < n_samples; x++) {
@@ -124,13 +129,16 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   idx += sizeof(std::uint8_t);
   float divisor = (float) (std::pow(2, (int) bit_depth)) - 1;
   
-  // figure out the maximum number of probabilities across the individuals. This
-  // allows preallocating the probs vector rather than clearing at each sample.
-  int max_sample_len;
+  // figure out the maximum number of probabilities across the individuals
   if (phased) {
-    max_sample_len = max_ploidy * (n_alleles - 1);
+    max_probs = max_ploidy * (n_alleles - 1) + 1;
   } else {
-    max_sample_len = n_choose_k(max_ploidy + n_alleles - 1, n_alleles - 1) - 1;
+    max_probs = n_choose_k(max_ploidy + n_alleles - 1, n_alleles - 1);
+  }
+  
+  probs = new float*[max_probs];
+  for (int i=0; i<max_probs; i++) {
+    probs[i] = new float[n_samples];
   }
   
   // get genotype/allele probabilities
@@ -138,8 +146,6 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   std::uint32_t n_probs;
   float prob;
   float remainder;
-  std::vector<float> sample(max_sample_len + 1);
-  parsed = std::vector<std::vector<float>>(n_samples, sample);
   for (int start=0; start < n_samples; start++) {
     // calculate the number of probabilities per sample (depends on whether the
     // data is phased, the sample ploidy and the number of alleles)
@@ -159,25 +165,22 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
       }
       idx += bit_len;
       remainder -= prob;
-      parsed[start][x] = prob;
+      probs[x][start] = prob;
     }
-    parsed[start][n_probs] = remainder;
+    probs[n_probs][start] = remainder;
     
     // if the sample has missing data, just set values to NA
     if (missing[start]) {
       for (int x=0; x<(n_probs + 1); x++) {
-        parsed[start][x] = std::nan("1");
+        probs[x][start] = std::nan("1");
       }
     }
   }
 }
 
-std::vector<std::vector<float>> & Genotypes::probabilities() {
+float ** Genotypes::probabilities() {
   /* parse genotype data for a single variant
   */
-  if ((int) parsed.size() == n_samples) {
-    return parsed;  //don't recompute if the probabilities are already available
-  }
   handle->seekg(offset);  // about 1 microsecond
   
   bool decompressed_field = false;
@@ -202,11 +205,18 @@ std::vector<std::vector<float>> & Genotypes::probabilities() {
       break;
     }
     case 2: {
-      parse_layout2(uncompressed);
+      parse_layout2(uncompressed);  // about 17 milliseconds
       break;
     }
   }
-  return parsed;
+  return probs;
+}
+
+void Genotypes::clear_probs() {
+  for(int i = 0; i < max_probs; ++i) {
+    delete [] probs[i];
+  }
+  max_probs = 0;
 }
 
 } //namespace bgen
