@@ -61,56 +61,65 @@ std::uint64_t Variant::next_variant_offset() {
   return geno.next_var_offset;
 }
 
-int Variant::alt_index(std::vector<std::vector<float>> & dose) {
-  /* find the index offset for the alt allele (second most frequent allele)
-  */
-  // get the per column sums. Assumes only two alleles, probably ok in practise
-  std::vector<double> sums(2);
-  for (int n=0; n<n_samples; n++) {
-    sums[0] += dose[n][0];
-    sums[1] += dose[n][1];
-  }
+std::vector<std::vector<float>> Variant::probabilities() {
+  /* get genotype probabilites for the variant
   
-  if (sums[0] > sums[1]) {
-    return 0;
-  } else if (sums[1] > sums[0]) {
-    return 1;
-  } else {
-    return 1; // pick the first if the alelles are 50:50
+  Note this converts the probability arrays to a 2D vector, which is much slower
+  than the initial parsing.
+  */
+  std::vector<std::vector<float>> probs(n_samples, std::vector<float>(geno.max_probs));
+  float ** float_probs = geno.probabilities();
+  for (int n=0; n<n_samples; n++) {
+    for (int x=0; x<geno.max_probs; x++){
+      probs[n][x] = float_probs[x][n];
+    }
   }
+  return probs;
 }
 
-std::vector<std::vector<float>> & Variant::probabilities() {
-  return geno.probabilities();
-}
-
-void Variant::dosages(std::vector<std::vector<float>> & dose) {
+void Variant::dosages(float * first, float * second) {
   /* get allele dosages (assumes biallelic variant)
   */
   if (n_alleles != 2) {
     throw std::invalid_argument("can't get allele dosages for non-biallelic var.");
   }
   
-  auto & probs = probabilities();
+  float ** probs = geno.probabilities();
   
+  float sums[2];
   std::uint8_t ploidy;
   for (int n=0; n<n_samples; n++) {
     ploidy = geno.ploidy[n];
-    float halved = probs[n][1] * ((float) ploidy / 2);
-    dose[n][0] = (probs[n][0] * ploidy) + halved;
-    dose[n][1] = (probs[n][2] * ploidy) + halved;
+    float halved = probs[1][n] * ((float) ploidy / 2);
+    first[n] = (probs[0][n] * ploidy) + halved;
+    second[n] = (probs[2][n] * ploidy) + halved;
+    
+    sums[0] += first[n];
+    sums[1] += second[n];
+  }
+  
+  if (sums[0] < sums[1]) {
+    alt_idx = 0;
+  } else if (sums[1] < sums[0]) {
+    alt_idx = 1;
+  } else {
+    alt_idx = 0; // pick the first if the alelles are 50:50
   }
 }
 
 std::vector<float> & Variant::alt_dosage() {
-  dose = std::vector<std::vector<float>>(n_samples, std::vector<float>(2, 0));
-  dosages(dose);
-  int idx = alt_index(dose);
+  float * first = new float[n_samples];
+  float * second = new float[n_samples];
+  dosages(first, second);
   
-  alt_dose = std::vector<float>(n_samples);
-  for (int n=0; n<n_samples; n++) {
-    alt_dose[n] = dose[n][idx];
+  if (alt_idx == 0) {
+    alt_dose = std::vector<float>(first, first + n_samples);
+  } else {
+    alt_dose = std::vector<float>(second, second + n_samples);
   }
+  
+  delete []first;
+  delete []second;
   
   return alt_dose;
 }
