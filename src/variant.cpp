@@ -87,10 +87,14 @@ void Variant::dosages(float * first, float * second) {
   float ** probs = geno.probabilities();
   
   float sums[2];
-  std::uint8_t ploidy;
+  float ploidy = geno.max_ploidy;
+  float half_ploidy = ploidy / 2;
   for (int n=0; n<n_samples; n++) {
-    ploidy = geno.ploidy[n];
-    float halved = probs[1][n] * ((float) ploidy / 2);
+    if (!geno.constant_ploidy) {
+      ploidy = (float) geno.ploidy[n];
+      half_ploidy = ploidy / 2;
+    }
+    float halved = probs[1][n] * half_ploidy;
     first[n] = (probs[0][n] * ploidy) + halved;
     second[n] = (probs[2][n] * ploidy) + halved;
     

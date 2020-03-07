@@ -35,6 +35,9 @@ public:
   float ** probabilities();
   void clear_probs();
   int max_probs;
+  bool constant_ploidy;
+  int min_ploidy;
+  int max_ploidy;
   std::vector<std::uint8_t> ploidy;
   std::uint64_t next_var_offset;
 };
