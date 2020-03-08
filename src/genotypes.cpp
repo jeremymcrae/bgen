@@ -159,22 +159,21 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   
   // get genotype/allele probabilities
   int bit_len = (int) bit_depth / 8;
-  std::uint32_t n_probs;
+  int n_probs;
+  int max_less_1 = max_probs - 1;
   float prob;
   float remainder;
   for (int start=0; start < n_samples; start++) {
     // calculate the number of probabilities per sample (depends on whether the
     // data is phased, the sample ploidy and the number of alleles)
-    if (phased) {
+    if (constant_ploidy) {
+    n_probs = max_less_1;
+    } else if (phased) {
       n_probs = ploidy[start] * (n_alleles - 1);
+    } else if (ploidy[start] == 2 & n_alleles == 2) {
+      n_probs = 2;
     } else {
-      if (constant_ploidy) {
-        n_probs = max_probs - 1;
-      } else if (ploidy[start] == 2 & n_alleles == 2) {
-        n_probs = 2;
-      } else {
-        n_probs = n_choose_k(ploidy[start] + n_alleles - 1, n_alleles - 1) - 1;
-      }
+      n_probs = n_choose_k(ploidy[start] + n_alleles - 1, n_alleles - 1) - 1;
     }
     remainder = 1.0;
     for (int x=0; x<n_probs; x++) {
