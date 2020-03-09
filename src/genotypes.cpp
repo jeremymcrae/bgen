@@ -125,15 +125,16 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   if (!constant_ploidy) {
     ploidy = std::vector<std::uint8_t>(n_samples);
   }
-  bool missing[n_samples];
-  std::uint8_t flags;
+  
+  std::vector<int> missing;
   std::uint8_t mask = 63;
   for (int x=0; x < n_samples; x++) {
-    flags = uncompressed[idx];
     if (!constant_ploidy) {
-      ploidy[x] = mask & flags;
+      ploidy[x] = mask & uncompressed[idx];
     }
-    missing[x] = flags >> 7;
+    if (uncompressed[idx] & 0x80) {
+      missing.push_back(x);
+    }
     idx += 1;
   }
   
@@ -189,12 +190,11 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
       probs[x][start] = prob;
     }
     probs[n_probs][start] = remainder;
-    
-    // if the sample has missing data, just set values to NA
-    if (missing[start]) {
-      for (int x=0; x<(n_probs + 1); x++) {
-        probs[x][start] = std::nan("1");
-      }
+  }
+  // for samples with missing data, just set values to NA
+  for (auto n: missing) {
+    for (int x=0; x<max_probs; x++) {
+      probs[x][n] = std::nan("1");
     }
   }
 }
