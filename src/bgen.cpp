@@ -47,6 +47,16 @@ void Bgen::drop_variants(std::vector<int> indices) {
   }
 }
 
+std::vector<std::string> Bgen::varids() {
+  /* get all the IDs for the variants in the bgen file
+  */
+  std::vector<std::string> varid(variants.size());
+  for (int x=0; x<variants.size(); x++) {
+    varid[x] = variants[x].varid;
+  }
+  return varid;
+}
+
 std::vector<std::string> Bgen::rsids() {
   /* get all the rsIDs for the variants in the bgen file
   */

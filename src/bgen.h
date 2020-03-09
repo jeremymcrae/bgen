@@ -17,6 +17,7 @@ public:
   Bgen(std::string path, std::string sample_path="");
   Variant next_var();
   void drop_variants(std::vector<int> indices);
+  std::vector<std::string> varids();
   std::vector<std::string> rsids();
   std::vector<std::string> chroms();
   std::vector<std::uint32_t> positions();
