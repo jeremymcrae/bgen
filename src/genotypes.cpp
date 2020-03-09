@@ -167,7 +167,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
     // calculate the number of probabilities per sample (depends on whether the
     // data is phased, the sample ploidy and the number of alleles)
     if (constant_ploidy) {
-    n_probs = max_less_1;
+      n_probs = max_less_1;
     } else if (phased) {
       n_probs = ploidy[start] * (n_alleles - 1);
     } else if (ploidy[start] == 2 & n_alleles == 2) {
