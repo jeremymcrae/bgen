@@ -67,11 +67,13 @@ std::vector<std::vector<float>> Variant::probabilities() {
   Note this converts the probability arrays to a 2D vector, which is much slower
   than the initial parsing.
   */
+  float * float_probs = geno.probabilities();
   std::vector<std::vector<float>> probs(n_samples, std::vector<float>(geno.max_probs));
-  float ** float_probs = geno.probabilities();
+  int offset;
   for (int n=0; n<n_samples; n++) {
+    offset = n * geno.max_probs;
     for (int x=0; x<geno.max_probs; x++){
-      probs[n][x] = float_probs[x][n];
+      probs[n][x] = float_probs[offset + x];
     }
   }
   return probs;
@@ -84,19 +86,21 @@ void Variant::dosages(float * first, float * second) {
     throw std::invalid_argument("can't get allele dosages for non-biallelic var.");
   }
   
-  float ** probs = geno.probabilities();
+  float * probs = geno.probabilities();
   
+  int offset;
   float sums[2];
   float ploidy = geno.max_ploidy;
   float half_ploidy = ploidy / 2;
   for (int n=0; n<n_samples; n++) {
+    offset = n * geno.max_probs;
     if (!geno.constant_ploidy) {
       ploidy = (float) geno.ploidy[n];
       half_ploidy = ploidy / 2;
     }
-    float halved = probs[1][n] * half_ploidy;
-    first[n] = (probs[0][n] * ploidy) + halved;
-    second[n] = (probs[2][n] * ploidy) + halved;
+    float halved = probs[offset + 1] * half_ploidy;
+    first[n] = (probs[offset] * ploidy) + halved;
+    second[n] = (probs[offset + 2] * ploidy) + halved;
     
     sums[0] += first[n];
     sums[1] += second[n];

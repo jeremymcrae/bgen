@@ -79,25 +79,24 @@ void Genotypes::parse_layout1(std::vector<char> uncompressed) {
     ploidy = std::vector<std::uint8_t>(n_samples);
   }
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
-  probs = new float*[max_probs];
-  for (int i=0; i<max_probs; i++) {
-    probs[i] = new float[n_samples];
-  }
+  probs = new float[max_probs * n_samples];
   
   int idx = 0;
   int bit_len = 2;
   float divisor = 32768;
   float prob;
+  int offset;
   for (int n=0; n<n_samples; n++) {
+    offset = max_probs * n;
     for (int x=0; x<3; x++) {
       prob = (float) *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) / divisor;
-      probs[x][n] = prob;
+      probs[offset + x] = prob;
       idx += bit_len;
     }
-    if ((probs[0][n] == 0.0) & (probs[1][n] == 0.0) & (probs[2][n] == 0.0)) {
-      probs[0][n] = std::nan("1");
-      probs[1][n] = std::nan("1");
-      probs[2][n] = std::nan("1");
+    if ((probs[offset] == 0.0) & (probs[offset + 1] == 0.0) & (probs[offset + 2] == 0.0)) {
+      probs[offset] = std::nan("1");
+      probs[offset + 1] = std::nan("1");
+      probs[offset + 2] = std::nan("1");
     }
   }
 }
@@ -153,10 +152,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   float divisor = (float) (std::pow(2, (int) bit_depth)) - 1;
   
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
-  probs = new float*[max_probs];
-  for (int i=0; i<max_probs; i++) {
-    probs[i] = new float[n_samples];
-  }
+  probs = new float[max_probs * n_samples];
   
   // get genotype/allele probabilities
   int bit_len = (int) bit_depth / 8;
@@ -164,6 +160,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   int max_less_1 = max_probs - 1;
   float prob;
   float remainder;
+  int offset;
   for (int start=0; start < n_samples; start++) {
     // calculate the number of probabilities per sample (depends on whether the
     // data is phased, the sample ploidy and the number of alleles)
@@ -177,6 +174,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
       n_probs = n_choose_k(ploidy[start] + n_alleles - 1, n_alleles - 1) - 1;
     }
     remainder = 1.0;
+    offset = max_probs * start;
     for (int x=0; x<n_probs; x++) {
       if (bit_depth == 8) {
         prob = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) / divisor;
@@ -187,19 +185,21 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
       }
       idx += bit_len;
       remainder -= prob;
-      probs[x][start] = prob;
+      probs[offset + x] = prob;
     }
-    probs[n_probs][start] = remainder;
+    probs[offset + n_probs] = remainder;
   }
   // for samples with missing data, just set values to NA
   for (auto n: missing) {
+    offset = offset = max_probs * n;
     for (int x=0; x<max_probs; x++) {
-      probs[x][n] = std::nan("1");
+      probs[offset + x] = std::nan("1");
     }
   }
 }
 
-float ** Genotypes::probabilities() {
+// float ** Genotypes::probabilities() {
+float * Genotypes::probabilities() {
   /* parse genotype data for a single variant
   */
   handle->seekg(offset);  // about 1 microsecond
@@ -234,9 +234,10 @@ float ** Genotypes::probabilities() {
 }
 
 void Genotypes::clear_probs() {
-  for(int i = 0; i < max_probs; ++i) {
-    delete [] probs[i];
-  }
+  // for(int i = 0; i < max_probs; ++i) {
+  //   delete [] probs[i];
+  // }
+  delete [] probs;
   max_probs = 0;
 }
 

@@ -17,7 +17,7 @@ class Genotypes {
   int compression;
   int n_alleles;
   int n_samples;
-  float ** probs;
+  float * probs;
 public:
   Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, int n_samples) :
     handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples) {
@@ -32,7 +32,7 @@ public:
   std::vector<char> decompress(char * bytes, int compressed_len, int decompressed_len);
   void parse_layout1(std::vector<char>);
   void parse_layout2(std::vector<char>);
-  float ** probabilities();
+  float * probabilities();
   void clear_probs();
   int max_probs;
   bool constant_ploidy;
