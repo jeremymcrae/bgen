@@ -17,7 +17,7 @@ Samples::Samples(std::ifstream & handle, int n_samples) {
   
   std::uint32_t sample_n_check;
   handle.read(reinterpret_cast<char*>(&sample_n_check), sizeof(std::uint32_t));
-  if (n_samples != sample_n_check) {
+  if (n_samples != (int) sample_n_check) {
     throw std::invalid_argument("inconsistent number of samples");
   }
   

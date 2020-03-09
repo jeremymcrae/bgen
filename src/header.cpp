@@ -16,7 +16,7 @@ Header::Header(std::ifstream & handle) {
   std::copy_n(std::istream_iterator<char>(handle), sizeof(std::uint32_t), std::back_inserter(magic));
   
   // make sure we are reading a bgen file
-  if (magic != "bgen" & magic != "0000") {
+  if ((magic != "bgen") & (magic != "0000")) {
     throw std::invalid_argument("doesn't appear to be a bgen file");
   }
   

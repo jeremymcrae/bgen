@@ -22,7 +22,7 @@ Bgen::Bgen(std::string path, std::string sample_path) {
   handle.seekg(current);
   
   while (true) {
-    if (handle.eof() | (std::uint64_t) handle.tellg() >= fsize) {
+    if (handle.eof() | ((std::uint64_t) handle.tellg() >= fsize)) {
       break;
     }
     Variant variant(handle, header.layout, header.compression, header.nsamples);
@@ -51,7 +51,7 @@ std::vector<std::string> Bgen::varids() {
   /* get all the IDs for the variants in the bgen file
   */
   std::vector<std::string> varid(variants.size());
-  for (int x=0; x<variants.size(); x++) {
+  for (uint x=0; x<variants.size(); x++) {
     varid[x] = variants[x].varid;
   }
   return varid;
@@ -61,7 +61,7 @@ std::vector<std::string> Bgen::rsids() {
   /* get all the rsIDs for the variants in the bgen file
   */
   std::vector<std::string> rsid(variants.size());
-  for (int x=0; x<variants.size(); x++) {
+  for (uint x=0; x<variants.size(); x++) {
     rsid[x] = variants[x].rsid;
   }
   return rsid;
@@ -71,7 +71,7 @@ std::vector<std::string> Bgen::chroms() {
   /* get all the chroms for the variants in the bgen file
   */
   std::vector<std::string> chrom(variants.size());
-  for (int x=0; x<variants.size(); x++) {
+  for (uint x=0; x<variants.size(); x++) {
     chrom[x] = variants[x].chrom;
   }
   return chrom;
@@ -81,7 +81,7 @@ std::vector<std::uint32_t> Bgen::positions() {
   /* get all the positions for the variants in the bgen file
   */
   std::vector<std::uint32_t> position(variants.size());
-  for (int x=0; x<variants.size(); x++) {
+  for (uint x=0; x<variants.size(); x++) {
     position[x] = variants[x].pos;
   }
   return position;

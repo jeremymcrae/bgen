@@ -19,7 +19,7 @@ Variant::Variant(std::ifstream & handle, int layout, int compression, int expect
     n_samples = expected_n;
   }
   
-  if (n_samples != expected_n) {
+  if ((int) n_samples != expected_n) {
     throw std::invalid_argument("number of samples doesn't match");
   }
   
@@ -70,7 +70,7 @@ std::vector<std::vector<float>> Variant::probabilities() {
   float * float_probs = geno.probabilities();
   std::vector<std::vector<float>> probs(n_samples, std::vector<float>(geno.max_probs));
   int offset;
-  for (int n=0; n<n_samples; n++) {
+  for (uint n=0; n<n_samples; n++) {
     offset = n * geno.max_probs;
     for (int x=0; x<geno.max_probs; x++){
       probs[n][x] = float_probs[offset + x];
@@ -89,10 +89,10 @@ void Variant::dosages(float * first, float * second) {
   float * probs = geno.probabilities();
   
   int offset;
-  float sums[2];
+  float sums[2] = {0, 0};
   float ploidy = geno.max_ploidy;
   float half_ploidy = ploidy / 2;
-  for (int n=0; n<n_samples; n++) {
+  for (uint n=0; n<n_samples; n++) {
     offset = n * geno.max_probs;
     if (!geno.constant_ploidy) {
       ploidy = (float) geno.ploidy[n];

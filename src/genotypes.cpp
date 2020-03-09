@@ -109,6 +109,9 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   idx += sizeof(std::uint32_t);
   std::uint16_t allele_check = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]);
   idx += sizeof(std::uint16_t);
+  if (nn_samples != (std::uint32_t) n_samples) {
+    throw std::invalid_argument("number of samples doesn't match!");
+  }
   if (allele_check != n_alleles) {
     throw std::invalid_argument("number of alleles doesn't match!");
   }
@@ -140,11 +143,11 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   int phased = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
   idx += sizeof(std::uint8_t);
   int bit_depth = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
-  if (bit_depth < 1 | bit_depth > 32) {
+  if ((bit_depth < 1) | (bit_depth > 32)) {
     throw std::invalid_argument("probabilities bit depth out of bounds");
   }
   
-  if (!(bit_depth == 8 | bit_depth == 16 | bit_depth == 32)) {
+  if (!((bit_depth == 8) | (bit_depth == 16) | (bit_depth == 32))) {
     throw std::invalid_argument("probabilities bit depth isn't a standard type (8, 16 or 32)");
   }
   
@@ -158,7 +161,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   int bit_len = (int) bit_depth / 8;
   int n_probs;
   int max_less_1 = max_probs - 1;
-  float prob;
+  float prob = 0;
   float remainder;
   int offset;
   for (int start=0; start < n_samples; start++) {
@@ -168,7 +171,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
       n_probs = max_less_1;
     } else if (phased) {
       n_probs = ploidy[start] * (n_alleles - 1);
-    } else if (ploidy[start] == 2 & n_alleles == 2) {
+    } else if ((ploidy[start] == 2) && (n_alleles == 2)) {
       n_probs = 2;
     } else {
       n_probs = n_choose_k(ploidy[start] + n_alleles - 1, n_alleles - 1) - 1;
@@ -191,7 +194,7 @@ void Genotypes::parse_layout2(std::vector<char> uncompressed) {
   }
   // for samples with missing data, just set values to NA
   for (auto n: missing) {
-    offset = offset = max_probs * n;
+    offset = max_probs * n;
     for (int x=0; x<max_probs; x++) {
       probs[offset + x] = std::nan("1");
     }
@@ -205,7 +208,7 @@ float * Genotypes::probabilities() {
   handle->seekg(offset);  // about 1 microsecond
   
   bool decompressed_field = false;
-  std:uint32_t decompressed_len;
+  std::uint32_t decompressed_len;
   if (compression != 0) {
     if (layout == 1) {
       decompressed_len = n_samples * 6;
