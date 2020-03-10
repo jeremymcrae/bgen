@@ -34,7 +34,7 @@ public:
   void parse_layout2(std::vector<char>);
   float * probabilities();
   void clear_probs();
-  int max_probs;
+  int max_probs = 0;
   bool constant_ploidy;
   int min_ploidy;
   int max_ploidy;

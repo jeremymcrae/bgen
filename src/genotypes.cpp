@@ -237,10 +237,9 @@ float * Genotypes::probabilities() {
 }
 
 void Genotypes::clear_probs() {
-  // for(int i = 0; i < max_probs; ++i) {
-  //   delete [] probs[i];
-  // }
-  delete [] probs;
+  if (max_probs > 0) {
+    delete [] probs;
+  }
   max_probs = 0;
 }
 
