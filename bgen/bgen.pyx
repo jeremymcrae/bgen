@@ -43,6 +43,9 @@ cdef extern from 'bgen.h' namespace 'bgen':
         vector[string] rsids()
         vector[string] chroms()
         vector[uint32_t] positions()
+        
+        # declare public attributes
+        vector[Variant] variants
 
 cdef class BgenVar:
     cdef string _varid
@@ -89,7 +92,12 @@ cdef class BgenFile:
     
     def __dealloc__(self):
         del self.thisptr
-      
+    
+    def __iter__(self):
+        length = self.thisptr.variants.size()
+        for idx in range(length):
+            yield self[idx]
+    
     def __getitem__(self, int idx):
         ''' pull out a Variant by index position
         '''
