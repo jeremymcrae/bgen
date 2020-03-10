@@ -22,6 +22,7 @@ cdef extern from "<fstream>" namespace "std":
 
 cdef extern from 'variant.h' namespace 'bgen':
     cdef cppclass Variant:
+        # declare class constructor and methods
         Variant(ifstream & handle, int layout, int compression, int expected_n) except +
         Variant() except +
         vector[float] alt_dosage()
@@ -61,19 +62,19 @@ cdef class BgenVar:
     
     @property
     def varid(self):
-      return self._varid
+      return self._varid.decode('utf8')
     @property
     def rsid(self):
-        return self._rsid
+        return self._rsid.decode('utf8')
     @property
     def chrom(self):
-        return self._chrom
+        return self._chrom.decode('utf8')
     @property
     def pos(self):
         return self._pos
     @property
     def alleles(self):
-        return self._alleles
+        return [x.decode('utf8') for x in self._alleles]
     @property
     def alt_dosage(self):
         return self._alt_dosage
