@@ -63,6 +63,12 @@ cdef class BgenVar:
         self._alleles = alleles
         self._alt_dosage = alt_dosage
     
+    def __repr__(self):
+        return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", x{self.pos}, {self.alleles})'
+    
+    def __str__(self):
+        return f'{self.rsid} - {self.chrom}:{self.pos} {self.alleles}'
+    
     @property
     def varid(self):
       return self._varid.decode('utf8')
@@ -84,14 +90,17 @@ cdef class BgenVar:
 
 cdef class BgenFile:
     cdef Bgen * thisptr
-    def __cinit__(self, path, sample_path=None):
-        path = path.encode('utf8')
-        if sample_path is None:
-            sample_path = ''.encode('utf8')
-        self.thisptr = new Bgen(path, sample_path)
+    cdef string path, sample_path
+    def __cinit__(self, str path, str sample_path=''):
+        self.path = path.encode('utf8')
+        self.sample_path = sample_path.encode('utf8')
+        self.thisptr = new Bgen(self.path, self.sample_path)
     
     def __dealloc__(self):
         del self.thisptr
+    
+    def __repr__(self):
+        return f'BgenFile("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
     
     def __iter__(self):
         length = self.thisptr.variants.size()
