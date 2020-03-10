@@ -25,9 +25,15 @@ cdef extern from 'variant.h' namespace 'bgen':
         Variant(ifstream & handle, int layout, int compression, int expected_n) except +
         Variant() except +
         vector[float] alt_dosage()
+        
+        # declare public attributes
+        string varid, rsid, chrom
+        int pos
+        vector[string] alleles
 
 cdef extern from 'bgen.h' namespace 'bgen':
     cdef cppclass Bgen:
+        # declare class constructor and methods
         Bgen(string path, string sample_path) except +
         Variant & operator[](int idx)
         Variant & get(int idx)
@@ -38,13 +44,39 @@ cdef extern from 'bgen.h' namespace 'bgen':
         vector[uint32_t] positions()
 
 cdef class BgenVar:
-    cdef Variant * thisptr
-    cdef set_var(self, Variant * variant):
-        self.thisptr = variant
-    def __dealloc__(self):
-        del self.thisptr
+    cdef string _varid
+    cdef string _rsid
+    cdef string _chrom
+    cdef int _pos
+    cdef vector[string] _alleles
+    cdef vector[float] _alt_dosage
+    def __cinit__(self, string varid, string rsid, string chrom, int pos,
+            vector[string] alleles, vector[float] alt_dosage):
+        self._varid = varid
+        self._rsid = rsid
+        self._chrom = chrom
+        self._pos = pos
+        self._alleles = alleles
+        self._alt_dosage = alt_dosage
+    
+    @property
+    def varid(self):
+      return self._varid
+    @property
+    def rsid(self):
+        return self._rsid
+    @property
+    def chrom(self):
+        return self._chrom
+    @property
+    def pos(self):
+        return self._pos
+    @property
+    def alleles(self):
+        return self._alleles
+    @property
     def alt_dosage(self):
-        return self.thisptr.alt_dosage()
+        return self._alt_dosage
 
 cdef class BgenFile:
     cdef Bgen * thisptr
@@ -61,9 +93,9 @@ cdef class BgenFile:
         ''' pull out a Variant by index position
         '''
         variant = self.thisptr.get(idx)
-        pvar = BgenVar()
-        pvar.set_var(&variant)
-        return pvar
+        # print(variant.varid)
+        return BgenVar(variant.varid, variant.rsid, variant.chrom, variant.pos,
+            variant.alleles, variant.alt_dosage())
     
     def drop_variants(self, list indices):
         ''' drops variants from bgen by indices, for avoiding processing variants
