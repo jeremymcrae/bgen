@@ -32,6 +32,16 @@ cdef extern from 'variant.h' namespace 'bgen':
         int pos
         vector[string] alleles
 
+cdef extern from 'samples.h' namespace 'bgen':
+    cdef cppclass Samples:
+        Samples(ifstream & handle, int n_samples) except +
+        Samples(string path, int n_samples) except +
+        Samples(int n_samples) except +
+        Samples() except +
+        
+        # declare public attributes
+        vector[string] samples
+
 cdef extern from 'bgen.h' namespace 'bgen':
     cdef cppclass Bgen:
         # declare class constructor and methods
@@ -46,6 +56,7 @@ cdef extern from 'bgen.h' namespace 'bgen':
         
         # declare public attributes
         vector[Variant] variants
+        Samples samples
 
 cdef class BgenVar:
     cdef string _varid
@@ -114,6 +125,13 @@ cdef class BgenFile:
         # print(variant.varid)
         return BgenVar(variant.varid, variant.rsid, variant.chrom, variant.pos,
             variant.alleles, variant.alt_dosage())
+    
+    @property
+    def samples(self):
+      ''' get list of samples in the bgen file
+      '''
+      samples = self.thisptr.samples.samples
+      return [x.decode('utf8') for x in samples]
     
     def drop_variants(self, list indices):
         ''' drops variants from bgen by indices, for avoiding processing variants
