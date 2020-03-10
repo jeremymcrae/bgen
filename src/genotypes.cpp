@@ -208,7 +208,7 @@ float * Genotypes::probabilities() {
   handle->seekg(offset);  // about 1 microsecond
   
   bool decompressed_field = false;
-  std::uint32_t decompressed_len;
+  std::uint32_t decompressed_len = 0;
   if (compression != 0) {
     if (layout == 1) {
       decompressed_len = n_samples * 6;
