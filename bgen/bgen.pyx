@@ -73,17 +73,20 @@ cdef class BgenFile:
     def varids(self):
       ''' get the varint IDs of all variants in the bgen file
       '''
-      return self.thisptr.varids()
+      varids = self.thisptr.varids()
+      return [x.decode('utf8') for x in varids]
     
     def rsids(self):
       ''' get the rsIDs of all variants in the bgen file
       '''
-      return self.thisptr.rsids()
+      rsids = self.thisptr.rsids()
+      return [x.decode('utf8') for x in rsids]
     
     def chroms(self):
         ''' get the chromosomes of all variants in the bgen file
         '''
-        return self.thisptr.chroms()
+        chroms = self.thisptr.chroms()
+        return [x.decode('utf8') for x in chroms]
     
     def positions(self):
         ''' get the positions of all variants in the bgen file
