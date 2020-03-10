@@ -18,6 +18,7 @@ class Variant {
   int alt_idx = -1;
 public:
   Variant(std::ifstream & handle, int layout, int compression, int expected_n);
+  Variant() {};
   std::uint64_t next_variant_offset();
   std::vector<std::vector<float>> probabilities();
   void dosages(float * first, float * second);
