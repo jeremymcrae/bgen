@@ -93,52 +93,39 @@ cdef class BgenHeader:
             f'layout={self.layout}, has_sample_ids={self.has_sample_ids})'
 
 cdef class BgenVar:
-    cdef string _varid
-    cdef string _rsid
-    cdef string _chrom
-    cdef int _pos
-    cdef vector[string] _alleles
-    cdef string _minor_allele
-    cdef vector[float] _minor_allele_dosage
-    def __cinit__(self, string varid, string rsid, string chrom, int pos,
-            vector[string] alleles, string minor_allele, vector[float] minor_allele_dosage):
-        self._varid = varid
-        self._rsid = rsid
-        self._chrom = chrom
-        self._pos = pos
-        self._alleles = alleles
-        self._minor_allele = minor_allele
-        self._minor_allele_dosage = minor_allele_dosage
+    cdef Variant thisptr
+    def __cinit__(self):
+        self.thisptr = Variant()
     
     def __repr__(self):
-        return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", x{self.pos}, {self.alleles})'
+       return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", x{self.pos}, {self.alleles})'
     
     def __str__(self):
-        return f'{self.rsid} - {self.chrom}:{self.pos} {self.alleles}'
+       return f'{self.rsid} - {self.chrom}:{self.pos} {self.alleles}'
     
     @property
     def varid(self):
-      return self._varid.decode('utf8')
+      return self.thisptr.varid.decode('utf8')
     @property
     def rsid(self):
-        return self._rsid.decode('utf8')
+        return self.thisptr.rsid.decode('utf8')
     @property
     def chrom(self):
-        return self._chrom.decode('utf8')
+        return self.thisptr.chrom.decode('utf8')
     @property
     def pos(self):
-        return self._pos
+        return self.thisptr.pos
     @property
     def alleles(self):
-        return [x.decode('utf8') for x in self._alleles]
+        return [x.decode('utf8') for x in self.thisptr.alleles]
     @property
     def minor_allele(self):
         ''' get the minor allele of a biallelic variant
         '''
-        return self._minor_allele.decode('utf8')
+        return self.thisptr.minor_allele.decode('utf8')
     @property
     def minor_allele_dosage(self):
-        return self._minor_allele_dosage
+        return self.thisptr.minor_allele_dosage()
 
 cdef class BgenFile:
     cdef Bgen * thisptr
@@ -162,10 +149,12 @@ cdef class BgenFile:
     def __getitem__(self, int idx):
         ''' pull out a Variant by index position
         '''
-        variant = self.thisptr.get(idx)
-        dosage = variant.minor_allele_dosage()
-        return BgenVar(variant.varid, variant.rsid, variant.chrom, variant.pos,
-            variant.alleles, variant.minor_allele, dosage)
+        # create a blank BgenVar objevct
+        var = BgenVar()
+        # get a reference to the indexed Variant and assign it to the pointer
+        # in the BgenVar object. This is awkward, but it works efficiently.
+        var.thisptr = self.thisptr.get(idx)
+        return var
     
     @property
     def header(self):
