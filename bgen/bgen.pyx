@@ -7,6 +7,8 @@ from libc.stdint cimport uint32_t
 
 from cython.operator cimport dereference as deref
 
+import numpy as np
+
 cdef extern from "<iostream>" namespace "std":
     cdef cppclass istream:
         istream& read(char *, int) except +
@@ -125,7 +127,18 @@ cdef class BgenVar:
         return self.thisptr.minor_allele.decode('utf8')
     @property
     def minor_allele_dosage(self):
-        return self.thisptr.minor_allele_dosage()
+        ''' get the dosage for the minor allele for a biallelic variant
+        
+        In order for this to be fast, we need to get the dosage data as a vector,
+        then get a memory view on that data, and finally return as a numpy array
+        '''
+        # get the vector data for the dosage
+        cdef vector[float] dosage = self.thisptr.minor_allele_dosage()
+        # convert to a memory view, see:
+        # https://cython.readthedocs.io/en/latest/src/userguide/memoryviews.html#coercion-to-numpy
+        cdef float[::1] arr = <float [:dosage.size()]>dosage.data()
+        # return as a numpy array
+        return np.asarray(arr)
 
 cdef class BgenFile:
     cdef Bgen * thisptr
