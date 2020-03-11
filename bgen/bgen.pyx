@@ -26,10 +26,10 @@ cdef extern from 'variant.h' namespace 'bgen':
         # declare class constructor and methods
         Variant(ifstream & handle, int layout, int compression, int expected_n) except +
         Variant() except +
-        vector[float] alt_dosage()
+        vector[float] minor_allele_dosage()
         
         # declare public attributes
-        string varid, rsid, chrom
+        string varid, rsid, chrom, minor_allele
         int pos
         vector[string] alleles
 
@@ -98,15 +98,17 @@ cdef class BgenVar:
     cdef string _chrom
     cdef int _pos
     cdef vector[string] _alleles
-    cdef vector[float] _alt_dosage
+    cdef string _minor_allele
+    cdef vector[float] _minor_allele_dosage
     def __cinit__(self, string varid, string rsid, string chrom, int pos,
-            vector[string] alleles, vector[float] alt_dosage):
+            vector[string] alleles, string minor_allele, vector[float] minor_allele_dosage):
         self._varid = varid
         self._rsid = rsid
         self._chrom = chrom
         self._pos = pos
         self._alleles = alleles
-        self._alt_dosage = alt_dosage
+        self._minor_allele = minor_allele
+        self._minor_allele_dosage = minor_allele_dosage
     
     def __repr__(self):
         return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", x{self.pos}, {self.alleles})'
@@ -130,8 +132,13 @@ cdef class BgenVar:
     def alleles(self):
         return [x.decode('utf8') for x in self._alleles]
     @property
-    def alt_dosage(self):
-        return self._alt_dosage
+    def minor_allele(self):
+        ''' get the minor allele of a biallelic variant
+        '''
+        return self._minor_allele.decode('utf8')
+    @property
+    def minor_allele_dosage(self):
+        return self._minor_allele_dosage
 
 cdef class BgenFile:
     cdef Bgen * thisptr
@@ -156,8 +163,9 @@ cdef class BgenFile:
         ''' pull out a Variant by index position
         '''
         variant = self.thisptr.get(idx)
+        dosage = variant.minor_allele_dosage()
         return BgenVar(variant.varid, variant.rsid, variant.chrom, variant.pos,
-            variant.alleles, variant.alt_dosage())
+            variant.alleles, variant.minor_allele, dosage)
     
     @property
     def header(self):

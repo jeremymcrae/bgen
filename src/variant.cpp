@@ -107,29 +107,32 @@ void Variant::dosages(float * first, float * second) {
   }
   
   if (sums[0] < sums[1]) {
-    alt_idx = 0;
+    minor_idx = 0;
   } else if (sums[1] < sums[0]) {
-    alt_idx = 1;
+    minor_idx = 1;
   } else {
-    alt_idx = 0; // pick the first if the alelles are 50:50
+    minor_idx = 0; // pick the first if the alelles are 50:50
   }
 }
 
-std::vector<float> & Variant::alt_dosage() {
+std::vector<float> & Variant::minor_allele_dosage() {
+  /* get dosage of the minor allele (only works for biallelic variants)
+  */
   float * first = new float[n_samples];
   float * second = new float[n_samples];
   dosages(first, second);
   
-  if (alt_idx == 0) {
-    alt_dose = std::vector<float>(first, first + n_samples);
+  minor_allele = alleles[minor_idx];
+  if (minor_idx == 0) {
+    minor_allele_dose = std::vector<float>(first, first + n_samples);
   } else {
-    alt_dose = std::vector<float>(second, second + n_samples);
+    minor_allele_dose = std::vector<float>(second, second + n_samples);
   }
   
   delete []first;
   delete []second;
   
-  return alt_dose;
+  return minor_allele_dose;
 }
 
 } // namespace bgen
