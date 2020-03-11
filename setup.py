@@ -22,8 +22,7 @@ reader = cythonize([
             'src/samples.cpp',
             'src/utils.cpp',
             'src/variant.cpp'],
-        include_dirs=['src/'],
-        library_dirs=['src/'],
+        include_dirs=['src/', 'src/zstd/lib'],
         libraries=['z'],
         language='c++'),
     ])

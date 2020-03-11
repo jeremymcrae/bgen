@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cassert>
 
-// #include "zstd.h"
+#include "zstd.h"
 #include <zlib.h>
 
 #include "genotypes.h"
@@ -36,6 +36,14 @@ void zlib_uncompress(char * input, int compressed_len, char * decompressed, int 
   }
 }
 
+std::vector<char> zstd_uncompress(char * input, int compressed_len, int decompressed_len) {
+  /* uncompress a char array with zstd
+  */
+  char decompressed[decompressed_len];
+  std::size_t total_out = ZSTD_decompress(decompressed, decompressed_len, input, compressed_len);
+  return std::vector<char> (decompressed, decompressed + total_out);
+}
+
 void Genotypes::decompress(char * bytes, int compressed_len, char * decompressed, int decompressed_len) {
   /* decompress the probabilty data
   */
@@ -49,7 +57,7 @@ void Genotypes::decompress(char * bytes, int compressed_len, char * decompressed
       break;
     }
     case 2: { //zstd
-      throw std::invalid_argument("zstd decompression not implemented yet");
+      decompressed = zstd_uncompress(bytes, compressed_len, decompressed_len);
       break;
     }
   }
