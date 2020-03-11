@@ -1,5 +1,6 @@
 # cython: language_level=3, boundscheck=False
 
+from libcpp cimport bool
 from libcpp.string cimport string
 from libcpp.vector cimport vector
 from libc.stdint cimport uint32_t
@@ -42,6 +43,17 @@ cdef extern from 'samples.h' namespace 'bgen':
         # declare public attributes
         vector[string] samples
 
+cdef extern from 'header.h' namespace 'bgen':
+    cdef cppclass Header:
+        Header(ifstream & handle) except +
+        Header();
+        uint32_t offset
+        uint32_t nvariants
+        uint32_t nsamples
+        int compression
+        int layout
+        bool has_sample_ids
+
 cdef extern from 'bgen.h' namespace 'bgen':
     cdef cppclass Bgen:
         # declare class constructor and methods
@@ -57,6 +69,28 @@ cdef extern from 'bgen.h' namespace 'bgen':
         # declare public attributes
         vector[Variant] variants
         Samples samples
+        Header header
+
+cdef class BgenHeader:
+    cdef uint32_t offset
+    cdef uint32_t nvariants
+    cdef uint32_t nsamples
+    cdef int compression
+    cdef int layout
+    cdef bool has_sample_ids
+    def __cinit__(self, uint32_t offset, uint32_t nvariants, uint32_t nsamples,
+            int compression, int layout, bool has_sample_ids):
+        self.offset = offset
+        self.nvariants = nvariants
+        self.nsamples = nsamples
+        self.compression = compression
+        self.layout = layout
+        self.has_sample_ids = has_sample_ids
+    
+    def __repr__(self):
+        return f'BgenHeader(offset={self.offset}, nvariants={self.nvariants}, ' \
+            f'nsamples={self.nsamples}, compression={self.compression}, ' \
+            f'layout={self.layout}, has_sample_ids={self.has_sample_ids})'
 
 cdef class BgenVar:
     cdef string _varid
@@ -125,6 +159,14 @@ cdef class BgenFile:
         # print(variant.varid)
         return BgenVar(variant.varid, variant.rsid, variant.chrom, variant.pos,
             variant.alleles, variant.alt_dosage())
+    
+    @property
+    def header(self):
+      ''' get header info from bgen file
+      '''
+      hdr = self.thisptr.header
+      return BgenHeader(hdr.offset, hdr.nvariants, hdr.nsamples,
+          hdr.compression, hdr.compression, hdr.has_sample_ids)
     
     @property
     def samples(self):
