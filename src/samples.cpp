@@ -35,13 +35,21 @@ Samples::Samples(std::string path, int n_samples) {
   */
   std::ifstream handle(path, std::ios::in);
   
+  std::string header;
+  std::getline(handle, header);
+  std::string types;
+  std::getline(handle, types);
+  
   std::string line;
   while (std::getline(handle, line)) {
-    std::vector<std::string> elems = split(line, '\t');
+    std::vector<std::string> elems = split(line, ' ');
     auto sample_id = elems[0];
-    if ((sample_id == "FID") | (sample_id == "0")) { continue; } // skip header lines
     samples.push_back(sample_id);
   }
+  for (int x=0; x<10; x++) {
+    std::cout << samples[x] << "\n";
+  }
+  
   if (n_samples != (int)samples.size()) {
     throw std::invalid_argument("inconsistent number of samples");
   }
