@@ -46,10 +46,6 @@ Samples::Samples(std::string path, int n_samples) {
     auto sample_id = elems[0];
     samples.push_back(sample_id);
   }
-  for (int x=0; x<10; x++) {
-    std::cout << samples[x] << "\n";
-  }
-  
   if (n_samples != (int)samples.size()) {
     throw std::invalid_argument("inconsistent number of samples");
   }
