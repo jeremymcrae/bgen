@@ -156,7 +156,6 @@ cdef class BgenFile:
         ''' pull out a Variant by index position
         '''
         variant = self.thisptr.get(idx)
-        # print(variant.varid)
         return BgenVar(variant.varid, variant.rsid, variant.chrom, variant.pos,
             variant.alleles, variant.alt_dosage())
     
