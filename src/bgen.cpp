@@ -19,7 +19,9 @@ Bgen::Bgen(std::string path, std::string sample_path) {
   std::uint64_t current = handle.tellg();
   handle.seekg(0, std::ios::end);
   fsize = (std::uint64_t) handle.tellg() - fsize;
-  handle.seekg(current);
+  
+  // seek forward to the first variant
+  handle.seekg(header.offset + 4);
   
   while (true) {
     if (handle.eof() | ((std::uint64_t) handle.tellg() >= fsize)) {
