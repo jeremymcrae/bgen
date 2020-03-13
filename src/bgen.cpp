@@ -42,10 +42,14 @@ void Bgen::drop_variants(std::vector<int> indices) {
     throw std::invalid_argument("can't drop variants with duplicate indices");
   }
   
-  std::vector<Variant>::iterator begin = variants.begin();
   for (auto idx : indices) {
-    variants.erase(begin + idx);
+    variants[idx] = variants.back();
+    variants.pop_back();
   }
+  
+  // and sort the variants again afterward
+  std::sort(variants.begin(), variants.end(),
+          [] (Variant const& a, Variant const& b) { return a.pos < b.pos; });
 }
 
 std::vector<std::string> Bgen::varids() {
