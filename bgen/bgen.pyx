@@ -12,6 +12,7 @@ import numpy as np
 cdef extern from "<iostream>" namespace "std":
     cdef cppclass istream:
         istream& read(char *, int) except +
+        istream& seekg(long) except +
 
 cdef extern from "<iostream>" namespace "std::ios_base":
     cdef cppclass open_mode:
@@ -20,8 +21,9 @@ cdef extern from "<iostream>" namespace "std::ios_base":
 
 cdef extern from "<fstream>" namespace "std":
     cdef cppclass ifstream(istream):
-        ifstream(const char*) except +
-        ifstream(const char*, open_mode) except +
+        ifstream() except +
+        ifstream(const string&) except +
+        ifstream(const string&, open_mode) except +
 
 cdef extern from 'variant.h' namespace 'bgen':
     cdef cppclass Variant:
@@ -33,6 +35,7 @@ cdef extern from 'variant.h' namespace 'bgen':
         # declare public attributes
         string varid, rsid, chrom, minor_allele
         int pos
+        long offset
         vector[string] alleles
 
 cdef extern from 'samples.h' namespace 'bgen':
@@ -96,14 +99,40 @@ cdef class BgenHeader:
 
 cdef class BgenVar:
     cdef Variant thisptr
-    def __cinit__(self):
-        self.thisptr = Variant()
+    cdef ifstream* handle
+    cdef string path
+    cdef int layout, compression, expected_n
+    def __cinit__(self, string path, long offset, int layout, int compression, int expected_n):
+        self.path = path
+        self.layout = layout
+        self.compression = compression
+        self.expected_n = expected_n
+        
+        # open a file stream to the bgen file, and seek to the variant offset.
+        # Note that this is about twice as slow as assigning an existing Variant
+        # pointer from the Bgen cpp object, but this means we can pickle the
+        # object for easy dispersion across dask clusters. Still quick to create
+        # BgenVar objects, ~10000 per second.
+        self.handle = new ifstream(path)
+        self.handle.seekg(offset)
+        self.thisptr = Variant(deref(self.handle), layout, compression, expected_n)
+    
+    def __dealloc__(self):
+        # delete file handle once variant no longer exists, otherwise it's easy
+        # to hit the limit of open files, since each variant has it's own handle
+        # for the bgen file
+        del self.handle
     
     def __repr__(self):
        return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", x{self.pos}, {self.alleles})'
     
     def __str__(self):
        return f'{self.rsid} - {self.chrom}:{self.pos} {self.alleles}'
+    
+    def __reduce__(self):
+        ''' enable pickling of a BgenVar object
+        '''
+        return (self.__class__, (self.path, self.thisptr.offset, self.layout, self.compression, self.expected_n))
     
     @property
     def varid(self):
@@ -162,12 +191,9 @@ cdef class BgenFile:
     def __getitem__(self, int idx):
         ''' pull out a Variant by index position
         '''
-        # create a blank BgenVar objevct
-        var = BgenVar()
-        # get a reference to the indexed Variant and assign it to the pointer
-        # in the BgenVar object. This is awkward, but it works efficiently.
-        var.thisptr = self.thisptr.get(idx)
-        return var
+        cdef long offset = self.thisptr.variants[idx].offset
+        return BgenVar(self.path, offset, self.thisptr.header.layout,
+          self.thisptr.header.compression, self.thisptr.header.nsamples)
     
     @property
     def header(self):

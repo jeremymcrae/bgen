@@ -13,7 +13,6 @@
 namespace bgen {
 
 class Variant {
-  std::uint64_t offset;
   Genotypes geno;
   int minor_idx = -1;
 public:
@@ -26,6 +25,7 @@ public:
   std::vector<float> minor_allele_dose;
   std::string minor_allele;
   
+  std::uint64_t offset;
   std::uint32_t n_samples;
   std::string varid;
   std::string rsid;
