@@ -76,6 +76,28 @@ cdef extern from 'bgen.h' namespace 'bgen':
         Samples samples
         Header header
 
+cdef class IFStream:
+    ''' basic cython implementation of std::ifstream, for easy pickling
+    '''
+    cdef ifstream * ptr
+    cdef string path
+    def __cinit__(self, string path):
+        self.path = path
+        self.ptr = new ifstream(path)
+    
+    def seekg(self, long offset):
+        self.ptr.seekg(offset)
+    
+    def __str__(self):
+        return self.path.decode('utf8')
+    
+    def __dealloc__(self):
+        # make sure to clean up ifstream memory once finished
+        del self.ptr
+    
+    def __reduce__(self):
+        return (self.__class__, (self.path, ))
+
 cdef class BgenHeader:
     cdef uint32_t offset
     cdef uint32_t nvariants
@@ -99,32 +121,20 @@ cdef class BgenHeader:
 
 cdef class BgenVar:
     cdef Variant thisptr
-    cdef ifstream* handle
-    cdef string path
+    cdef IFStream handle
     cdef int layout, compression, expected_n
-    def __cinit__(self, string path, long offset, int layout, int compression, int expected_n):
-        self.path = path
+    def __cinit__(self, IFStream handle, long offset, int layout, int compression, int expected_n):
+        self.handle = handle
         self.layout = layout
         self.compression = compression
         self.expected_n = expected_n
         
-        # open a file stream to the bgen file, and seek to the variant offset.
-        # Note that this is about twice as slow as assigning an existing Variant
-        # pointer from the Bgen cpp object, but this means we can pickle the
-        # object for easy dispersion across dask clusters. Still quick to create
-        # BgenVar objects, ~10000 per second.
-        self.handle = new ifstream(path)
+        # seek to the variant offset
         self.handle.seekg(offset)
-        self.thisptr = Variant(deref(self.handle), layout, compression, expected_n)
-    
-    def __dealloc__(self):
-        # delete file handle once variant no longer exists, otherwise it's easy
-        # to hit the limit of open files, since each variant has it's own handle
-        # for the bgen file
-        del self.handle
+        self.thisptr = Variant(deref(self.handle.ptr), layout, compression, expected_n)
     
     def __repr__(self):
-       return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", x{self.pos}, {self.alleles})'
+       return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", {self.pos}, {self.alleles})'
     
     def __str__(self):
        return f'{self.rsid} - {self.chrom}:{self.pos} {self.alleles}'
@@ -132,7 +142,7 @@ cdef class BgenVar:
     def __reduce__(self):
         ''' enable pickling of a BgenVar object
         '''
-        return (self.__class__, (self.path, self.thisptr.offset, self.layout, self.compression, self.expected_n))
+        return (self.__class__, (self.handle, self.thisptr.offset, self.layout, self.compression, self.expected_n))
     
     @property
     def varid(self):
@@ -172,10 +182,12 @@ cdef class BgenVar:
 cdef class BgenFile:
     cdef Bgen * thisptr
     cdef string path, sample_path
+    cdef IFStream handle
     def __cinit__(self, str path, str sample_path=''):
         self.path = path.encode('utf8')
         self.sample_path = sample_path.encode('utf8')
         self.thisptr = new Bgen(self.path, self.sample_path)
+        self.handle = IFStream(self.path)
     
     def __dealloc__(self):
         del self.thisptr
@@ -192,7 +204,7 @@ cdef class BgenFile:
         ''' pull out a Variant by index position
         '''
         cdef long offset = self.thisptr.variants[idx].offset
-        return BgenVar(self.path, offset, self.thisptr.header.layout,
+        return BgenVar(self.handle, offset, self.thisptr.header.layout,
           self.thisptr.header.compression, self.thisptr.header.nsamples)
     
     @property
