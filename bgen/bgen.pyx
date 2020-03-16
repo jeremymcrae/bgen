@@ -124,7 +124,6 @@ cdef class BgenVar:
     cdef IFStream handle
     cdef uint64_t offset
     cdef int layout, compression, expected_n
-    cdef vector[float] dosage
     def __cinit__(self, IFStream handle, uint64_t offset, int layout, int compression, int expected_n):
         self.handle = handle
         self.offset = offset
@@ -172,12 +171,12 @@ cdef class BgenVar:
         In order for this to be fast, we need to get the dosage data as a vector,
         then get a memory view on that data, and finally return as a numpy array
         '''
-        # get the vector data for the dosage. This needs to be stored in a local
-        # attribute so the memory doesn't go out of scope, as we use a cython
-        # memoryview to quickly convert to a nunmpy array.
+        # get the vector data for the dosage. We use a cython memoryview to
+        # quickly convert to a nunmpy array, and freturn a copy of that, so the
+        # underlying memory doesn't go out of scope
         # https://cython.readthedocs.io/en/latest/src/userguide/memoryviews.html#coercion-to-numpy
-        self.dosage = self.thisptr.minor_allele_dosage()
-        return np.asarray(<float [:self.dosage.size()]>self.dosage.data())
+        cdef vector[float] dosage = self.thisptr.minor_allele_dosage()
+        return np.copy(np.asarray(<float [:dosage.size()]>dosage.data()))
 
 cdef class BgenFile:
     cdef Bgen * thisptr
