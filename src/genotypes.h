@@ -28,9 +28,9 @@ public:
   };
   Genotypes() {};
   ~Genotypes() { clear_probs(); };
-  std::vector<char> decompress(char * bytes, int compressed_len, int decompressed_len);
-  void parse_layout1(std::vector<char>);
-  void parse_layout2(std::vector<char>);
+  void decompress(char * bytes, int compressed_len, char * decompressed, int decompressed_len);
+  void parse_layout1(char *);
+  void parse_layout2(char *);
   float * probabilities();
   void clear_probs();
   int max_probs = 0;

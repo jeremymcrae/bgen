@@ -14,11 +14,9 @@
 
 namespace bgen {
 
-std::vector<char> zlib_uncompress(char * input, int compressed_len, int decompressed_len) {
+void zlib_uncompress(char * input, int compressed_len, char * decompressed, int decompressed_len) {
   /* uncompress a char array with zlib
   */
-  char decompressed[decompressed_len];
-  
   z_stream infstream;
   infstream.zalloc = Z_NULL;
   infstream.zfree = Z_NULL;
@@ -26,27 +24,28 @@ std::vector<char> zlib_uncompress(char * input, int compressed_len, int decompre
   
   infstream.avail_in = compressed_len; // size of input
   infstream.next_in = (Bytef *) input; // input char array
-  infstream.avail_out = (uInt) sizeof(decompressed); // size of output
+  infstream.avail_out = decompressed_len; // size of output
   infstream.next_out = (Bytef *) decompressed; // output char array
   
   inflateInit(&infstream);
   inflate(&infstream, Z_NO_FLUSH);
   inflateEnd(&infstream);
   
-  return std::vector<char> {decompressed, decompressed+infstream.total_out};
+  if (decompressed_len != (int) infstream.total_out) {
+    throw std::invalid_argument("zlib decompression gave data of wrong length");
+  }
 }
 
-std::vector<char> Genotypes::decompress(char * bytes, int compressed_len, int decompressed_len) {
+void Genotypes::decompress(char * bytes, int compressed_len, char * decompressed, int decompressed_len) {
   /* decompress the probabilty data
   */
-  std::vector<char> decompressed;
   switch (compression) {
     case 0: { // no compression
-      decompressed = std::vector<char> {bytes, bytes + compressed_len};
+      decompressed = bytes;
       break;
     }
     case 1: { // zlib
-      decompressed = zlib_uncompress(bytes, compressed_len, decompressed_len);
+      zlib_uncompress(bytes, compressed_len, decompressed, decompressed_len);
       break;
     }
     case 2: { //zstd
@@ -54,7 +53,6 @@ std::vector<char> Genotypes::decompress(char * bytes, int compressed_len, int de
       break;
     }
   }
-  return decompressed;
 }
 
 int get_max_probs(int max_ploidy, int n_alleles, bool phased) {
@@ -68,7 +66,7 @@ int get_max_probs(int max_ploidy, int n_alleles, bool phased) {
   return max_probs;
 }
 
-void Genotypes::parse_layout1(std::vector<char> uncompressed) {
+void Genotypes::parse_layout1(char * uncompressed) {
   /* parse probabilities for layout1
   */
   bool phased = false;
@@ -101,7 +99,7 @@ void Genotypes::parse_layout1(std::vector<char> uncompressed) {
   }
 }
 
-void Genotypes::parse_layout2(std::vector<char> uncompressed) {
+void Genotypes::parse_layout2(char * uncompressed) {
   /* parse probabilities for layout2
   */
   int idx = 0;
@@ -220,8 +218,9 @@ float * Genotypes::probabilities() {
   
   std::uint32_t compressed_len = next_var_offset - offset - decompressed_field * 4;
   char geno[compressed_len];
+  char uncompressed[decompressed_len];
   handle->read(&geno[0], compressed_len); // about 70 microseconds
-  auto uncompressed = decompress(geno, (int) compressed_len, (int) decompressed_len);  // about 2-3 milliseconds
+  decompress(geno, (int) compressed_len, uncompressed, (int) decompressed_len);  // about 2-3 milliseconds
   
   switch (layout) {
     case 1: {
