@@ -196,13 +196,18 @@ cdef class BgenFile:
         return f'BgenFile("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
     
     def __iter__(self):
-        length = self.thisptr.variants.size()
-        for idx in range(length):
+        for idx in range(len(self)):
             yield self[idx]
+    
+    def __len__(self):
+        return self.thisptr.variants.size()
     
     def __getitem__(self, int idx):
         ''' pull out a Variant by index position
         '''
+        if idx >= len(self) or idx < 0:
+            raise IndexError(f'cannot get Variant at index: {idx}')
+        
         cdef long offset = self.thisptr.variants[idx].offset
         return BgenVar(self.handle, offset, self.thisptr.header.layout,
           self.thisptr.header.compression, self.thisptr.header.nsamples)
