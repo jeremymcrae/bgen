@@ -5,14 +5,15 @@
 
 namespace bgen {
 
-Variant::Variant(std::ifstream & handle, int layout, int compression, int expected_n) {
+Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) {
   /* initialise a single variant with chrom, pos, rsID identifiers
   
   This starts a Genotypes object, but this doesn't parse the genotypes until
   required, just starts it so we can get the offset of the next variant, so as
   to parse the bgen variants at speed.
   */
-  offset = handle.tellg();
+  offset = varoffset;
+  handle.seekg(offset);
   if (layout == 1) {
     handle.read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
   } else {

@@ -3,7 +3,7 @@
 from libcpp cimport bool
 from libcpp.string cimport string
 from libcpp.vector cimport vector
-from libc.stdint cimport uint32_t
+from libc.stdint cimport uint32_t, uint64_t
 
 from cython.operator cimport dereference as deref
 
@@ -28,7 +28,7 @@ cdef extern from "<fstream>" namespace "std":
 cdef extern from 'variant.h' namespace 'bgen':
     cdef cppclass Variant:
         # declare class constructor and methods
-        Variant(ifstream & handle, int layout, int compression, int expected_n) except +
+        Variant(ifstream & handle, uint64_t & offset, int layout, int compression, int expected_n) except +
         Variant() except +
         vector[float] minor_allele_dosage()
         
@@ -122,16 +122,16 @@ cdef class BgenHeader:
 cdef class BgenVar:
     cdef Variant thisptr
     cdef IFStream handle
+    cdef uint64_t offset
     cdef int layout, compression, expected_n
-    def __cinit__(self, IFStream handle, long offset, int layout, int compression, int expected_n):
+    def __cinit__(self, IFStream handle, uint64_t offset, int layout, int compression, int expected_n):
         self.handle = handle
+        self.offset = offset
         self.layout = layout
         self.compression = compression
         self.expected_n = expected_n
         
-        # seek to the variant offset
-        self.handle.seekg(offset)
-        self.thisptr = Variant(deref(self.handle.ptr), layout, compression, expected_n)
+        self.thisptr = Variant(deref(self.handle.ptr), offset, layout, compression, expected_n)
     
     def __repr__(self):
        return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", {self.pos}, {self.alleles})'

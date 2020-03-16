@@ -16,7 +16,7 @@ class Variant {
   Genotypes geno;
   int minor_idx = -1;
 public:
-  Variant(std::ifstream & handle, int layout, int compression, int expected_n);
+  Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n);
   Variant() {};
   std::uint64_t next_variant_offset();
   std::vector<std::vector<float>> probabilities();

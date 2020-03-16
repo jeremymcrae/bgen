@@ -18,16 +18,16 @@ Bgen::Bgen(std::string path, std::string sample_path) {
   // figure out the file length, so we don't go beyond it
   handle.seekg(0, std::ios::end);
   fsize = (std::uint64_t) handle.tellg() - fsize;
+  handle.seekg(0);
   
-  // seek to the first variant
-  handle.seekg(header.offset + 4);
-  
+  std::uint64_t offset = header.offset + 4;
   while (true) {
     if (handle.eof() | ((std::uint64_t) handle.tellg() >= fsize)) {
       break;
     }
-    Variant variant(handle, header.layout, header.compression, header.nsamples);
+    Variant variant(handle, offset, header.layout, header.compression, header.nsamples);
     variants.push_back(variant);
+    offset = variant.next_variant_offset();
   }
 }
 
