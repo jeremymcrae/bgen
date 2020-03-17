@@ -22,7 +22,7 @@ Bgen::Bgen(std::string path, std::string sample_path) {
   
   std::uint64_t offset = header.offset + 4;
   while (true) {
-    if (handle.eof() | ((std::uint64_t) handle.tellg() >= fsize)) {
+    if (handle.eof() | (offset >= fsize)) {
       break;
     }
     Variant variant(handle, offset, header.layout, header.compression, header.nsamples);
