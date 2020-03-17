@@ -77,6 +77,7 @@ std::vector<std::vector<float>> Variant::probabilities() {
       probs[n][x] = float_probs[offset + x];
     }
   }
+  delete[] float_probs;
   return probs;
 }
 
@@ -106,6 +107,7 @@ void Variant::dosages(float * first, float * second) {
     sums[0] += first[n];
     sums[1] += second[n];
   }
+  delete[] probs;
   
   if (sums[0] < sums[1]) {
     minor_idx = 0;

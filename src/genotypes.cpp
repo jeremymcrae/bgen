@@ -66,7 +66,7 @@ int get_max_probs(int max_ploidy, int n_alleles, bool phased) {
   return max_probs;
 }
 
-void Genotypes::parse_layout1(char * uncompressed) {
+float * Genotypes::parse_layout1(char * uncompressed) {
   /* parse probabilities for layout1
   */
   bool phased = false;
@@ -77,7 +77,7 @@ void Genotypes::parse_layout1(char * uncompressed) {
     ploidy = std::vector<std::uint8_t>(n_samples);
   }
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
-  probs = new float[max_probs * n_samples];
+  float * probs = new float[max_probs * n_samples];
   
   int idx = 0;
   int bit_len = 2;
@@ -97,9 +97,10 @@ void Genotypes::parse_layout1(char * uncompressed) {
       probs[offset + 2] = std::nan("1");
     }
   }
+  return probs;
 }
 
-void Genotypes::parse_layout2(char * uncompressed) {
+float * Genotypes::parse_layout2(char * uncompressed) {
   /* parse probabilities for layout2
   */
   int idx = 0;
@@ -153,7 +154,7 @@ void Genotypes::parse_layout2(char * uncompressed) {
   float divisor = (float) (std::pow(2, (int) bit_depth)) - 1;
   
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
-  probs = new float[max_probs * n_samples];
+  float * probs = new float[max_probs * n_samples];
   
   // get genotype/allele probabilities
   int bit_len = (int) bit_depth / 8;
@@ -197,9 +198,9 @@ void Genotypes::parse_layout2(char * uncompressed) {
       probs[offset + x] = std::nan("1");
     }
   }
+  return probs;
 }
 
-// float ** Genotypes::probabilities() {
 float * Genotypes::probabilities() {
   /* parse genotype data for a single variant
   */
@@ -222,13 +223,14 @@ float * Genotypes::probabilities() {
   handle->read(&geno[0], compressed_len); // about 70 microseconds
   decompress(geno, (int) compressed_len, uncompressed, (int) decompressed_len);  // about 2-3 milliseconds
   
+  float * probs;
   switch (layout) {
     case 1: {
-      parse_layout1(uncompressed);
+      probs = parse_layout1(uncompressed);
       break;
     }
     case 2: {
-      parse_layout2(uncompressed);  // about 17 milliseconds
+      probs = parse_layout2(uncompressed);  // about 17 milliseconds
       break;
     }
   }
@@ -236,9 +238,6 @@ float * Genotypes::probabilities() {
 }
 
 void Genotypes::clear_probs() {
-  if (max_probs > 0) {
-    delete [] probs;
-  }
   max_probs = 0;
 }
 
