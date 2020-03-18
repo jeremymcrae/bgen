@@ -220,8 +220,8 @@ float * Genotypes::probabilities() {
   std::uint32_t compressed_len = next_var_offset - offset - decompressed_field * 4;
   char geno[compressed_len];
   char uncompressed[decompressed_len];
-  handle->read(&geno[0], compressed_len); // about 70 microseconds
-  decompress(geno, (int) compressed_len, uncompressed, (int) decompressed_len);  // about 2-3 milliseconds
+  handle->read(&geno[0], compressed_len); // about 20 microseconds
+  decompress(geno, (int) compressed_len, uncompressed, (int) decompressed_len);  // about 2 milliseconds
   
   float * probs;
   switch (layout) {
@@ -230,7 +230,7 @@ float * Genotypes::probabilities() {
       break;
     }
     case 2: {
-      probs = parse_layout2(uncompressed);  // about 17 milliseconds
+      probs = parse_layout2(uncompressed);  // about 3 milliseconds
       break;
     }
   }
