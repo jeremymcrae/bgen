@@ -62,23 +62,40 @@ std::uint64_t Variant::next_variant_offset() {
   return geno.next_var_offset;
 }
 
-std::vector<std::vector<float>> Variant::probabilities() {
-  /* get genotype probabilites for the variant
+int Variant::probs_per_sample() {
+  return geno.max_probs;
+}
+float * Variant::probs_1d() {
+  /* get genotype probabilities for the variant as a 1-dimensional vector
+  
+  This makes it easy to pass the data via cython into a numpy array, which can
+  be reshaped to a 2-D array.
+  */
+  return geno.probabilities();
+  // float * float_probs = geno.probabilities();
+  // uint size = n_samples * geno.max_probs;
+  // probs1d = std::vector<float>(float_probs, float_probs + size);
+  // delete[] float_probs;
+  // return probs1d;
+}
+
+std::vector<std::vector<float>> & Variant::probabilities() {
+  /* get genotype probabilities for the variant
   
   Note this converts the probability arrays to a 2D vector, which is much slower
   than the initial parsing.
   */
   float * float_probs = geno.probabilities();
-  std::vector<std::vector<float>> probs(n_samples, std::vector<float>(geno.max_probs));
+  probs2d = std::vector<std::vector<float>>(n_samples, std::vector<float>(geno.max_probs));
   int offset;
   for (uint n=0; n<n_samples; n++) {
     offset = n * geno.max_probs;
     for (int x=0; x<geno.max_probs; x++){
-      probs[n][x] = float_probs[offset + x];
+      probs2d[n][x] = float_probs[offset + x];
     }
   }
   delete[] float_probs;
-  return probs;
+  return probs2d;
 }
 
 void Variant::dosages(float * first, float * second) {

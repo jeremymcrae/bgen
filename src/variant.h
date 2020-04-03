@@ -19,9 +19,12 @@ public:
   Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n);
   Variant() {};
   std::uint64_t next_variant_offset();
-  std::vector<std::vector<float>> probabilities();
+  int probs_per_sample();
+  std::vector<std::vector<float>> & probabilities();
   void dosages(float * first, float * second);
   std::vector<float> & minor_allele_dosage();
+  float * probs_1d();
+  std::vector<std::vector<float>> probs2d;
   std::vector<float> minor_allele_dose;
   std::string minor_allele;
   

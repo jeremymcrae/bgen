@@ -4,6 +4,7 @@ from libcpp cimport bool
 from libcpp.string cimport string
 from libcpp.vector cimport vector
 from libc.stdint cimport uint32_t, uint64_t
+from libc.stdlib cimport malloc, free
 
 from cython.operator cimport dereference as deref
 
@@ -30,7 +31,10 @@ cdef extern from 'variant.h' namespace 'bgen':
         # declare class constructor and methods
         Variant(ifstream & handle, uint64_t & offset, int layout, int compression, int expected_n) except +
         Variant() except +
-        vector[float] minor_allele_dosage()
+        vector[float] & minor_allele_dosage()
+        # vector[float] & probs_1d()
+        float * probs_1d()
+        int probs_per_sample()
         
         # declare public attributes
         string varid, rsid, chrom, minor_allele
@@ -99,6 +103,8 @@ cdef class IFStream:
         return (self.__class__, (self.path, ))
 
 cdef class BgenHeader:
+    ''' holds information about the Bgen file, obtained from the intial header.
+    '''
     cdef uint32_t offset
     cdef uint32_t nvariants
     cdef uint32_t nsamples
@@ -120,6 +126,19 @@ cdef class BgenHeader:
             f'layout={self.layout}, has_sample_ids={self.has_sample_ids})'
 
 cdef class BgenVar:
+    ''' holds data for a Variant from a bgen file
+    
+    This constructs a new Variant, rather than using a object pointer, in order
+    to make pickling the object easier.
+    
+    Initialization takes about 1e-5 seconds per variant, so we can only run
+    through variants in a file at 100,000 variants per second at most (assuming
+    no other work is being done).
+    
+    This shouldn't be a limitation in practise, since the rate limiting part is
+    parsing genotype information, which runs at about 90 variants per second
+    for files with 500,000 samples.
+    '''
     cdef Variant thisptr
     cdef IFStream handle
     cdef uint64_t offset
@@ -131,6 +150,7 @@ cdef class BgenVar:
         self.compression = compression
         self.expected_n = expected_n
         
+        # construct new Variant from the handle, offset and other file info
         self.thisptr = Variant(deref(self.handle.ptr), offset, layout, compression, expected_n)
     
     def __repr__(self):
@@ -177,8 +197,21 @@ cdef class BgenVar:
         # https://cython.readthedocs.io/en/latest/src/userguide/memoryviews.html#coercion-to-numpy
         cdef vector[float] dosage = self.thisptr.minor_allele_dosage()
         return np.copy(np.asarray(<float [:dosage.size()]>dosage.data()))
+    @property
+    def probabilities(self):
+        ''' get the allelic probabilities for a variant
+        '''
+        cdef float * probs = self.thisptr.probs_1d()
+        cdef int cols = self.thisptr.probs_per_sample()
+        cdef int size = self.expected_n * cols
+        arr = np.asarray(<float [:size]>probs)
+        data = np.reshape(arr, (-1, cols))
+        free(probs)
+        return data
 
 cdef class BgenFile:
+    ''' test docstring
+    '''
     cdef Bgen * thisptr
     cdef string path, sample_path
     cdef IFStream handle
@@ -232,7 +265,7 @@ cdef class BgenFile:
         self.thisptr.drop_variants(indices)
     
     def varids(self):
-      ''' get the varint IDs of all variants in the bgen file
+      ''' get the variant IDs of all variants in the bgen file
       '''
       varids = self.thisptr.varids()
       return [x.decode('utf8') for x in varids]
