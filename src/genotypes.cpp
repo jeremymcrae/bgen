@@ -40,6 +40,9 @@ void zstd_uncompress(char * input, int compressed_len, char * decompressed,  int
   /* uncompress a char array with zstd
   */
   std::size_t total_out = ZSTD_decompress(decompressed, decompressed_len, input, compressed_len);
+  if (decompressed_len != (int) total_out) {
+    throw std::invalid_argument("zstd decompression gave data of wrong length");
+  }
 }
 
 void Genotypes::decompress(char * bytes, int compressed_len, char * decompressed, int decompressed_len) {
