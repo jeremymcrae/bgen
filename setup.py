@@ -75,7 +75,9 @@ setup(name='bgen',
     license="MIT",
     url='https://github.com/jeremymcrae/bgen',
     packages=['bgen'],
-    install_requires=['cython',
+    install_requires=[
+        'cython',
+        'numpy',
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',
