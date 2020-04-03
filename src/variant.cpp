@@ -130,24 +130,21 @@ void Variant::dosages(float * first, float * second) {
   }
 }
 
-std::vector<float> & Variant::minor_allele_dosage() {
+float * Variant::minor_allele_dosage() {
   /* get dosage of the minor allele (only works for biallelic variants)
   */
-  float * first = new float[n_samples];
-  float * second = new float[n_samples];
+  first = new float[n_samples];
+  second = new float[n_samples];
   dosages(first, second);
   
   minor_allele = alleles[minor_idx];
   if (minor_idx == 0) {
-    minor_allele_dose = std::vector<float>(first, first + n_samples);
+    delete[] second;
+    return first;
   } else {
-    minor_allele_dose = std::vector<float>(second, second + n_samples);
+    delete[] first;
+    return second;
   }
-  
-  delete []first;
-  delete []second;
-  
-  return minor_allele_dose;
 }
 
 } // namespace bgen

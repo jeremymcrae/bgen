@@ -31,8 +31,7 @@ cdef extern from 'variant.h' namespace 'bgen':
         # declare class constructor and methods
         Variant(ifstream & handle, uint64_t & offset, int layout, int compression, int expected_n) except +
         Variant() except +
-        vector[float] & minor_allele_dosage()
-        # vector[float] & probs_1d()
+        float * minor_allele_dosage()
         float * probs_1d()
         int probs_per_sample()
         
@@ -195,8 +194,10 @@ cdef class BgenVar:
         # quickly convert to a nunmpy array, and freturn a copy of that, so the
         # underlying memory doesn't go out of scope
         # https://cython.readthedocs.io/en/latest/src/userguide/memoryviews.html#coercion-to-numpy
-        cdef vector[float] dosage = self.thisptr.minor_allele_dosage()
-        return np.copy(np.asarray(<float [:dosage.size()]>dosage.data()))
+        cdef float * dosage = self.thisptr.minor_allele_dosage()
+        data = np.copy(np.asarray(<float [:self.expected_n]>dosage))
+        free(dosage)
+        return data
     @property
     def probabilities(self):
         ''' get the allelic probabilities for a variant

@@ -22,7 +22,7 @@ public:
   int probs_per_sample();
   std::vector<std::vector<float>> & probabilities();
   void dosages(float * first, float * second);
-  std::vector<float> & minor_allele_dosage();
+  float * minor_allele_dosage();
   float * probs_1d();
   std::vector<std::vector<float>> probs2d;
   std::vector<float> minor_allele_dose;
@@ -36,6 +36,9 @@ public:
   std::uint32_t pos;
   std::uint16_t n_alleles;
   std::vector<std::string> alleles;
+  
+  float * first;
+  float * second;
 };
 
 } // namespace bgen
