@@ -5,7 +5,8 @@ from setuptools import setup
 import sys
 
 from distutils.core import Extension
-from Cython.Build import cythonize, build_ext
+from distutils.ccompiler import new_compiler
+from Cython.Build import cythonize
 
 EXTRA_COMPILE_ARGS = ['-std=c++11']
 EXTRA_LINK_ARGS = []
@@ -16,58 +17,37 @@ if sys.platform == "darwin":
 def flatten(*lists):
     return [str(x) for sublist in lists for x in sublist]
 
-folder = Path('src/zstd/lib')
-zstd = Extension('bgen.libzstd',
-    extra_compile_args=["-std=gnu11"],
-    extra_link_args=['-shared',],
-    sources=flatten(
+def build_zstd():
+    ''' compile zstd code to object files for linking with bgen c++ code
+    
+    This needs to be compiles independently of the bgen c++ code, as zstd is in
+    c, so cannot be compiled directly with the bgen code. zstd is compiled to
+    object files, and these are staticly linked in with the bgen code.
+    
+    I tried to link to a shared/dynamic zstd library, but couldn't specify a
+    location that would be found by the compiled bgen library after relocating
+    files into to a python package.
+    
+    Returns:
+        list of paths to compiled object code
+    '''
+    folder = Path('src/zstd/lib')
+    include_dirs = ['src/zstd/lib/', 'src/zstd/lib/common']
+    sources = flatten(
         (folder / 'common').glob('*.c'),
         (folder / 'compress').glob('*.c'),
+        (folder / 'decompress').glob('*.c'),
         (folder / 'dictBuilder').glob('*.c'),
         (folder / 'deprecated').glob('*.c'),
         (folder / 'legacy').glob('*.c'),  # TODO: drop some legacy versions
-    ),
-    include_dirs=['src/zstd/lib/',
-        'src/zstd/lib/common',
-    ],
-    language='c'),
-builder = build_ext('temp')
-print(dir(zstd[0]))
-builder.build_extension(zstd[0])
-
-
-# ext_libraries = [['zstd', {
-#     'extra_compile_args': ["-std=gnu11"],
-#     # 'extra_link_args': ['-shared'],
-#     'sources':  flatten(
-#         (folder / 'common').glob('*.c'),
-#         (folder / 'compress').glob('*.c'),
-#         (folder / 'dictBuilder').glob('*.c'),
-#         (folder / 'deprecated').glob('*.c'),
-#         (folder / 'legacy').glob('*.c'),  # TODO: drop some legacy versions
-#     ),
-#     'include_dirs': ['src/zstd/lib/',
-#         'src/zstd/lib/common',
-#     ],
-#     'language': 'c'
-#     }
-# ]]
+    )
+    extra_compile_args = ['-std=gnu11']
+    
+    cc = new_compiler()
+    return cc.compile(sources, include_dirs=include_dirs,
+        extra_preargs=extra_compile_args)
 
 reader = cythonize([
-    # Extension('bgen.libzstd',
-    #     extra_compile_args=["-std=gnu11"],
-    #     extra_link_args=['-shared',],
-    #     sources=flatten(
-    #         (folder / 'common').glob('*.c'),
-    #         (folder / 'compress').glob('*.c'),
-    #         (folder / 'dictBuilder').glob('*.c'),
-    #         (folder / 'deprecated').glob('*.c'),
-    #         (folder / 'legacy').glob('*.c'),  # TODO: drop some legacy versions
-    #     ),
-    #     include_dirs=['src/zstd/lib/',
-    #         'src/zstd/lib/common',
-    #     ],
-    #     language='c'),
     Extension('bgen.reader',
         extra_compile_args=EXTRA_COMPILE_ARGS,
         extra_link_args=EXTRA_LINK_ARGS,
@@ -78,9 +58,9 @@ reader = cythonize([
             'src/samples.cpp',
             'src/utils.cpp',
             'src/variant.cpp'],
+        extra_objects=build_zstd(),
         include_dirs=['src/', 'src/zstd/lib'],
-        libraries=['z', 'zstd.cpython-37m-darwin'],
-        # library_dirs=[str(x) for x in Path('build').glob('**') if x.is_dir() and 'lib' in str(x)],
+        libraries=['z'],
         library_dirs=['bgen'],
         language='c++'),
     ])
@@ -101,8 +81,6 @@ setup(name='bgen',
         'Development Status :: 3 - Alpha',
         'Topic :: Scientific/Engineering :: Bio-Informatics',
     ],
-    # ext_modules=[zstd()],
     ext_modules=reader,
-    # libraries=ext_libraries,
     test_suite='tests',
     )
