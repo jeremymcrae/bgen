@@ -72,11 +72,6 @@ float * Variant::probs_1d() {
   be reshaped to a 2-D array.
   */
   return geno.probabilities();
-  // float * float_probs = geno.probabilities();
-  // uint size = n_samples * geno.max_probs;
-  // probs1d = std::vector<float>(float_probs, float_probs + size);
-  // delete[] float_probs;
-  // return probs1d;
 }
 
 std::vector<std::vector<float>> & Variant::probabilities() {
