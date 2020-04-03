@@ -41,7 +41,7 @@ def build_zstd():
         (folder / 'deprecated').glob('*.c'),
         (folder / 'legacy').glob('*.c'),  # TODO: drop some legacy versions
     )
-    extra_compile_args = ['-std=gnu11']
+    extra_compile_args = ['-std=gnu11', '-fPIC']
     
     cc = new_compiler()
     return cc.compile(sources, include_dirs=include_dirs,
