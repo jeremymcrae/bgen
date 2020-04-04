@@ -2,7 +2,7 @@
 This is a package for reading [bgen files](https://www.well.ox.ac.uk/~gav/).
 
 This package uses cython to wrap c++ code for bgen parsing. It's fairly quick,
-it can parse genotypes from 500,000 individuals at ~90 variants per second
+it can parse genotypes from 500,000 individuals at ~100 variants per second
 within python.
 
 #### Install
