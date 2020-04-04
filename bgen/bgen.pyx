@@ -287,4 +287,10 @@ cdef class BgenFile:
         ''' get the positions of all variants in the bgen file
         '''
         return self.thisptr.positions()
-  
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        del self.thisptr
+        return False
