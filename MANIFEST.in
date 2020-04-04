@@ -1,0 +1,11 @@
+# bgen code
+include MANIFEST.in
+include pyproject.toml
+include bgen/*.cpp
+include bgen/*.py
+include bgen/*.pyx
+include src/*.h
+include src/*.cpp
+include src/zstd/lib/*.h
+recursive-include src/zstd/lib/ *.h
+recursive-include src/zstd/lib/ *.c
