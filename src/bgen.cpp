@@ -5,6 +5,9 @@ namespace bgen {
 
 Bgen::Bgen(std::string path, std::string sample_path) {
   handle.open(path, std::ios::binary);
+  if (!handle) {
+    throw std::invalid_argument("error reading from '" + path + "'");
+  }
   std::uint64_t fsize = handle.tellg();
   header = Header(handle);
   if (header.has_sample_ids) {
