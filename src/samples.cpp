@@ -34,6 +34,9 @@ Samples::Samples(std::string path, int n_samples) {
   /* initialize from external sample file
   */
   std::ifstream handle(path, std::ios::in);
+  if (!handle) {
+    throw std::invalid_argument("error with sample file: '" + path + "'");
+  }
   
   std::string header;
   std::getline(handle, header);
