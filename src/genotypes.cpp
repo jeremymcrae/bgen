@@ -155,10 +155,6 @@ float * Genotypes::parse_layout2(char * uncompressed) {
     throw std::invalid_argument("probabilities bit depth out of bounds");
   }
   
-  if (!((bit_depth == 8) | (bit_depth == 16) | (bit_depth == 32))) {
-    throw std::invalid_argument("probabilities bit depth isn't a standard type (8, 16 or 32)");
-  }
-  
   idx += sizeof(std::uint8_t);
   float divisor = (float) (std::pow(2, (int) bit_depth)) - 1;
   
@@ -172,6 +168,12 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   float prob = 0;
   float remainder;
   int offset;
+  
+  // define variables for parsing depths not aligned with 8 bit char array
+  std::uint32_t probs_mask = std::uint32_t(0xFFFFFFFF) >> ( 32 - bit_depth );
+  int bit_offset;  //
+  int bit_idx = 0;  // index position in bits
+  int shift; // for bit shifting within the word
   for (int start=0; start < n_samples; start++) {
     // calculate the number of probabilities per sample (depends on whether the
     // data is phased, the sample ploidy and the number of alleles)
@@ -193,6 +195,13 @@ float * Genotypes::parse_layout2(char * uncompressed) {
         prob = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) / divisor;
       } else if (bit_depth == 32) {
         prob = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]) / divisor;
+      } else {
+        // parsing for bit depths not divisible by 8.
+        bit_offset = bit_idx / 8;
+        shift = bit_idx % 8;
+        prob = ((*reinterpret_cast<const std::uint32_t* >(&uncompressed[idx + bit_offset]) >> shift) & probs_mask) / divisor ;
+        bit_idx += bit_depth;
+        idx -= bit_len;  // keep index position constant, bit_idx locates probs instead
       }
       idx += bit_len;
       remainder -= prob;
