@@ -170,7 +170,7 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   int offset;
   
   // define variables for parsing depths not aligned with 8 bit char array
-  std::uint32_t probs_mask = std::uint32_t(0xFFFFFFFF) >> ( 32 - bit_depth );
+  std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
   int bit_offset;  //
   int bit_idx = 0;  // index position in bits
   int shift; // for bit shifting within the word
@@ -199,7 +199,7 @@ float * Genotypes::parse_layout2(char * uncompressed) {
         // parsing for bit depths not divisible by 8.
         bit_offset = bit_idx / 8;
         shift = bit_idx % 8;
-        prob = ((*reinterpret_cast<const std::uint32_t* >(&uncompressed[idx + bit_offset]) >> shift) & probs_mask) / divisor ;
+        prob = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_offset]) >> shift) & probs_mask) / divisor ;
         bit_idx += bit_depth;
         idx -= bit_len;  // keep index position constant, bit_idx locates probs instead
       }
