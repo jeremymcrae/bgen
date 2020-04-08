@@ -86,7 +86,7 @@ float * Genotypes::parse_layout1(char * uncompressed) {
     ploidy = std::vector<std::uint8_t>(n_samples);
   }
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
-  float * probs = new float[max_probs * n_samples];
+  probs = new float[max_probs * n_samples];
   
   int idx = 0;
   int bit_len = 2;
@@ -159,7 +159,7 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   float divisor = (float) (std::pow(2, (int) bit_depth)) - 1;
   
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
-  float * probs = new float[max_probs * n_samples];
+  probs = new float[max_probs * n_samples];
   
   // get genotype/allele probabilities
   int bit_len = (int) bit_depth / 8;
@@ -241,7 +241,6 @@ float * Genotypes::probabilities() {
   handle->read(&geno[0], compressed_len); // about 20 microseconds
   decompress(geno, (int) compressed_len, uncompressed, (int) decompressed_len);  // about 2 milliseconds
   
-  float * probs;
   switch (layout) {
     case 1: {
       probs = parse_layout1(uncompressed);
@@ -256,6 +255,9 @@ float * Genotypes::probabilities() {
 }
 
 void Genotypes::clear_probs() {
+  if (max_probs > 0) {
+    delete[] probs;
+  }
   max_probs = 0;
 }
 

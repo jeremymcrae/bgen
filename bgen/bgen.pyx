@@ -4,7 +4,6 @@ from libcpp cimport bool
 from libcpp.string cimport string
 from libcpp.vector cimport vector
 from libc.stdint cimport uint32_t, uint64_t
-from libc.stdlib cimport malloc, free
 
 from cython.operator cimport dereference as deref
 
@@ -196,7 +195,6 @@ cdef class BgenVar:
         # https://cython.readthedocs.io/en/latest/src/userguide/memoryviews.html#coercion-to-numpy
         cdef float * dosage = self.thisptr.minor_allele_dosage()
         data = np.copy(np.asarray(<float [:self.expected_n]>dosage))
-        free(dosage)
         return data
     @property
     def probabilities(self):
@@ -207,7 +205,6 @@ cdef class BgenVar:
         cdef int size = self.expected_n * cols
         arr = np.asarray(<float [:size]>probs)
         data = np.reshape(arr, (-1, cols))
-        free(probs)
         return data
 
 cdef class BgenFile:

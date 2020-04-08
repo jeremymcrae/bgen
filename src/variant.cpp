@@ -94,7 +94,6 @@ std::vector<std::vector<float>> & Variant::probabilities() {
       probs2d[n][x] = float_probs[offset + x];
     }
   }
-  delete[] float_probs;
   return probs2d;
 }
 
@@ -124,7 +123,6 @@ void Variant::dosages(float * first, float * second) {
     sums[0] += first[n];
     sums[1] += second[n];
   }
-  delete[] probs;
   
   if (sums[0] < sums[1]) {
     minor_idx = 0;
@@ -144,10 +142,8 @@ float * Variant::minor_allele_dosage() {
   
   minor_allele = alleles[minor_idx];
   if (minor_idx == 0) {
-    delete[] second;
     return first;
   } else {
-    delete[] first;
     return second;
   }
 }

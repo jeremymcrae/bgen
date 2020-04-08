@@ -18,6 +18,12 @@ class Variant {
 public:
   Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n);
   Variant() {};
+  ~Variant() {
+    if (minor_idx >=0) {
+      delete[] first;
+      delete[] second;
+    }
+  }
   std::uint64_t next_variant_offset();
   int probs_per_sample();
   std::vector<std::vector<float>> & probabilities();

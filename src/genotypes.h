@@ -17,6 +17,7 @@ class Genotypes {
   int compression;
   int n_alleles;
   int n_samples;
+  float * probs;
 public:
   Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, int n_samples) :
     handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples) {
