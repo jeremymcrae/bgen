@@ -27,16 +27,21 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   // get the variant ID (first need to know how long the field is)
   std::uint16_t item_len;
   handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
-  std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(varid));
+  if (item_len > 0) {
+    std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(varid));
+  }
   
   // get the rsID (first need to know how long the field is)
   handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
-  
-  std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(rsid));
+  if (item_len > 0) {
+    std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(rsid));
+  }
   
   // get the chromosome (first need to know how long the field is)
   handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
-  std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(chrom));
+  if (item_len > 0) {
+    std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(chrom));
+  }
   
   handle.read(reinterpret_cast<char*>(&pos), sizeof(std::uint32_t));
   if (layout == 1) {
