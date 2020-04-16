@@ -23,6 +23,7 @@ Bgen::Bgen(std::string path, std::string sample_path) {
   fsize = (std::uint64_t) handle.tellg() - fsize;
   handle.seekg(0);
   
+  variants.resize(header.nvariants);
   std::uint64_t offset = header.offset + 4;
   while (true) {
     if (handle.eof() | (offset >= fsize)) {
@@ -53,6 +54,7 @@ void Bgen::drop_variants(std::vector<int> indices) {
   // and sort the variants again afterward
   std::sort(variants.begin(), variants.end(),
           [] (Variant const& a, Variant const& b) { return a.pos < b.pos; });
+  variants.shrink_to_fit();
 }
 
 std::vector<std::string> Bgen::varids() {
