@@ -70,6 +70,21 @@ std::uint64_t Variant::next_variant_offset() {
 int Variant::probs_per_sample() {
   return geno.max_probs;
 }
+
+bool Variant::phased() {
+  if (geno.max_probs == 0) {
+    throw std::invalid_argument("unknown phase, run variant.probabilities() first");
+  }
+  return geno.phased;
+}
+
+std::uint8_t * Variant::ploidy() {
+  if (geno.max_probs == 0) {
+    throw std::invalid_argument("unknown ploidy, run variant.probabilities() first");
+  }
+  return geno.ploidy;
+}
+
 float * Variant::probs_1d() {
   /* get genotype probabilities for the variant as a 1-dimensional vector
   
@@ -86,7 +101,16 @@ std::vector<std::vector<float>> & Variant::probabilities() {
   than the initial parsing.
   */
   float * float_probs = geno.probabilities();
-  probs2d = std::vector<std::vector<float>>(n_samples, std::vector<float>(geno.max_probs));
+  int nrows = 0;
+  if (geno.phased) {
+    for (int n=0; n<n_samples; n++) {
+      nrows += geno.ploidy[n];
+    }
+  } else {
+    nrows = n_samples;
+  }
+  
+  probs2d = std::vector<std::vector<float>>(nrows, std::vector<float>(geno.max_probs));
   int offset;
   for (uint n=0; n<n_samples; n++) {
     offset = n * geno.max_probs;

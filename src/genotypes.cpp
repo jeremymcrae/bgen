@@ -68,7 +68,7 @@ int get_max_probs(int max_ploidy, int n_alleles, bool phased) {
   // figure out the maximum number of probabilities across the individuals
   int max_probs;
   if (phased) {
-    max_probs = max_ploidy * (n_alleles - 1) + 1;
+    max_probs = max_ploidy * (n_alleles - 1);
   } else {
     max_probs = n_choose_k(max_ploidy + n_alleles - 1, n_alleles - 1);
   }
@@ -78,12 +78,12 @@ int get_max_probs(int max_ploidy, int n_alleles, bool phased) {
 float * Genotypes::parse_layout1(char * uncompressed) {
   /* parse probabilities for layout1
   */
-  bool phased = false;
+  phased = false;
   min_ploidy = 2;
   max_ploidy = 2;
   constant_ploidy = (min_ploidy == max_ploidy);
   if (!constant_ploidy) {
-    ploidy = std::vector<std::uint8_t>(n_samples);
+    ploidy = new std::uint8_t[n_samples];
   }
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
   probs = new float[max_probs * n_samples];
@@ -132,15 +132,17 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   constant_ploidy = (min_ploidy == max_ploidy);
   
   // get ploidy and missing states. this uses 3 milliseconds for 500k samples
-  if (!constant_ploidy) {
-    ploidy = std::vector<std::uint8_t>(n_samples);
-  }
+  ploidy = new std::uint8_t[n_samples];
   
+  std::vector<int> phased_ploidy;
   std::vector<int> missing;
   std::uint8_t mask = 63;
   for (int x=0; x < n_samples; x++) {
-    if (!constant_ploidy) {
+    if (!constant_ploidy | phased) {
       ploidy[x] = mask & uncompressed[idx];
+      for (int y=0; y<ploidy[x]; y++) {
+        phased_ploidy.push_back(ploidy[x]);
+      }
     }
     if (uncompressed[idx] & 0x80) {
       missing.push_back(x);
@@ -148,7 +150,7 @@ float * Genotypes::parse_layout2(char * uncompressed) {
     idx += 1;
   }
   
-  int phased = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
+  phased = (bool) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
   idx += sizeof(std::uint8_t);
   int bit_depth = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
   if ((bit_depth < 1) | (bit_depth > 32)) {
@@ -159,7 +161,18 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   float divisor = (float) (std::pow(2, (int) bit_depth)) - 1;
   
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
-  probs = new float[max_probs * n_samples];
+  int nrows = 0;
+  if (!phased) {
+    nrows = n_samples;
+  } else {
+    // phased probabilities require as many rows per sample as the ploidy
+    if (constant_ploidy) {
+      nrows = n_samples * max_ploidy;
+    } else {
+      for (int n=0; n<n_samples; n++) { nrows += ploidy[n]; }
+    }
+  }
+  probs = new float[max_probs * nrows];
   
   // get genotype/allele probabilities
   int bit_len = (int) bit_depth / 8;
@@ -174,13 +187,14 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   int bit_offset;  //
   int bit_idx = 0;  // index position in bits
   int shift; // for bit shifting within the word
-  for (int start=0; start < n_samples; start++) {
+  
+  for (int start=0; start < nrows; start++) {
     // calculate the number of probabilities per sample (depends on whether the
     // data is phased, the sample ploidy and the number of alleles)
     if (constant_ploidy) {
       n_probs = max_less_1;
     } else if (phased) {
-      n_probs = ploidy[start] * (n_alleles - 1);
+      n_probs = phased_ploidy[start] * (n_alleles - 1);
     } else if ((ploidy[start] == 2) && (n_alleles == 2)) {
       n_probs = 2;
     } else {
@@ -257,6 +271,7 @@ float * Genotypes::probabilities() {
 void Genotypes::clear_probs() {
   if (max_probs > 0) {
     delete[] probs;
+    delete[] ploidy;
   }
   max_probs = 0;
 }

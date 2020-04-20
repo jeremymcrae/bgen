@@ -20,21 +20,11 @@ class TestExampleBgens(unittest.TestCase):
         '''
         self.folder = Path(__file__).parent /  "data"
     
-    def test_load_example_files(self):
-        ''' check we can open the example files
+    def test_load_example_genotypes_bit_depths(self):
+        ''' check parsing genotypes from the example files with different bit depths
         '''
-        for path in self.folder.glob('example*.bgen'):
-            bfile = BgenFile(str(path))
-    
-    def test_load_example_genotypes(self):
-        ''' check parsing genotypes from the example files
-        '''
-        for path in self.folder.glob('example*.bgen'):
-            print(f'testing {path}')
-            try:
-                bit_depth = int(path.stem.split('.')[1].strip('bits'))
-            except ValueError:
-                bit_depth = 16
+        for path in self.folder.glob('example.*bits.bgen'):
+            bit_depth = int(path.stem.split('.')[1].strip('bits'))
             bfile = BgenFile(str(path))
             for var, g in zip(bfile, self.gen_data):
                 self.assertEqual(g, var)
@@ -49,12 +39,55 @@ class TestExampleBgens(unittest.TestCase):
             self.assertEqual(g, var)
             self.assertTrue(arrays_equal(g.probabilities, var.probabilities, 16))
     
+    def test_v11(self):
+        ''' check we can open a bgen in v1.1 format, and parse genotypes correctly
+        '''
+        path = self.folder / 'example.v11.bgen'
+        bfile = BgenFile(str(path))
+        bit_depth = 16
+        for var, g in zip(bfile, self.gen_data):
+            self.assertEqual(g, var)
+            self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
+    
+    def test_Path(self):
+        ''' check we can open bgen files from Path objects
+        '''
+        path = self.folder / 'example.v11.bgen'
+        bfile = BgenFile(path)
+    
+    def test_load_haplotypes_bgen(self):
+        ''' check we can open a bgen with haplotypes, and parse genotypes correctly
+        '''
+        path = self.folder / 'haplotypes.bgen'
+        bfile = BgenFile(str(path))
+        bit_depth = 16
+        for var, g in zip(bfile, self.gen_data):
+            print(var)
+            probs = var.probabilities
+            print(probs, probs.shape)
+            # self.assertEqual(g, var)
+            # self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
+    
+    def test_load_complex_file(self):
+        ''' make sure we can open a complex bgen file
+        '''
+        path = self.folder / 'complex.bgen'
+        bfile = BgenFile(path)
+        for var in bfile:
+            print(var)
+            print(var.probabilities)
+            print(' - python: probs parsed')
+    
     def test_load_complex_files(self):
         ''' make sure we can open the complex bgen files
         '''
         for path in self.folder.glob('complex*.bgen'):
-            # bfile = BgenFile(str(path))
-            pass
+            print(path)
+            bfile = BgenFile(path)
+            for var in bfile:
+                print(var)
+                print(var.probabilities)
+                print(' - python: probs parsed')
     
     def test_load_missing_file(self):
         ''' check passing in a path to a missing file fails gracefully

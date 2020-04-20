@@ -33,11 +33,12 @@ public:
   float * parse_layout2(char *);
   float * probabilities();
   void clear_probs();
+  bool phased;
   int max_probs = 0;
   bool constant_ploidy;
   int min_ploidy;
   int max_ploidy;
-  std::vector<std::uint8_t> ploidy;
+  std::uint8_t * ploidy;
   std::uint64_t next_var_offset;
 };
 

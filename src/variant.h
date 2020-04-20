@@ -30,6 +30,8 @@ public:
   void dosages(float * first, float * second);
   float * minor_allele_dosage();
   float * probs_1d();
+  bool phased();
+  std::uint8_t * ploidy();
   std::vector<std::vector<float>> probs2d;
   std::vector<float> minor_allele_dose;
   std::string minor_allele;

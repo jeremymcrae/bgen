@@ -5,7 +5,7 @@ from pathlib import Path
 from libcpp cimport bool
 from libcpp.string cimport string
 from libcpp.vector cimport vector
-from libc.stdint cimport uint32_t, uint64_t
+from libc.stdint cimport uint8_t, uint32_t, uint64_t
 
 from cython.operator cimport dereference as deref
 
@@ -35,6 +35,8 @@ cdef extern from 'variant.h' namespace 'bgen':
         float * minor_allele_dosage()
         float * probs_1d()
         int probs_per_sample()
+        bool phased()
+        uint8_t * ploidy()
         
         # declare public attributes
         string varid, rsid, chrom, minor_allele
@@ -180,6 +182,15 @@ cdef class BgenVar:
     def alleles(self):
         return [x.decode('utf8') for x in self.thisptr.alleles]
     @property
+    def is_phased(self):
+      return self.thisptr.phased()
+    @property
+    def ploidy(self):
+        ''' get the ploidy for each sample
+        '''
+        cdef uint8_t * ploid = self.thisptr.ploidy()
+        return np.copy(np.asarray(<uint8_t [:self.expected_n]>ploid))
+    @property
     def minor_allele(self):
         ''' get the minor allele of a biallelic variant
         '''
@@ -204,7 +215,11 @@ cdef class BgenVar:
         '''
         cdef float * probs = self.thisptr.probs_1d()
         cdef int cols = self.thisptr.probs_per_sample()
-        cdef int size = self.expected_n * cols
+        cdef int size
+        if self.is_phased:
+            size = self.ploidy.sum() * cols
+        else:
+            size = self.expected_n * cols
         arr = np.asarray(<float [:size]>probs)
         data = np.reshape(arr, (-1, cols))
         return data
