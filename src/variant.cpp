@@ -103,7 +103,7 @@ std::vector<std::vector<float>> & Variant::probabilities() {
   float * float_probs = geno.probabilities();
   int nrows = 0;
   if (geno.phased) {
-    for (int n=0; n<n_samples; n++) {
+    for (uint n=0; n<n_samples; n++) {
       nrows += geno.ploidy[n];
     }
   } else {
