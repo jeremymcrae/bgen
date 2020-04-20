@@ -210,7 +210,7 @@ cdef class BgenVar:
         return data
 
 cdef class BgenFile:
-    ''' test docstring
+    ''' class to open bgen files from disk, and access variant data within
     '''
     cdef Bgen * thisptr
     cdef string path, sample_path
