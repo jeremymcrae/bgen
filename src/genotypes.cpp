@@ -82,9 +82,7 @@ float * Genotypes::parse_layout1(char * uncompressed) {
   min_ploidy = 2;
   max_ploidy = 2;
   constant_ploidy = (min_ploidy == max_ploidy);
-  if (!constant_ploidy) {
-    ploidy = new std::uint8_t[n_samples];
-  }
+  ploidy = new std::uint8_t[n_samples];
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
   probs = new float[max_probs * n_samples];
   
