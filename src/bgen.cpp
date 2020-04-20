@@ -25,13 +25,14 @@ Bgen::Bgen(std::string path, std::string sample_path) {
   
   variants.resize(header.nvariants);
   std::uint64_t offset = header.offset + 4;
+  int idx = 0;
   while (true) {
     if (handle.eof() | (offset >= fsize)) {
       break;
     }
-    Variant variant(handle, offset, header.layout, header.compression, header.nsamples);
-    variants.push_back(variant);
-    offset = variant.next_variant_offset();
+    variants[idx] = Variant(handle, offset, header.layout, header.compression, header.nsamples);
+    offset = variants[idx].next_variant_offset();
+    idx += 1;
   }
 }
 
