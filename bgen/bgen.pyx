@@ -1,5 +1,7 @@
 # cython: language_level=3, boundscheck=False
 
+from pathlib import Path
+
 from libcpp cimport bool
 from libcpp.string cimport string
 from libcpp.vector cimport vector
@@ -213,9 +215,17 @@ cdef class BgenFile:
     cdef Bgen * thisptr
     cdef string path, sample_path
     cdef IFStream handle
-    def __cinit__(self, str path, str sample_path=''):
-        self.path = path.encode('utf8')
-        self.sample_path = sample_path.encode('utf8')
+    def __cinit__(self, path, sample_path=''):
+        if isinstance(path, str):
+            self.path = path.encode('utf8')
+        elif isinstance(path, Path):
+            self.path = str(path).encode('utf8')
+        
+        if isinstance(sample_path, str):
+            self.sample_path = sample_path.encode('utf8')
+        elif isinstance(sample_path, Path):
+            self.sample_path = str(sample_path).encode('utf8')
+        
         self.thisptr = new Bgen(self.path, self.sample_path)
         self.handle = IFStream(self.path)
     
