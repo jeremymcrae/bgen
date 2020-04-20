@@ -216,15 +216,13 @@ cdef class BgenFile:
     cdef string path, sample_path
     cdef IFStream handle
     def __cinit__(self, path, sample_path=''):
-        if isinstance(path, str):
-            self.path = path.encode('utf8')
-        elif isinstance(path, Path):
-            self.path = str(path).encode('utf8')
+        if isinstance(path, Path):
+            path = str(path)
+        if isinstance(sample_path, Path):
+            sample_path = str(sample_path)
         
-        if isinstance(sample_path, str):
-            self.sample_path = sample_path.encode('utf8')
-        elif isinstance(sample_path, Path):
-            self.sample_path = str(sample_path).encode('utf8')
+        self.path = path.encode('utf8')
+        self.sample_path = sample_path.encode('utf8')
         
         self.thisptr = new Bgen(self.path, self.sample_path)
         self.handle = IFStream(self.path)
