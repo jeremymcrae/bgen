@@ -6,7 +6,7 @@ import numpy as np
 
 from bgen.reader import BgenFile
 
-from tests.utils import load_gen_data, arrays_equal
+from tests.utils import load_gen_data, load_vcf_data, arrays_equal
 
 class TestExampleBgens(unittest.TestCase):
     ''' class to make sure we can load bgen files
@@ -14,6 +14,7 @@ class TestExampleBgens(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.gen_data = load_gen_data()
+        cls.vcf_data = load_vcf_data()
     
     def setUp(self):
         ''' set path to folder with test data
@@ -73,21 +74,21 @@ class TestExampleBgens(unittest.TestCase):
         '''
         path = self.folder / 'complex.bgen'
         bfile = BgenFile(path)
-        for var in bfile:
-            print(var)
-            print(var.probabilities)
-            print(' - python: probs parsed')
+        bit_depth = 16
+        for var, g in zip(bfile, self.vcf_data):
+            self.assertEqual(g, var)
+            self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
     
     def test_load_complex_files(self):
         ''' make sure we can open the complex bgen files
         '''
+        
         for path in self.folder.glob('complex*.bgen'):
-            print(path)
+            bit_depth = int(path.stem.split('.')[1].strip('bits'))
             bfile = BgenFile(path)
-            for var in bfile:
-                print(var)
-                print(var.probabilities)
-                print(' - python: probs parsed')
+            for var, g in zip(bfile, self.vcf_data):
+                self.assertEqual(g, var)
+                self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
     
     def test_load_missing_file(self):
         ''' check passing in a path to a missing file fails gracefully

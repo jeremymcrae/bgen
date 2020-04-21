@@ -1,26 +1,27 @@
 
 from pathlib import Path
+import re
 
 import numpy as np
+
+class GenVar:
+    ''' store data for easy comparison with BgenVars
+    '''
+    def __init__(self, chrom, varid, rsid, pos, alleles, probs):
+        self.chrom = chrom
+        self.varid = varid
+        self.rsid = rsid
+        self.pos = int(pos)
+        self.alleles = alleles
+        self.probabilities = probs
+    def __eq__(self, other):
+        return self.chrom == other.chrom and self.pos == other.pos and \
+            self.varid == other.varid and self.rsid == other.rsid and \
+            set(self.alleles) == set(other.alleles)
 
 def load_gen_data():
     ''' load data from "example.gen" for comparison with the bgen files
     '''
-    class GenVar:
-        ''' store data for easy comparison with BgenVars
-        '''
-        def __init__(self, chrom, varid, rsid, pos, ref, alt, probs):
-            self.chrom = chrom
-            self.varid = varid
-            self.rsid = rsid
-            self.pos = int(pos)
-            self.alleles = [ref, alt]
-            self.probabilities = probs
-        def __eq__(self, other):
-            return self.chrom == other.chrom and self.pos == other.pos and \
-                self.varid == other.varid and self.rsid == other.rsid and \
-                set(self.alleles) == set(other.alleles)
-    
     variants = []
     path = Path(__file__).parent /  "data" / "example.gen"
     with open(path, 'rt') as gen:
@@ -30,7 +31,47 @@ def load_gen_data():
             probs = np.reshape(probs, (-1, 3))
             nonzero = (probs == 0.0).all(axis=1)
             probs[nonzero] = float('nan')
-            var = GenVar(chrom, varid, rsid, pos, ref, alt, probs)
+            var = GenVar(chrom, varid, rsid, pos, [ref, alt], probs)
+            variants.append(var)
+    return variants
+
+def parse_vcf_samples(format, samples):
+    ''' parses sample data from VCF into probabilities and ploidy
+    '''
+    samples = [dict(zip(format.split(':'), x.split(':'))) for x in samples]
+    keys = {'GT': re.compile('[/|]'), 'GP': re.compile(','), 'HP': re.compile(',')}
+    for x in samples:
+        for k in x:
+            x[k] = re.split(keys[k], x[k])
+    
+    probs = [x['GP'] if 'GP' in format else x['HP'] for x in samples]
+    max_len = max(len(x) for x in probs)
+    
+    for i in range(len(probs)):
+        if len(probs[i]) < max_len:
+            probs[i] += ['nan'] * (max_len - len(probs[i]))
+    
+    ploidy = np.array([len(x['GT']) for x in samples])
+    return np.array(probs, dtype=float), ploidy
+
+def load_vcf_data():
+    '''load data from 'complex.vcf' for comparison with the complex bgen files
+    '''
+    variants = []
+    path = Path(__file__).parent / 'data' / 'complex.vcf'
+    with open(path, 'rt') as vcf:
+        for line in vcf:
+            if line.startswith('#'):
+                continue
+            chrom, pos, varid, ref, alts, _, _, _, format, *samples = line.strip('\n').split('\t')
+            varid = varid.split(',')
+            if len(varid) > 1:
+                rsid, varid = varid
+            else:
+                varid, rsid = '', varid[0]
+            probs, ploidy = parse_vcf_samples(format, samples)
+            var = GenVar(chrom, varid, rsid, pos, [ref] + alts.split(','), probs)
+            var.ploidy = ploidy
             variants.append(var)
     return variants
 
