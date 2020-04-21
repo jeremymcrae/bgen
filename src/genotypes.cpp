@@ -68,7 +68,7 @@ int get_max_probs(int max_ploidy, int n_alleles, bool phased) {
   // figure out the maximum number of probabilities across the individuals
   int max_probs;
   if (phased) {
-    max_probs = max_ploidy * (n_alleles - 1);
+    max_probs = n_alleles;
   } else {
     max_probs = n_choose_k(max_ploidy + n_alleles - 1, n_alleles - 1);
   }
@@ -192,7 +192,7 @@ float * Genotypes::parse_layout2(char * uncompressed) {
     if (constant_ploidy) {
       n_probs = max_less_1;
     } else if (phased) {
-      n_probs = phased_ploidy[start] * (n_alleles - 1);
+      n_probs = n_alleles - 1;
     } else if ((ploidy[start] == 2) && (n_alleles == 2)) {
       n_probs = 2;
     } else {
@@ -220,6 +220,9 @@ float * Genotypes::parse_layout2(char * uncompressed) {
       probs[offset + x] = prob;
     }
     probs[offset + n_probs] = remainder;
+    for (int x=(n_probs + 1); x<max_probs; x++) {
+      probs[offset + x] = std::nan("1");
+    }
   }
   // for samples with missing data, just set values to NA
   for (auto n: missing) {
