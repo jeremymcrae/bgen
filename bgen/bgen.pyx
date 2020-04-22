@@ -253,15 +253,14 @@ cdef class BgenFile:
         return f'BgenFile("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
     
     def __iter__(self):
-        cdef Variant var
         if not self.delay_parsing:
             for idx in range(len(self)):
                 yield self[idx]
         else:
             while True:
                 try:
-                    var = self.thisptr.next_var()
-                    yield BgenVar(self.handle, var.offset, self.thisptr.header.layout,
+                    offset = self.thisptr.next_var().offset
+                    yield BgenVar(self.handle, offset, self.thisptr.header.layout,
                       self.thisptr.header.compression, self.thisptr.header.nsamples)
                 except IndexError:
                     raise StopIteration
