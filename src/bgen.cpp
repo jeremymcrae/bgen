@@ -3,12 +3,12 @@
 
 namespace bgen {
 
-Bgen::Bgen(std::string path, std::string sample_path) {
+Bgen::Bgen(std::string path, std::string sample_path, bool delay_parsing) {
   handle.open(path, std::ios::binary);
   if (!handle) {
     throw std::invalid_argument("error reading from '" + path + "'");
   }
-  std::uint64_t fsize = handle.tellg();
+  fsize = handle.tellg();
   header = Header(handle);
   if (header.has_sample_ids) {
     samples = Samples(handle, header.nsamples);
@@ -23,16 +23,33 @@ Bgen::Bgen(std::string path, std::string sample_path) {
   fsize = (std::uint64_t) handle.tellg() - fsize;
   handle.seekg(0);
   
+  offset = header.offset + 4;
+  if (!delay_parsing) {
+    parse_all_variants();
+  }
+}
+
+Variant Bgen::next_var() {
+  if (handle.eof() | (offset >= fsize)) {
+    throw std::out_of_range("reached end of file");
+  }
+  Variant var(handle, offset, header.layout, header.compression, header.nsamples);
+  offset = var.next_variant_offset();
+  return var;
+}
+
+void Bgen::parse_all_variants() {
+  offset = header.offset + 4;
+  variants.clear();
   variants.resize(header.nvariants);
-  std::uint64_t offset = header.offset + 4;
   int idx = 0;
   while (true) {
-    if (handle.eof() | (offset >= fsize)) {
+    try {
+      variants[idx] = next_var();
+      idx += 1;
+    } catch (const std::out_of_range & e) {
       break;
     }
-    variants[idx] = Variant(handle, offset, header.layout, header.compression, header.nsamples);
-    offset = variants[idx].next_variant_offset();
-    idx += 1;
   }
 }
 
@@ -51,11 +68,11 @@ void Bgen::drop_variants(std::vector<int> indices) {
     variants[idx] = variants.back();
     variants.pop_back();
   }
+  variants.shrink_to_fit();
   
   // and sort the variants again afterward
   std::sort(variants.begin(), variants.end(),
           [] (Variant const& a, Variant const& b) { return a.pos < b.pos; });
-  variants.shrink_to_fit();
 }
 
 std::vector<std::string> Bgen::varids() {

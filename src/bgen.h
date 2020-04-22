@@ -13,8 +13,11 @@ namespace bgen {
 
 class Bgen {
   std::ifstream handle;
+  std::uint64_t fsize;
+  std::uint64_t offset;
 public:
-  Bgen(std::string path, std::string sample_path="");
+  Bgen(std::string path, std::string sample_path="", bool delay_parsing=false);
+  void parse_all_variants();
   Variant next_var();
   void drop_variants(std::vector<int> indices);
   std::vector<std::string> varids();

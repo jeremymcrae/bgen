@@ -68,7 +68,9 @@ cdef extern from 'header.h' namespace 'bgen':
 cdef extern from 'bgen.h' namespace 'bgen':
     cdef cppclass Bgen:
         # declare class constructor and methods
-        Bgen(string path, string sample_path) except +
+        Bgen(string path, string sample_path, bool delay_parsing) except +
+        void parse_all_variants()
+        Variant & next_var() except +
         Variant & operator[](int idx)
         Variant & get(int idx)
         void drop_variants(vector[int] indices)
@@ -229,8 +231,9 @@ cdef class BgenFile:
     '''
     cdef Bgen * thisptr
     cdef string path, sample_path
+    cdef bool delay_parsing
     cdef IFStream handle
-    def __cinit__(self, path, sample_path=''):
+    def __cinit__(self, path, sample_path='', bool delay_parsing=False):
         if isinstance(path, Path):
             path = str(path)
         if isinstance(sample_path, Path):
@@ -238,8 +241,9 @@ cdef class BgenFile:
         
         self.path = path.encode('utf8')
         self.sample_path = sample_path.encode('utf8')
+        self.delay_parsing = delay_parsing
         
-        self.thisptr = new Bgen(self.path, self.sample_path)
+        self.thisptr = new Bgen(self.path, self.sample_path, self.delay_parsing)
         self.handle = IFStream(self.path)
     
     def __dealloc__(self):
@@ -249,17 +253,35 @@ cdef class BgenFile:
         return f'BgenFile("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
     
     def __iter__(self):
-        for idx in range(len(self)):
-            yield self[idx]
+        cdef Variant var
+        if not self.delay_parsing:
+            for idx in range(len(self)):
+                yield self[idx]
+        else:
+            while True:
+                try:
+                    var = self.thisptr.next_var()
+                    yield BgenVar(self.handle, var.offset, self.thisptr.header.layout,
+                      self.thisptr.header.compression, self.thisptr.header.nsamples)
+                except IndexError:
+                    raise StopIteration
     
     def __len__(self):
-        return self.thisptr.variants.size()
+      length = self.thisptr.variants.size()
+      if length > 0:
+          return length
+      else:
+          return self.thisptr.header.nvariants
     
     def __getitem__(self, int idx):
         ''' pull out a Variant by index position
         '''
         if idx >= len(self) or idx < 0:
             raise IndexError(f'cannot get Variant at index: {idx}')
+        
+        # account for lazy loading variants from bgen
+        if self.thisptr.variants.size() == 0:
+            self.thisptr.parse_all_variants()
         
         cdef long offset = self.thisptr.variants[idx].offset
         return BgenVar(self.handle, offset, self.thisptr.header.layout,
@@ -283,6 +305,9 @@ cdef class BgenFile:
     def drop_variants(self, list indices):
         ''' drops variants from bgen by indices, for avoiding processing variants
         '''
+        if self.delay_parsing:
+            self.thisptr.parse_all_variants()
+        
         self.thisptr.drop_variants(indices)
     
     def varids(self):
