@@ -6,7 +6,7 @@ import numpy as np
 
 from bgen.reader import BgenFile
 
-from tests.utils import load_gen_data, load_vcf_data, arrays_equal
+from tests.utils import load_gen_data, load_vcf_data, load_haps_data, arrays_equal
 
 class TestExampleBgens(unittest.TestCase):
     ''' class to make sure we can load bgen files
@@ -15,6 +15,7 @@ class TestExampleBgens(unittest.TestCase):
     def setUpClass(cls):
         cls.gen_data = load_gen_data()
         cls.vcf_data = load_vcf_data()
+        cls.haps_data = load_haps_data()
     
     def setUp(self):
         ''' set path to folder with test data
@@ -62,12 +63,9 @@ class TestExampleBgens(unittest.TestCase):
         path = self.folder / 'haplotypes.bgen'
         bfile = BgenFile(str(path))
         bit_depth = 16
-        for var, g in zip(bfile, self.gen_data):
-            print(var)
-            probs = var.probabilities
-            print(probs, probs.shape)
-            # self.assertEqual(g, var)
-            # self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
+        for var, g in zip(bfile, self.haps_data):
+            self.assertEqual(g, var)
+            self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
     
     def test_load_complex_file(self):
         ''' make sure we can open a complex bgen file

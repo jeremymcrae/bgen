@@ -14,6 +14,8 @@ class GenVar:
         self.pos = int(pos)
         self.alleles = alleles
         self.probabilities = probs
+    def __repr__(self):
+        return f'{self.rsid} - {self.chrom}:{self.pos} {self.alleles}'
     def __eq__(self, other):
         return self.chrom == other.chrom and self.pos == other.pos and \
             self.varid == other.varid and self.rsid == other.rsid and \
@@ -73,6 +75,22 @@ def load_vcf_data():
             var = GenVar(chrom, varid, rsid, pos, [ref] + alts.split(','), probs)
             var.ploidy = ploidy
             variants.append(var)
+    return variants
+
+def load_haps_data():
+    ''' load data from 'haplotypes.haps' for comparison with haplotypes.bgen
+    '''
+    variants = []
+    path = Path(__file__).parent / 'data' / 'haplotypes.haps'
+    with open(path, 'rt') as haps:
+        for line in haps:
+            chrom, varid, rsid, pos, ref, alt, *probs = line.strip('\n').split(' ')
+            probs = [[1.0, 0.0] if x == '0' else [0.0, 1.0] for x in probs]
+            probs = [probs[pos:pos + 2] for pos in range(0, len(probs), 2)]
+            probs = [x[0] + x[1] for x in probs]
+            var = GenVar(chrom, varid, rsid, pos, [ref, alt], np.array(probs, dtype=np.int8))
+            variants.append(var)
+    
     return variants
 
 def epsilon(bit_depth):
