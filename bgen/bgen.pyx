@@ -217,13 +217,35 @@ cdef class BgenVar:
         '''
         cdef float * probs = self.thisptr.probs_1d()
         cdef int cols = self.thisptr.probs_per_sample()
-        cdef int size
+        cdef int size = self.expected_n * cols
         if self.is_phased:
-            size = self.ploidy.sum() * cols
-        else:
-            size = self.expected_n * cols
+            ploidy = self.ploidy
+            size = ploidy.sum() * cols
+        
         arr = np.asarray(<float [:size]>probs)
         data = np.reshape(arr, (-1, cols))
+        
+        cdef int current = 0
+        cdef int phase_width = data.shape[1]
+        if self.is_phased:
+            # phased data initially comes as one row per haploytpe. This is
+            # reshaped to concatenate haplotype data into single row. Fill in a
+            # new array from the old data row by row
+            
+            # create an empty array filled with nans
+            ragged = np.empty((len(ploidy), ploidy.max() * cols))
+            ragged.fill(np.nan)
+            
+            # fill in the empty array
+            for i, x in enumerate(ploidy):
+                for y in range(x):
+                    start = y * phase_width
+                    end = start + phase_width
+                    ragged[i, start:end] = data[current]
+                    current += 1
+            
+            data = ragged
+        
         return data
 
 cdef class BgenFile:
