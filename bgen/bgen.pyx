@@ -358,5 +358,4 @@ cdef class BgenFile:
         return self
     
     def __exit__(self, exc_type, exc_value, traceback):
-        del self.thisptr
         return False
