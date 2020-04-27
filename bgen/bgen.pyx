@@ -1,5 +1,6 @@
 # cython: language_level=3, boundscheck=False
 
+import logging
 from pathlib import Path
 
 from libcpp cimport bool
@@ -265,6 +266,8 @@ cdef class BgenFile:
         self.sample_path = sample_path.encode('utf8')
         self.delay_parsing = delay_parsing
         
+        samp = '' if sample_path == '' else f', (samples={sample_path.decode("utf")})'
+        logging.debug(f'opening BgenFile from {self.path.decode("utf")}{samp}')
         self.thisptr = new Bgen(self.path, self.sample_path, self.delay_parsing)
         self.handle = IFStream(self.path)
     
