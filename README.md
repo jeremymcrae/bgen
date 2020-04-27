@@ -1,4 +1,6 @@
 ### Another bgen reader
+![travis](https://travis-ci.org/jeremymcrae/bgen.svg?branch=master)
+
 This is a package for reading [bgen files](https://www.well.ox.ac.uk/~gav/).
 
 This package uses cython to wrap c++ code for parsing bgen files. It's not too
