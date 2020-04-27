@@ -76,6 +76,7 @@ class TestExampleBgens(unittest.TestCase):
         for var, g in zip(bfile, self.vcf_data):
             self.assertEqual(g, var)
             self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
+            self.assertTrue(all(x == y for x, y in zip(g.ploidy, var.ploidy)))
     
     def test_load_complex_files(self):
         ''' make sure we can open the complex bgen files
