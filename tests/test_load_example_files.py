@@ -83,7 +83,7 @@ class TestExampleBgens(unittest.TestCase):
         ''' make sure we can open the complex bgen files
         '''
         
-        for path in self.folder.glob('complex*.bgen'):
+        for path in self.folder.glob('complex.*.bgen'):
             bit_depth = int(path.stem.split('.')[1].strip('bits'))
             bfile = BgenFile(path)
             for var, g in zip(bfile, self.vcf_data):
