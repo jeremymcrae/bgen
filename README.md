@@ -7,18 +7,18 @@ This package uses cython to wrap c++ code for parsing bgen files. It's not too
 slow, it can parse genotypes from 500,000 individuals at >100 variants per
 second within python.
 
-This has been primarily been designed for UKBiobank bgen files (i.e. bgen
+This has been primarily been designed around UKBiobank bgen files (i.e. bgen
 version 1.2 with zlib compressed genotype probabilities, but the other versions
 and compression schemes have also been tested using example bgen files).
 
 #### Install
-`pip install bgen` (possibly needs `pip install cython` beforehand)
+`pip install bgen`
 
 #### Usage
 ```python
 from bgen import BgenFile
 bfile = BgenFile(BGEN_PATH, SAMPLE_PATH=None)
-rsids = var.rsids()
+rsids = bfile.rsids()
 
 # select a variant by indexing
 var = bfile[1000]
@@ -41,5 +41,5 @@ with BgenFile(BGEN_PATH, SAMPLE_PATH=None, delay_parsing=True) as bfile:
   for var in bfile:
       probs = var.probabilities()
       dosage = var.alt_dosage()
-      ploidy = var.ploidya
+      ploidy = var.ploidy
 ```
