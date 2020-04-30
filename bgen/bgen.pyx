@@ -12,6 +12,8 @@ from cython.operator cimport dereference as deref
 
 import numpy as np
 
+from bgen.index import Index
+
 cdef extern from "<iostream>" namespace "std":
     cdef cppclass istream:
         istream& read(char *, int) except +
@@ -256,11 +258,14 @@ cdef class BgenFile:
     cdef string path, sample_path
     cdef bool delay_parsing
     cdef IFStream handle
+    cdef object index
     def __cinit__(self, path, sample_path='', bool delay_parsing=False):
         if isinstance(path, Path):
             path = str(path)
         if isinstance(sample_path, Path):
             sample_path = str(sample_path)
+        
+        delay_parsing |= self.check_for_index(path)
         
         self.path = path.encode('utf8')
         self.sample_path = sample_path.encode('utf8')
@@ -282,13 +287,18 @@ cdef class BgenFile:
             for idx in range(len(self)):
                 yield self[idx]
         else:
-            while True:
-                try:
-                    offset = self.thisptr.next_var().offset
+            if self.index:
+                for offset in self.index.offsets:
                     yield BgenVar(self.handle, offset, self.thisptr.header.layout,
-                      self.thisptr.header.compression, self.thisptr.header.nsamples)
-                except IndexError:
-                    raise StopIteration
+                        self.thisptr.header.compression, self.thisptr.header.nsamples)
+            else:
+                while True:
+                    try:
+                        offset = self.thisptr.next_var().offset
+                        yield BgenVar(self.handle, offset, self.thisptr.header.layout,
+                          self.thisptr.header.compression, self.thisptr.header.nsamples)
+                    except IndexError:
+                        raise StopIteration
     
     def __len__(self):
       length = self.thisptr.variants.size()
@@ -304,12 +314,21 @@ cdef class BgenFile:
             raise IndexError(f'cannot get Variant at index: {idx}')
         
         # account for lazy loading variants from bgen
-        if self.thisptr.variants.size() == 0:
+        if self.index is None and self.thisptr.variants.size() == 0:
             self.thisptr.parse_all_variants()
         
-        cdef long offset = self.thisptr.variants[idx].offset
+        cdef long offset
+        offset = self.index.offsets[idx] if self.index else self.thisptr.variants[idx].offset
         return BgenVar(self.handle, offset, self.thisptr.header.layout,
           self.thisptr.header.compression, self.thisptr.header.nsamples)
+    
+    def check_for_index(self, bgen_path):
+        ''' creates self.index if a bgenix index file is available
+        '''
+        index_path = Path(bgen_path + '.bgi')
+        idx_exists = index_path.exists()
+        self.index = Index(index_path) if idx_exists else None
+        return idx_exists
     
     @property
     def header(self):
@@ -337,24 +356,36 @@ cdef class BgenFile:
     def varids(self):
       ''' get the variant IDs of all variants in the bgen file
       '''
+      if self.index:
+          raise ValueError("can't load varids when using an index file")
+      
       varids = self.thisptr.varids()
       return [x.decode('utf8') for x in varids]
     
     def rsids(self):
       ''' get the rsIDs of all variants in the bgen file
       '''
+      if self.index:
+          return self.index.rsids
+      
       rsids = self.thisptr.rsids()
       return [x.decode('utf8') for x in rsids]
     
     def chroms(self):
         ''' get the chromosomes of all variants in the bgen file
         '''
+        if self.index:
+            return self.index.chroms
+        
         chroms = self.thisptr.chroms()
         return [x.decode('utf8') for x in chroms]
     
     def positions(self):
         ''' get the positions of all variants in the bgen file
         '''
+        if self.index:
+            return self.index.positions
+        
         return self.thisptr.positions()
     
     def __enter__(self):
