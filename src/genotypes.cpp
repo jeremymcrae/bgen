@@ -75,6 +75,31 @@ int get_max_probs(int max_ploidy, int n_alleles, bool phased) {
   return max_probs;
 }
 
+void Genotypes::parse_ploidy(char * uncompressed, int & idx) {
+  // get ploidy and missingness for layout2. this uses 3 milliseconds for 500k samples
+  
+  ploidy = new std::uint8_t[n_samples];
+  
+  // we want to avoid parsing the ploidy states if  every sample has the same
+  // ploidy. If we have a constant ploidy, set all entries to the same value
+  if (constant_ploidy) {
+    for (int i=0; i<n_samples; i++) {
+      ploidy[i] = max_ploidy;
+    }
+  }
+  
+  std::uint8_t mask = 63;
+  for (int x=0; x < n_samples; x++) {
+    if (!constant_ploidy) {
+      ploidy[x] = mask & uncompressed[idx];
+    }
+    if (uncompressed[idx] & 0x80) {
+      missing.push_back(x);
+    }
+    idx += 1;
+  }
+}
+
 float * Genotypes::parse_layout1(char * uncompressed) {
   /* parse probabilities for layout1
   */
@@ -128,25 +153,7 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   idx += sizeof(std::uint8_t);
   
   constant_ploidy = (min_ploidy == max_ploidy);
-  
-  // get ploidy and missing states. this uses 3 milliseconds for 500k samples
-  ploidy = new std::uint8_t[n_samples];
-  
-  std::vector<int> phased_ploidy;
-  std::vector<int> missing;
-  std::uint8_t mask = 63;
-  for (int x=0; x < n_samples; x++) {
-    if (!constant_ploidy | phased) {
-      ploidy[x] = mask & uncompressed[idx];
-      for (int y=0; y<ploidy[x]; y++) {
-        phased_ploidy.push_back(ploidy[x]);
-      }
-    }
-    if (uncompressed[idx] & 0x80) {
-      missing.push_back(x);
-    }
-    idx += 1;
-  }
+  parse_ploidy(uncompressed, idx);
   
   phased = (bool) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
   idx += sizeof(std::uint8_t);
