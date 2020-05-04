@@ -1,3 +1,7 @@
+os:
+  - linux
+  - osx
+language: python
 jobs:
   include:
     - name: "Python 3.8.0 on Bionic Linux"
@@ -9,11 +13,11 @@ jobs:
       language: shell
 
 before_install:
- - pip install --only-binary=all cython numpy coveralls
+ - pip3 install --only-binary=all cython numpy coveralls
 install:
- - python setup.py install
+ - python3 setup.py install
 script:
- - python setup.py test
- - python -m coverage run --source=./bgen -m unittest discover
+ - python3 setup.py test
+ - python3 -m coverage run --source=./bgen -m unittest discover
 after_success:
  - coveralls
