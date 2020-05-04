@@ -8,10 +8,13 @@ from distutils.core import Extension
 from distutils.ccompiler import new_compiler
 from Cython.Build import cythonize
 
-EXTRA_COMPILE_ARGS = ['-std=c++11']
+EXTRA_COMPILE_ARGS = ['-std=c++11', '-I/usr/include']
 EXTRA_LINK_ARGS = []
 if sys.platform == "darwin":
-    EXTRA_COMPILE_ARGS += ["-stdlib=libc++", "-mmacosx-version-min=10.9"]
+    EXTRA_COMPILE_ARGS += ["-stdlib=libc++",
+        "-mmacosx-version-min=10.9",
+        "-I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
+        ]
     EXTRA_LINK_ARGS += ["-stdlib=libc++", "-mmacosx-version-min=10.9"]
 
 def flatten(*lists):
@@ -69,7 +72,7 @@ setup(name='bgen',
     description='Package for loading data from bgen files',
     long_description=io.open('README.md', encoding='utf-8').read(),
     long_description_content_type='text/markdown',
-    version='1.0.0',
+    version='1.1.0',
     author='Jeremy McRae',
     author_email='jmcrae@illumina.com',
     license="MIT",
