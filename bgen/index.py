@@ -8,7 +8,7 @@ import numpy as np
 class Index:
     def __init__(self, path):
         logging.info(f'opening bgen index: {path}')
-        self.conn = sqlite3.connect(path)
+        self.conn = sqlite3.connect(str(path))
         self.cursor = self.conn.cursor()
         self.dropped_variants = None
         
