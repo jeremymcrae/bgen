@@ -55,8 +55,8 @@ class Index:
         '''
         if self._rsids is None:
             with sqlite3.connect(self.path) as conn:
-                conn.execute("SELECT rsid FROM Variant")
-            self._rsids = [x[0] for x in conn.fetchall()]
+                query = conn.execute("SELECT rsid FROM Variant")
+            self._rsids = [x[0] for x in query.fetchall()]
         return self._rsids
     
     @property
@@ -65,8 +65,8 @@ class Index:
         '''
         if self._chroms is None:
             with sqlite3.connect(self.path) as conn:
-                conn.execute("SELECT chromosome FROM Variant")
-            self._chroms = [x[0] for x in conn.fetchall()]
+                query = conn.execute("SELECT chromosome FROM Variant")
+            self._chroms = [x[0] for x in query.fetchall()]
         return self._chroms
     
     @property
@@ -75,6 +75,6 @@ class Index:
         '''
         if self._positions is None:
             with sqlite3.connect(self.path) as conn:
-                conn.execute("SELECT position FROM Variant")
-            self._positions = np.array([x[0] for x in conn.fetchall()])
+                query = conn.execute("SELECT position FROM Variant")
+            self._positions = np.array([x[0] for x in query.fetchall()])
         return self._positions
