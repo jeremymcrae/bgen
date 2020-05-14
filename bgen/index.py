@@ -75,6 +75,6 @@ class Index:
         '''
         if self._positions is None:
             with sqlite3.connect(self.path) as conn:
-                cursor.execute("SELECT position FROM Variant")
-            self._positions = np.array([x[0] for x in cursor.fetchall()])
+                conn.execute("SELECT position FROM Variant")
+            self._positions = np.array([x[0] for x in conn.fetchall()])
         return self._positions
