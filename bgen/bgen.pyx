@@ -283,22 +283,15 @@ cdef class BgenFile:
         return f'BgenFile("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
     
     def __iter__(self):
-        if not self.delay_parsing:
-            for idx in range(len(self)):
-                yield self[idx]
-        else:
-            if self.index:
-                for offset in self.index.offsets:
-                    yield BgenVar(self.handle, offset, self.thisptr.header.layout,
-                        self.thisptr.header.compression, self.thisptr.header.nsamples)
-            else:
-                while True:
-                    try:
-                        offset = self.thisptr.next_var().offset
-                        yield BgenVar(self.handle, offset, self.thisptr.header.layout,
-                          self.thisptr.header.compression, self.thisptr.header.nsamples)
-                    except IndexError:
-                        raise StopIteration
+        ''' iterate through all variants in the bgen file
+        '''
+        while True:
+            try:
+                offset = self.thisptr.next_var().offset
+                yield BgenVar(self.handle, offset, self.thisptr.header.layout,
+                    self.thisptr.header.compression, self.thisptr.header.nsamples)
+            except IndexError:
+                raise StopIteration
     
     def __len__(self):
       length = self.thisptr.variants.size()
@@ -318,7 +311,7 @@ cdef class BgenFile:
             self.thisptr.parse_all_variants()
         
         cdef long offset
-        offset = self.index.offsets[idx] if self.index else self.thisptr.variants[idx].offset
+        offset = self.index.offset_by_index(idx) if self.index else self.thisptr.variants[idx].offset
         return BgenVar(self.handle, offset, self.thisptr.header.layout,
           self.thisptr.header.compression, self.thisptr.header.nsamples)
     
@@ -352,6 +345,42 @@ cdef class BgenFile:
             self.thisptr.parse_all_variants()
         
         self.thisptr.drop_variants(indices)
+    
+    def with_rsid(self, rsid):
+      ''' get BgenVar from file given an rsID
+      '''
+      if self.index:
+          offset = self.index.offset_by_rsid(rsid)
+          return BgenVar(self.handle, offset, self.thisptr.header.layout,
+              self.thisptr.header.compression, self.thisptr.header.nsamples)
+      
+      if not self.delayed:
+          idx = [i for i, x in enumerate(self.rsids) if x == rsid]
+          if len(idx) == 0:
+              raise ValueError(f'cannot find variant match for {rsid}')
+          elif len(idx) > 1:
+              raise ValueError(f'multiple variant matches for {rsid}')
+          return self[idx]
+      
+      raise ValueError("can't get variant without fully loading the bgen, or indexing")
+    
+    def at_position(self, pos):
+      ''' get BgenVar from file given a position
+      '''
+      if self.index:
+          offset = self.index.offset_by_pos(pos)
+          return BgenVar(self.handle, offset, self.thisptr.header.layout,
+              self.thisptr.header.compression, self.thisptr.header.nsamples)
+      
+      if not self.delayed:
+          idx = [i for i, x in enumerate(self.positions) if x == pos]
+          if len(idx) == 0:
+              raise ValueError(f'cannot find variant match at pos: {pos}')
+          elif len(idx) > 1:
+              raise ValueError(f'multiple variant matches at pos: {pos}')
+          return self[idx]
+      
+      raise ValueError("can't get variant without fully loading the bgen, or indexing")
     
     def varids(self):
       ''' get the variant IDs of all variants in the bgen file
