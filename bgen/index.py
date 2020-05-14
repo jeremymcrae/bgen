@@ -8,8 +8,7 @@ import numpy as np
 class Index:
     def __init__(self, path):
         logging.info(f'opening bgen index: {path}')
-        self.conn = sqlite3.connect(str(path))
-        self.cursor = self.conn.cursor()
+        self.path = str(path)
         self.dropped_variants = None
         
         self._rsids = None
@@ -20,13 +19,15 @@ class Index:
     def offset_by_index(self, index):
         ''' get file offset of bgen variant given a variant index
         '''
-        offset = self.cursor.execute('''SELECT file_start_position FROM Variant LIMIT 1 OFFSET ?''', (index, )).fetchone()
+        with sqlite3.connect(self.path) as conn:
+            offset = conn.execute('''SELECT file_start_position FROM Variant LIMIT 1 OFFSET ?''', (index, )).fetchone()
         return offset[0]
         
     def offset_by_rsid(self, rsid):
         ''' get file offset of bgen variant given a variant index
         '''
-        offsets = self.cursor.execute("SELECT file_start_position FROM Variant WHERE rsid= ?", (rsid, )).fetchall()
+        with sqlite3.connect(self.path) as conn:
+            offsets = conn.execute("SELECT file_start_position FROM Variant WHERE rsid= ?", (rsid, )).fetchall()
         
         if len(offsets) == 0:
             raise ValueError(f'cannot find variant match for {rsid}')
@@ -38,7 +39,8 @@ class Index:
     def offset_by_pos(self, pos):
         ''' get file offset of bgen variant given a variant index
         '''
-        offsets = self.cursor.execute("SELECT file_start_position FROM Variant WHERE position= ?", (pos, )).fetchall()
+        with sqlite3.connect(self.path) as conn:
+            offsets = conn.execute("SELECT file_start_position FROM Variant WHERE position= ?", (pos, )).fetchall()
         
         if len(offsets) == 0:
             raise ValueError(f'cannot find variant match at pos: {pos}')
@@ -52,8 +54,9 @@ class Index:
         ''' get rsID list for all variants in the bgen file
         '''
         if self._rsids is None:
-            self.cursor.execute("SELECT rsid FROM Variant")
-            self._rsids = [x[0] for x in self.cursor.fetchall()]
+            with sqlite3.connect(self.path) as conn:
+                conn.execute("SELECT rsid FROM Variant")
+            self._rsids = [x[0] for x in conn.fetchall()]
         return self._rsids
     
     @property
@@ -61,8 +64,9 @@ class Index:
         ''' get chromosome list for all variants in the bgen file
         '''
         if self._chroms is None:
-            self.cursor.execute("SELECT chromosome FROM Variant")
-            self._chroms = [x[0] for x in self.cursor.fetchall()]
+            with sqlite3.connect(self.path) as conn:
+                conn.execute("SELECT chromosome FROM Variant")
+            self._chroms = [x[0] for x in conn.fetchall()]
         return self._chroms
     
     @property
@@ -70,6 +74,7 @@ class Index:
         ''' get position list for all variants in the bgen file
         '''
         if self._positions is None:
-            self.cursor.execute("SELECT position FROM Variant")
-            self._positions = np.array([x[0] for x in self.cursor.fetchall()])
+            with sqlite3.connect(self.path) as conn:
+                cursor.execute("SELECT position FROM Variant")
+            self._positions = np.array([x[0] for x in cursor.fetchall()])
         return self._positions
