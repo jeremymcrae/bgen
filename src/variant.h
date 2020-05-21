@@ -32,6 +32,7 @@ public:
   float * probs_1d();
   bool phased();
   std::uint8_t * ploidy();
+  void clear_probs();
   std::vector<std::vector<float>> probs2d;
   std::vector<float> minor_allele_dose;
   std::string minor_allele;

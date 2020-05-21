@@ -244,6 +244,7 @@ float * Genotypes::parse_layout2(char * uncompressed) {
 float * Genotypes::probabilities() {
   /* parse genotype data for a single variant
   */
+  clear_probs();  // clean up, so that we don't leak memory during repeated calls
   handle->seekg(offset);  // about 1 microsecond
   
   bool decompressed_field = false;
@@ -280,6 +281,7 @@ void Genotypes::clear_probs() {
   if (max_probs > 0) {
     delete[] probs;
     delete[] ploidy;
+    missing.clear();
   }
   max_probs = 0;
 }
