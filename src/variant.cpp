@@ -1,5 +1,6 @@
 
 #include <stdexcept>
+#include <cmath>
 
 #include "variant.h"
 
@@ -121,6 +122,27 @@ std::vector<std::vector<float>> & Variant::probabilities() {
   return probs2d;
 }
 
+bool minor_certain(double freq, int n_checked, double z) {
+    /** check if the minor allele is certain (to 99.9999999999999& confidence)
+    
+    Take the frequency, and number of individuals checked so far, and see if the
+    99.99..(fifteen nines) confidence interval overlaps 0.5. If not, then we can
+    be sure we've identified the minor allele, even without checking the full
+    population.
+    
+      @freq estimated minor allele frequency
+      @n_checked number of individsuals checked so far
+      @z standard normal deviate (eg 1.96 for 95% CI, here we use 10.0 for
+        stronger confidence, and the fact the normal approximation for confidence
+        intervals isn't perfect)
+      @return True/False for whether to halt the permuations
+    */
+    double delta = (z * std::sqrt((freq * (1 - freq))))/n_checked;
+    
+    // check if the confidence interval overlaps 0.5
+    return !(freq - delta < 0.5 & freq + delta > 0.5);
+}
+
 void Variant::dosages(float * first, float * second) {
   /* get allele dosages (assumes biallelic variant)
   */
@@ -131,21 +153,43 @@ void Variant::dosages(float * first, float * second) {
   float * probs = geno.probabilities();
   
   int offset;
+  int batchsize = 1000;
+  int increment = n_samples / batchsize;
   float sums[2] = {0, 0};
   float ploidy = geno.max_ploidy;
   float half_ploidy = ploidy / 2;
-  for (uint n=0; n<n_samples; n++) {
-    offset = n * geno.max_probs;
-    if (!geno.constant_ploidy) {
-      ploidy = (float) geno.ploidy[n];
-      half_ploidy = ploidy / 2;
+  int total;
+  
+  // rather than checking every individual to see which is the minor allele, we
+  // check subsets, in batches of 1000. We obtain alleles for individuals in the
+  // batch, then check if a confidence interval for the frequency of the less
+  // frequent allele could overlap 0.5. If not, we can be reasonably certain the
+  // less frequent allele is the true minor allele, without having to check the
+  // full cohort. This can be 60X faster than checking the full cohort in larger
+  // populations.
+  
+  // To make sure we don't hit weird groupings of alleles in individuals, this
+  // picks samples uniformly thoughout the population, by using an appropriate
+  // step size.
+  for (int idx=0; idx<increment; idx++) {
+    for (uint n=idx; n<n_samples; n += increment) {
+      offset = n * geno.max_probs;
+      if (!geno.constant_ploidy) {
+        ploidy = (float) geno.ploidy[n];
+        half_ploidy = ploidy / 2;
+      }
+      float halved = probs[offset + 1] * half_ploidy;
+      first[n] = (probs[offset] * ploidy) + halved;
+      second[n] = (probs[offset + 2] * ploidy) + halved;
+  
+      sums[0] += first[n];
+      sums[1] += second[n];
     }
-    float halved = probs[offset + 1] * half_ploidy;
-    first[n] = (probs[offset] * ploidy) + halved;
-    second[n] = (probs[offset + 2] * ploidy) + halved;
-    
-    sums[0] += first[n];
-    sums[1] += second[n];
+    total = sums[0] + sums[1];
+    double freq = (double) std::min(sums[0], sums[1]) / total;
+    if (minor_certain(freq, batchsize * (idx + 1), 10.0)) {
+      break;
+    }
   }
   
   if (sums[0] < sums[1]) {
