@@ -5,6 +5,7 @@
 #include <bitset>
 #include <cmath>
 #include <cassert>
+#include <cstring>
 
 #include "zstd.h"
 #include <zlib.h>
@@ -83,9 +84,7 @@ void Genotypes::parse_ploidy(char * uncompressed, int & idx) {
   // we want to avoid parsing the ploidy states if  every sample has the same
   // ploidy. If we have a constant ploidy, set all entries to the same value
   if (constant_ploidy) {
-    for (int i=0; i<n_samples; i++) {
-      ploidy[i] = max_ploidy;
-    }
+    std::memset(ploidy, max_ploidy, n_samples);
   }
   
   std::uint8_t mask = 63;
