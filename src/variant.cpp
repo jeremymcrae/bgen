@@ -193,12 +193,31 @@ void Variant::dosages(float * first, float * second) {
     }
   }
   
+  float * dose = first;
+  int geno_idx = 0;
   if (sums[0] < sums[1]) {
     minor_idx = 0;
   } else if (sums[1] < sums[0]) {
     minor_idx = 1;
+    dose = second;
+    geno_idx = 2;
   } else {
     minor_idx = 0; // pick the first if the alelles are 50:50
+  }
+  
+  // now that we know which allele to use, calculate dosage for all samples
+  if (geno.constant_ploidy) {
+    for (uint n=0; n<n_samples; n++) {
+      offset = n * geno.max_probs;
+      dose[n] = (probs[offset + geno_idx] * ploidy) + probs[offset + 1] * half_ploidy;
+    }
+  } else {
+    for (uint n=0; n<n_samples; n++) {
+      offset = n * geno.max_probs;
+      ploidy = (float) geno.ploidy[n];
+      half_ploidy = ploidy / 2;
+      dose[n] = (probs[offset + geno_idx] * ploidy) + probs[offset + 1] * half_ploidy;
+    }
   }
 }
 
