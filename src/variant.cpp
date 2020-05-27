@@ -158,6 +158,7 @@ void Variant::dosages(float * first, float * second) {
   float sums[2] = {0, 0};
   float ploidy = geno.max_ploidy;
   float half_ploidy = ploidy / 2;
+  float halved;
   int total;
   
   // rather than checking every individual to see which is the minor allele, we
@@ -178,7 +179,7 @@ void Variant::dosages(float * first, float * second) {
         ploidy = (float) geno.ploidy[n];
         half_ploidy = ploidy / 2;
       }
-      float halved = probs[offset + 1] * half_ploidy;
+      halved = probs[offset + 1] * half_ploidy;
       first[n] = (probs[offset] * ploidy) + halved;
       second[n] = (probs[offset + 2] * ploidy) + halved;
   
