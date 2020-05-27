@@ -1,4 +1,4 @@
-# cython: language_level=3, boundscheck=False
+# cython: language_level=3, boundscheck=False, emit_linenums=True
 
 import logging
 from pathlib import Path
