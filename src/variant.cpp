@@ -140,7 +140,7 @@ bool minor_certain(double freq, int n_checked, double z) {
     double delta = (z * std::sqrt((freq * (1 - freq))))/n_checked;
     
     // check if the confidence interval overlaps 0.5
-    return !(freq - delta < 0.5 & freq + delta > 0.5);
+    return !((freq - delta < 0.5) & (freq + delta > 0.5));
 }
 
 void Variant::dosages(float * first, float * second) {
