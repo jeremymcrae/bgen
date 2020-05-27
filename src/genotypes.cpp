@@ -162,7 +162,8 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   }
   
   idx += sizeof(std::uint8_t);
-  float divisor = (float) (std::pow(2, (int) bit_depth)) - 1;
+  int int_divisor = (std::pow(2, (int) bit_depth)) - 1;
+  float divisor = (float) int_divisor;
   
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
   int nrows = 0;
@@ -182,8 +183,8 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   int bit_len = (int) bit_depth / 8;
   int n_probs;
   int max_less_1 = max_probs - 1;
-  float prob = 0;
-  float remainder;
+  int prob = 0;
+  std::uint32_t remainder;
   int offset;
   
   // define variables for parsing depths not aligned with 8 bit char array
@@ -204,28 +205,28 @@ float * Genotypes::parse_layout2(char * uncompressed) {
     } else {
       n_probs = n_choose_k(ploidy[start] + n_alleles - 1, n_alleles - 1) - 1;
     }
-    remainder = 1.0;
+    remainder = int_divisor;
     offset = max_probs * start;
     for (int x=0; x<n_probs; x++) {
       if (bit_depth == 8) {
-        prob = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) / divisor;
+        prob = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
       } else if (bit_depth == 16) {
-        prob = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) / divisor;
+        prob = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]);
       } else if (bit_depth == 32) {
-        prob = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]) / divisor;
+        prob = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]);
       } else {
         // parsing for bit depths not divisible by 8.
         bit_offset = bit_idx / 8;
         shift = bit_idx % 8;
-        prob = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_offset]) >> shift) & probs_mask) / divisor ;
+        prob = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_offset]) >> shift) & probs_mask) ;
         bit_idx += bit_depth;
         idx -= bit_len;  // keep index position constant, bit_idx locates probs instead
       }
       idx += bit_len;
       remainder -= prob;
-      probs[offset + x] = prob;
+      probs[offset + x] = prob / divisor;
     }
-    probs[offset + n_probs] = remainder;
+    probs[offset + n_probs] = remainder / divisor;
     for (int x=(n_probs + 1); x<max_probs; x++) {
       probs[offset + x] = std::nan("1");
     }
