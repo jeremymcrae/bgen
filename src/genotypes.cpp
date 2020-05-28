@@ -112,13 +112,13 @@ float * Genotypes::parse_layout1(char * uncompressed) {
   
   int idx = 0;
   int bit_len = 2;
-  float divisor = 32768;
+  float factor = 1.0 / 32768;
   float prob;
   int offset;
   for (int n=0; n<n_samples; n++) {
     offset = max_probs * n;
     for (int x=0; x<3; x++) {
-      prob = (float) *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) / divisor;
+      prob = (float) *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) / factor;
       probs[offset + x] = prob;
       idx += bit_len;
     }
@@ -162,7 +162,7 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   }
   
   idx += sizeof(std::uint8_t);
-  float divisor = (float) (std::pow(2, (int) bit_depth)) - 1;
+  float factor = 1.0 / ((float) (std::pow(2, (int) bit_depth)) - 1);
   
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
   int nrows = 0;
@@ -208,16 +208,16 @@ float * Genotypes::parse_layout2(char * uncompressed) {
     offset = max_probs * start;
     for (int x=0; x<n_probs; x++) {
       if (bit_depth == 8) {
-        prob = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) / divisor;
+        prob = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) * factor;
       } else if (bit_depth == 16) {
-        prob = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) / divisor;
+        prob = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) * factor;
       } else if (bit_depth == 32) {
-        prob = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]) / divisor;
+        prob = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]) * factor;
       } else {
         // parsing for bit depths not divisible by 8.
         bit_offset = bit_idx / 8;
         shift = bit_idx % 8;
-        prob = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_offset]) >> shift) & probs_mask) / divisor ;
+        prob = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_offset]) >> shift) & probs_mask) * factor ;
         bit_idx += bit_depth;
         idx -= bit_len;  // keep index position constant, bit_idx locates probs instead
       }
