@@ -118,7 +118,7 @@ float * Genotypes::parse_layout1(char * uncompressed) {
   for (int n=0; n<n_samples; n++) {
     offset = max_probs * n;
     for (int x=0; x<3; x++) {
-      prob = (float) *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) / factor;
+      prob = (float) *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) * factor;
       probs[offset + x] = prob;
       idx += bit_len;
     }
