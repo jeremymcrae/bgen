@@ -259,6 +259,7 @@ cdef class BgenFile:
     cdef bool delay_parsing
     cdef IFStream handle
     cdef object index
+    cdef bool is_open
     def __cinit__(self, path, sample_path='', bool delay_parsing=False):
         if isinstance(path, Path):
             path = str(path)
@@ -275,9 +276,15 @@ cdef class BgenFile:
         logging.debug(f'opening BgenFile from {self.path.decode("utf")}{samp}')
         self.thisptr = new Bgen(self.path, self.sample_path, self.delay_parsing)
         self.handle = IFStream(self.path)
+        self.is_open = True
     
     def __dealloc__(self):
-        del self.thisptr
+        if self.is_open:
+          del self.thisptr
+          self.handle = None
+          self.index = None
+        
+        self.is_open = False
     
     def __repr__(self):
         return f'BgenFile("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
@@ -294,6 +301,9 @@ cdef class BgenFile:
                 raise StopIteration
     
     def __len__(self):
+      if not self.is_open:
+          raise ValueError("bgen file is closed")
+      
       length = self.thisptr.variants.size()
       if length > 0:
           return length
@@ -349,12 +359,15 @@ cdef class BgenFile:
     def with_rsid(self, rsid):
       ''' get BgenVar from file given an rsID
       '''
+      if not self.is_open:
+          raise ValueError('bgen file is closed')
+      
       if self.index:
           offset = self.index.offset_by_rsid(rsid)
           return BgenVar(self.handle, offset, self.thisptr.header.layout,
               self.thisptr.header.compression, self.thisptr.header.nsamples)
       
-      if not self.delayed:
+      if not self.delay_parsing:
           idx = [i for i, x in enumerate(self.rsids) if x == rsid]
           if len(idx) == 0:
               raise ValueError(f'cannot find variant match for {rsid}')
@@ -367,12 +380,15 @@ cdef class BgenFile:
     def at_position(self, pos):
       ''' get BgenVar from file given a position
       '''
+      if not self.is_open:
+          raise ValueError('bgen file is closed')
+      
       if self.index:
           offset = self.index.offset_by_pos(pos)
           return BgenVar(self.handle, offset, self.thisptr.header.layout,
               self.thisptr.header.compression, self.thisptr.header.nsamples)
       
-      if not self.delayed:
+      if not self.delay_parsing:
           idx = [i for i, x in enumerate(self.positions) if x == pos]
           if len(idx) == 0:
               raise ValueError(f'cannot find variant match at pos: {pos}')
@@ -421,4 +437,13 @@ cdef class BgenFile:
         return self
     
     def __exit__(self, exc_type, exc_value, traceback):
+        self._close()
         return False
+    
+    def _close(self):
+        if self.is_open:
+            del self.thisptr
+            self.handle = None
+            self.index = None
+        
+        self.is_open = False
