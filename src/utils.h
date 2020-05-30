@@ -10,7 +10,6 @@
 
 namespace bgen {
 
-std::vector<std::string> split(const std::string &s, char delim);
 int n_choose_k(int n, int k);
 
 } // namespace bgen
