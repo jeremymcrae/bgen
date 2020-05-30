@@ -59,8 +59,7 @@ Samples::Samples(std::string path, int n_samples) {
   int idx = 0;
   std::string line;
   while (std::getline(iss, line, '\n')) {
-    std::istringstream iss_line(line);
-    std::getline(iss_line, samples[idx], ' ');
+    samples[idx] = line.substr(0, line.find(' '));
     idx += 1;
   }
   
