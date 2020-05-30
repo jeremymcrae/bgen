@@ -7,7 +7,7 @@ import numpy as np
 
 class Index:
     def __init__(self, path):
-        logging.info(f'opening bgen index: {path}')
+        logging.debug(f'opening bgen index: {path}')
         self.path = str(path)
         self.dropped_variants = None
         
