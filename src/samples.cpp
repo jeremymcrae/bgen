@@ -43,12 +43,31 @@ Samples::Samples(std::string path, int n_samples) {
   std::string types;
   std::getline(handle, types);
   
+  // find the file length post header, then read it all in to memory
+  auto pos = handle.tellg();
+  handle.seekg(0, std::ios::end);
+  auto fsize = (std::uint64_t) handle.tellg() - pos;
+  std::string lines(fsize, '\0');
+  handle.seekg(pos);
+  handle.read(&lines[0], fsize);
+  
+  samples.resize(n_samples);
+  std::string sample_id;
+  std::istringstream iss(lines);
+  
+  // run through all lines and gte the first column as sample_id
+  int idx = 0;
   std::string line;
-  while (std::getline(handle, line)) {
-    std::vector<std::string> elems = split(line, ' ');
-    auto sample_id = elems[0];
-    samples.push_back(sample_id);
+  while (std::getline(iss, line, '\n')) {
+    std::istringstream iss_line(line);
+    std::getline(iss_line, samples[idx], ' ');
+    idx += 1;
   }
+  
+  if (idx != n_samples) {
+    throw std::invalid_argument("inconsistent number of samples");
+  }
+  
   if (n_samples != (int)samples.size()) {
     throw std::invalid_argument("inconsistent number of samples");
   }
