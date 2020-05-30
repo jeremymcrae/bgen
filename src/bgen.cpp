@@ -51,6 +51,9 @@ void Bgen::parse_all_variants() {
       break;
     }
   }
+  // finally reset the offset position to the first variant, so we can iterate
+  // over variants more easily in python
+  offset = header.offset + 4;
 }
 
 void Bgen::drop_variants(std::vector<int> indices) {
