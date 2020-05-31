@@ -22,7 +22,8 @@ class TestBgenFile(unittest.TestCase):
         with BgenFile(path) as bfile:
             self.assertTrue(len(bfile.samples) > 0)
         
-        self.assertEqual(bfile.samples, [])
+        with self.assertRaises(ValueError):
+            bfile.samples
     
     def test_context_handler_closed_bgen_varids(self):
         ''' no varids available from exited BgenFile
@@ -31,10 +32,8 @@ class TestBgenFile(unittest.TestCase):
         with BgenFile(path) as bfile:
             self.assertTrue(len(bfile.varids()) > 0)
         
-        # we shouldn't be able to see any samples, rsids, varids or positions
-        self.assertEqual(bfile.varids(), [])
-        self.assertEqual(bfile.rsids(), [])
-        self.assertEqual(bfile.positions(), [])
+        with self.assertRaises(ValueError):
+            bfile.varids()
     
     def test_context_handler_closed_bgen_rsids(self):
         ''' no rsids available from exited BgenFile
@@ -43,9 +42,8 @@ class TestBgenFile(unittest.TestCase):
         with BgenFile(path) as bfile:
             self.assertTrue(len(bfile.rsids()) > 0)
         
-        # we shouldn't be able to see any samples, rsids, varids or positions
-        self.assertEqual(bfile.rsids(), [])
-        self.assertEqual(bfile.positions(), [])
+        with self.assertRaises(ValueError):
+            bfile.rsids()
     
     def test_context_handler_closed_bgen_positions(self):
         ''' no positions available from exited BgenFile
@@ -54,8 +52,8 @@ class TestBgenFile(unittest.TestCase):
         with BgenFile(path) as bfile:
             self.assertTrue(len(bfile.positions()) > 0)
         
-        # we shouldn't be able to see any samples, rsids, varids or positions
-        self.assertEqual(bfile.positions(), [])
+        with self.assertRaises(ValueError):
+            bfile.positions()
     
     def test_context_handler_closed_bgen_length(self):
         ''' error raised if accessing length of exited BgenFile

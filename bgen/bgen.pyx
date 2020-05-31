@@ -337,6 +337,9 @@ cdef class BgenFile:
     def header(self):
       ''' get header info from bgen file
       '''
+      if not self.is_open:
+          raise ValueError("bgen file is closed")
+      
       hdr = self.thisptr.header
       return BgenHeader(hdr.offset, hdr.nvariants, hdr.nsamples,
           hdr.compression, hdr.compression, hdr.has_sample_ids)
@@ -345,12 +348,18 @@ cdef class BgenFile:
     def samples(self):
       ''' get list of samples in the bgen file
       '''
+      if not self.is_open:
+          raise ValueError("bgen file is closed")
+      
       samples = self.thisptr.samples.samples
       return [x.decode('utf8') for x in samples]
     
     def drop_variants(self, list indices):
         ''' drops variants from bgen by indices, for avoiding processing variants
         '''
+        if not self.is_open:
+            raise ValueError("bgen file is closed")
+        
         if self.delay_parsing:
             self.thisptr.parse_all_variants()
         
@@ -401,6 +410,9 @@ cdef class BgenFile:
     def varids(self):
       ''' get the variant IDs of all variants in the bgen file
       '''
+      if not self.is_open:
+          raise ValueError("bgen file is closed")
+      
       if self.index:
           raise ValueError("can't load varids when using an index file")
       
@@ -410,6 +422,9 @@ cdef class BgenFile:
     def rsids(self):
       ''' get the rsIDs of all variants in the bgen file
       '''
+      if not self.is_open:
+          raise ValueError("bgen file is closed")
+      
       if self.index:
           return self.index.rsids
       
@@ -419,6 +434,9 @@ cdef class BgenFile:
     def chroms(self):
         ''' get the chromosomes of all variants in the bgen file
         '''
+        if not self.is_open:
+            raise ValueError("bgen file is closed")
+        
         if self.index:
             return self.index.chroms
         
@@ -428,6 +446,9 @@ cdef class BgenFile:
     def positions(self):
         ''' get the positions of all variants in the bgen file
         '''
+        if not self.is_open:
+            raise ValueError("bgen file is closed")
+        
         if self.index:
             return self.index.positions
         
