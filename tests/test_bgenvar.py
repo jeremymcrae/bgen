@@ -1,11 +1,11 @@
 
 from pathlib import Path
 import unittest
+import pickle
 
 import numpy as np
 
 from bgen.reader import BgenFile
-
 
 class TestBgenVar(unittest.TestCase):
     ''' class to make sure BgenVar works correctly
@@ -37,3 +37,21 @@ class TestBgenVar(unittest.TestCase):
                   
                   # check difference between the two estimates is sufficiently low
                   self.assertTrue(np.nanmax(delta) < 1e-15)
+    
+    def test_pickling(self):
+        ''' BgenVar should pickle and unpickle
+        '''
+        path = self.folder / 'example.16bits.zstd.bgen'
+        with BgenFile(path) as bfile:
+            for var in bfile:
+                # this checks that we can pickle and unpickle a BgenVar
+                pickled = pickle.dumps(var)
+                unpickled = pickle.loads(pickled)
+                
+                # check attributes of the original and unpickled are identical
+                self.assertEqual(var.varid, unpickled.varid)
+                self.assertEqual(var.rsid, unpickled.rsid)
+                self.assertEqual(var.chrom, unpickled.chrom)
+                self.assertEqual(var.pos, unpickled.pos)
+                self.assertEqual(var.alleles, unpickled.alleles)
+                
