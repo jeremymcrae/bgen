@@ -266,7 +266,7 @@ cdef class BgenFile:
         if isinstance(sample_path, Path):
             sample_path = str(sample_path)
         
-        delay_parsing |= self.check_for_index(path)
+        delay_parsing |= self._check_for_index(path)
         
         self.path = path.encode('utf8')
         self.sample_path = sample_path.encode('utf8')
@@ -325,7 +325,7 @@ cdef class BgenFile:
         return BgenVar(self.handle, offset, self.thisptr.header.layout,
           self.thisptr.header.compression, self.thisptr.header.nsamples)
     
-    def check_for_index(self, bgen_path):
+    def _check_for_index(self, bgen_path):
         ''' creates self.index if a bgenix index file is available
         '''
         index_path = Path(bgen_path + '.bgi')
