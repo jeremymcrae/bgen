@@ -30,7 +30,7 @@ public:
   Genotypes() {};
   ~Genotypes() { clear_probs(); };
   void decompress(char * bytes, int compressed_len, char * decompressed, int decompressed_len);
-  void parse_ploidy(char * uncompressed, int & idx);
+  void parse_ploidy(char * uncompressed, uint & idx);
   float * parse_layout1(char *);
   float * parse_layout2(char *);
   float * probabilities();

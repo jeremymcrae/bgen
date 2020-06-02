@@ -76,7 +76,7 @@ int get_max_probs(int max_ploidy, int n_alleles, bool phased) {
   return max_probs;
 }
 
-void Genotypes::parse_ploidy(char * uncompressed, int & idx) {
+void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
   // get ploidy and missingness for layout2. this uses 3 milliseconds for 500k samples
   
   ploidy = new std::uint8_t[n_samples];
@@ -110,11 +110,11 @@ float * Genotypes::parse_layout1(char * uncompressed) {
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
   probs = new float[max_probs * n_samples];
   
-  int idx = 0;
-  int bit_len = 2;
+  uint idx = 0;
+  uint bit_len = 2;
   float factor = 1.0 / 32768;
   float prob;
-  int offset;
+  uint offset;
   for (int n=0; n<n_samples; n++) {
     offset = max_probs * n;
     for (int x=0; x<3; x++) {
@@ -134,7 +134,7 @@ float * Genotypes::parse_layout1(char * uncompressed) {
 float * Genotypes::parse_layout2(char * uncompressed) {
   /* parse probabilities for layout2
   */
-  int idx = 0;
+  uint idx = 0;
   std::uint32_t nn_samples = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]);
   idx += sizeof(std::uint32_t);
   std::uint16_t allele_check = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]);
@@ -156,7 +156,7 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   
   phased = (bool) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
   idx += sizeof(std::uint8_t);
-  int bit_depth = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
+  uint bit_depth = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
   if ((bit_depth < 1) | (bit_depth > 32)) {
     throw std::invalid_argument("probabilities bit depth out of bounds");
   }
@@ -165,7 +165,7 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   float factor = 1.0 / ((float) (std::pow(2, (int) bit_depth)) - 1);
   
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
-  int nrows = 0;
+  uint nrows = 0;
   if (!phased) {
     nrows = n_samples;
   } else {
@@ -179,20 +179,17 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   probs = new float[max_probs * nrows];
   
   // get genotype/allele probabilities
-  int bit_len = (int) bit_depth / 8;
-  int n_probs;
-  int max_less_1 = max_probs - 1;
+  uint n_probs;
+  uint max_less_1 = max_probs - 1;
   float prob = 0;
   float remainder;
-  int offset;
+  uint offset;
   
   // define variables for parsing depths not aligned with 8 bit char array
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
-  int bit_offset;  //
-  int bit_idx = 0;  // index position in bits
-  int shift; // for bit shifting within the word
+  uint bit_idx = 0;  // index position in bits
   
-  for (int start=0; start < nrows; start++) {
+  for (uint start=0; start < nrows; start++) {
     // calculate the number of probabilities per sample (depends on whether the
     // data is phased, the sample ploidy and the number of alleles)
     if (constant_ploidy) {
@@ -206,22 +203,9 @@ float * Genotypes::parse_layout2(char * uncompressed) {
     }
     remainder = 1.0;
     offset = max_probs * start;
-    for (int x=0; x<n_probs; x++) {
-      if (bit_depth == 8) {
-        prob = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) * factor;
-      } else if (bit_depth == 16) {
-        prob = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) * factor;
-      } else if (bit_depth == 32) {
-        prob = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]) * factor;
-      } else {
-        // parsing for bit depths not divisible by 8.
-        bit_offset = bit_idx / 8;
-        shift = bit_idx % 8;
-        prob = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_offset]) >> shift) & probs_mask) * factor ;
-        bit_idx += bit_depth;
-        idx -= bit_len;  // keep index position constant, bit_idx locates probs instead
-      }
-      idx += bit_len;
+    for (uint x=0; x<n_probs; x++) {
+      prob = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask) * factor ;
+      bit_idx += bit_depth;
       remainder -= prob;
       probs[offset + x] = prob;
     }
