@@ -21,12 +21,13 @@ Samples::Samples(std::ifstream & handle, int n_samples) {
     throw std::invalid_argument("inconsistent number of samples");
   }
   
+  samples.resize(n_samples);
   std::uint16_t id_len;
   for (int i=0; i<n_samples; i++) {
     handle.read(reinterpret_cast<char*>(&id_len), sizeof(id_len));
     std::string sample_id;
     std::copy_n(std::istream_iterator<char>(handle), id_len, std::back_inserter(sample_id));
-    samples.push_back(sample_id);
+    samples[i] = sample_id;
   }
 }
 
@@ -75,8 +76,9 @@ Samples::Samples(std::string path, int n_samples) {
 Samples::Samples(int n_samples) {
   /* initialize with integer IDs if no sample list available
   */
+  samples.resize(n_samples);
   for (int i=0; i<n_samples; i++) {
-    samples.push_back(std::to_string(i));
+    samples[i] = std::to_string(i);
   }
 }
 
