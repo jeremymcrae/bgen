@@ -25,14 +25,12 @@ public:
   }
   std::uint64_t next_variant_offset();
   int probs_per_sample();
-  std::vector<std::vector<float>> & probabilities();
   void dosages();
   float * minor_allele_dosage();
   float * probs_1d();
   bool phased();
   std::uint8_t * ploidy();
   void clear_probs();
-  std::vector<std::vector<float>> probs2d;
   std::string minor_allele;
   
   std::uint64_t offset;

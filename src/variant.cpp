@@ -95,33 +95,6 @@ float * Variant::probs_1d() {
   return geno.probabilities();
 }
 
-std::vector<std::vector<float>> & Variant::probabilities() {
-  /* get genotype probabilities for the variant
-  
-  Note this converts the probability arrays to a 2D vector, which is much slower
-  than the initial parsing.
-  */
-  float * float_probs = geno.probabilities();
-  int nrows = 0;
-  if (geno.phased) {
-    for (uint n=0; n<n_samples; n++) {
-      nrows += geno.ploidy[n];
-    }
-  } else {
-    nrows = n_samples;
-  }
-  
-  probs2d = std::vector<std::vector<float>>(nrows, std::vector<float>(geno.max_probs));
-  int offset;
-  for (uint n=0; n<n_samples; n++) {
-    offset = n * geno.max_probs;
-    for (int x=0; x<geno.max_probs; x++){
-      probs2d[n][x] = float_probs[offset + x];
-    }
-  }
-  return probs2d;
-}
-
 bool minor_certain(double freq, int n_checked, double z) {
     /** check if the minor allele is certain (to 99.9999999999999& confidence)
     
