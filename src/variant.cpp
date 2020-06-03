@@ -143,13 +143,14 @@ bool minor_certain(double freq, int n_checked, double z) {
     return !((freq - delta < 0.5) & (freq + delta > 0.5));
 }
 
-void Variant::dosages(float * first, float * second) {
+void Variant::dosages() {
   /* get allele dosages (assumes biallelic variant)
   */
   if (n_alleles != 2) {
     throw std::invalid_argument("can't get allele dosages for non-biallelic var.");
   }
   
+  dose = new float[n_samples];
   float * probs = geno.probabilities();
   
   int offset;
@@ -180,11 +181,8 @@ void Variant::dosages(float * first, float * second) {
         half_ploidy = ploidy / 2;
       }
       halved = probs[offset + 1] * half_ploidy;
-      first[n] = (probs[offset] * ploidy) + halved;
-      second[n] = (probs[offset + 2] * ploidy) + halved;
-  
-      sums[0] += first[n];
-      sums[1] += second[n];
+      sums[0] += (probs[offset] * ploidy) + halved;
+      sums[1] += (probs[offset + 2] * ploidy) + halved;
     }
     total = sums[0] + sums[1];
     double freq = (double) std::min(sums[0], sums[1]) / total;
@@ -193,13 +191,11 @@ void Variant::dosages(float * first, float * second) {
     }
   }
   
-  float * dose = first;
   int geno_idx = 0;
   if (sums[0] < sums[1]) {
     minor_idx = 0;
   } else if (sums[1] < sums[0]) {
     minor_idx = 1;
-    dose = second;
     geno_idx = 2;
   } else {
     minor_idx = 0; // pick the first if the alelles are 50:50
@@ -226,22 +222,15 @@ float * Variant::minor_allele_dosage() {
   */
   clear_probs(); // clean up so repeated calls don't leak memory
   
-  first = new float[n_samples];
-  second = new float[n_samples];
-  dosages(first, second);
+  dosages();
   
   minor_allele = alleles[minor_idx];
-  if (minor_idx == 0) {
-    return first;
-  } else {
-    return second;
-  }
+  return dose;
 }
 
 void Variant::clear_probs() {
   if (minor_idx != -1) {
-    delete[] first;
-    delete[] second;
+    delete[] dose;
   }
   minor_idx = -1;
 }

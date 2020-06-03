@@ -20,21 +20,19 @@ public:
   Variant() {};
   ~Variant() {
     if (minor_idx >=0) {
-      delete[] first;
-      delete[] second;
+      delete[] dose;
     }
   }
   std::uint64_t next_variant_offset();
   int probs_per_sample();
   std::vector<std::vector<float>> & probabilities();
-  void dosages(float * first, float * second);
+  void dosages();
   float * minor_allele_dosage();
   float * probs_1d();
   bool phased();
   std::uint8_t * ploidy();
   void clear_probs();
   std::vector<std::vector<float>> probs2d;
-  std::vector<float> minor_allele_dose;
   std::string minor_allele;
   
   std::uint64_t offset;
@@ -46,8 +44,7 @@ public:
   std::uint16_t n_alleles;
   std::vector<std::string> alleles;
   
-  float * first;
-  float * second;
+  float * dose;
 };
 
 } // namespace bgen
