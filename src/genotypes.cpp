@@ -88,15 +88,15 @@ void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
   }
   
   std::uint8_t mask = 63;
-  for (int x=0; x < n_samples; x++) {
+  for (uint x=0; x < (uint) n_samples; x++) {
     if (!constant_ploidy) {
-      ploidy[x] = mask & uncompressed[idx];
+      ploidy[x] = mask & uncompressed[idx + x];
     }
-    if (uncompressed[idx] & 0x80) {
+    if (uncompressed[idx + x] & 0x80) {
       missing.push_back(x);
     }
-    idx += 1;
   }
+  idx += n_samples;
 }
 
 float * Genotypes::parse_layout1(char * uncompressed) {
