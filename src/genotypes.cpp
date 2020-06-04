@@ -65,9 +65,9 @@ void Genotypes::decompress(char * bytes, int compressed_len, char * decompressed
   }
 }
 
-int get_max_probs(int max_ploidy, int n_alleles, bool phased) {
+uint get_max_probs(int max_ploidy, int n_alleles, bool phased) {
   // figure out the maximum number of probabilities across the individuals
-  int max_probs;
+  uint max_probs;
   if (phased) {
     max_probs = n_alleles;
   } else {

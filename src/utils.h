@@ -10,7 +10,7 @@
 
 namespace bgen {
 
-int n_choose_k(int n, int k);
+uint n_choose_k(int n, int k);
 
 } // namespace bgen
 
