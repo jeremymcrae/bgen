@@ -36,7 +36,7 @@ public:
   float * probabilities();
   void clear_probs();
   bool phased;
-  int max_probs = 0;
+  uint max_probs = 0;
   bool constant_ploidy;
   int min_ploidy;
   int max_ploidy;

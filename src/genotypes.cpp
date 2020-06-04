@@ -183,26 +183,24 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   uint max_less_1 = max_probs - 1;
   float prob = 0;
   float remainder;
-  uint offset;
   
   // define variables for parsing depths not aligned with 8 bit char array
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
   uint bit_idx = 0;  // index position in bits
   
-  for (uint start=0; start < nrows; start++) {
+  for (uint offset=0; offset < (nrows * max_probs); offset += max_probs) {
     // calculate the number of probabilities per sample (depends on whether the
     // data is phased, the sample ploidy and the number of alleles)
     if (constant_ploidy) {
       n_probs = max_less_1;
     } else if (phased) {
       n_probs = n_alleles - 1;
-    } else if ((ploidy[start] == 2) && (n_alleles == 2)) {
+    } else if ((ploidy[offset / max_probs] == 2) && (n_alleles == 2)) {
       n_probs = 2;
     } else {
-      n_probs = n_choose_k(ploidy[start] + n_alleles - 1, n_alleles - 1) - 1;
+      n_probs = n_choose_k(ploidy[offset / max_probs] + n_alleles - 1, n_alleles - 1) - 1;
     }
     remainder = 1.0;
-    offset = max_probs * start;
     for (uint x=0; x<n_probs; x++) {
       prob = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask) * factor ;
       bit_idx += bit_depth;
@@ -210,14 +208,16 @@ float * Genotypes::parse_layout2(char * uncompressed) {
       probs[offset + x] = prob;
     }
     probs[offset + n_probs] = remainder;
-    for (int x=(n_probs + 1); x<max_probs; x++) {
+    for (uint x=(n_probs + 1); x<max_probs; x++) {
       probs[offset + x] = std::nan("1");
     }
   }
+  
+  uint offset;
   // for samples with missing data, just set values to NA
   for (auto n: missing) {
     offset = max_probs * n;
-    for (int x=0; x<max_probs; x++) {
+    for (uint x=0; x<max_probs; x++) {
       probs[offset + x] = std::nan("1");
     }
   }
