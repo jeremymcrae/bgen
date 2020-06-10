@@ -193,19 +193,15 @@ void Variant::dosages() {
 float * Variant::minor_allele_dosage() {
   /* get dosage of the minor allele (only works for biallelic variants)
   */
-  clear_probs(); // clean up so repeated calls don't leak memory
+  // avoid recomputation if getting dosage repeatedly for same variant
+  if (minor_idx != -1) {
+    return dose;
+  }
   
   dosages();
   
   minor_allele = alleles[minor_idx];
   return dose;
-}
-
-void Variant::clear_probs() {
-  if (minor_idx != -1) {
-    delete[] dose;
-  }
-  minor_idx = -1;
 }
 
 } // namespace bgen

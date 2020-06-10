@@ -227,7 +227,11 @@ float * Genotypes::parse_layout2(char * uncompressed) {
 float * Genotypes::probabilities() {
   /* parse genotype data for a single variant
   */
-  clear_probs();  // clean up, so that we don't leak memory during repeated calls
+  // avoid recomputation if called repeatedly for same variant
+  if (max_probs > 0) {
+    return probs;
+  }
+  
   handle->seekg(offset);  // about 1 microsecond
   
   bool decompressed_field = false;

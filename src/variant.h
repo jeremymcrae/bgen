@@ -19,7 +19,7 @@ public:
   Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n);
   Variant() {};
   ~Variant() {
-    if (minor_idx >=0) {
+    if (minor_idx != -1) {
       delete[] dose;
     }
   }
@@ -30,7 +30,6 @@ public:
   float * probs_1d();
   bool phased();
   std::uint8_t * ploidy();
-  void clear_probs();
   std::string minor_allele;
   
   std::uint64_t offset;
