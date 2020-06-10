@@ -3,9 +3,9 @@
 
 This is a package for reading [bgen files](https://www.well.ox.ac.uk/~gav/).
 
-This package uses cython to wrap c++ code for parsing bgen files. It's not too
-slow, it can parse genotypes from 500,000 individuals at >100 variants per
-second within python.
+This package uses cython to wrap c++ code for parsing bgen files. It's fairly
+quick, it can parse genotypes from 500,000 individuals at ~200 variants per
+second within a single python process.
 
 This has been primarily been designed around UKBiobank bgen files (i.e. bgen
 version 1.2 with zlib compressed genotype probabilities, but the other versions
@@ -32,6 +32,9 @@ dosage = var.minor_allele_dosage  # returns 1D numpy array for biallelic variant
 with BgenFile(BGEN_PATH, delay_parsing=True) as bfile:
   for var in bfile:
       dosage = var.minor_allele_dosage
+
+# get all variants in a genomic region
+variants = bfile.fetch('21', 10000, 5000000)
 ```
 
 #### API documentation
@@ -55,6 +58,7 @@ class BgenFile(path, sample_path='', delay_parsing=False)
   Methods:
     slicing: BgenVars can be accessed by slicing the BgenFile e.g. bfile[1000]
     iteration: variants in a BgenFile can be looped over e.g. for x in bfile: print(x)
+    fetch(chrom, start=None, stop=None): get all variants within a genomic region
     drop_variants(list[int]): drops variants by index from being used in analyses
     with_rsid(pos): returns BgenVar with given position
     at_position(rsid): returns BgenVar with given rsid
