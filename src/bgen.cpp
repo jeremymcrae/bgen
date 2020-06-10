@@ -21,7 +21,6 @@ Bgen::Bgen(std::string path, std::string sample_path, bool delay_parsing) {
   // figure out the file length, so we don't go beyond it
   handle.seekg(0, std::ios::end);
   fsize = (std::uint64_t) handle.tellg() - fsize;
-  // handle.seekg(0);
   
   offset = header.offset + 4;
   if (!delay_parsing) {
