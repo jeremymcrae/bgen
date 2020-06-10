@@ -363,6 +363,27 @@ cdef class BgenFile:
         
         self.thisptr.drop_variants(indices)
     
+    def fetch(self, chrom, start=None, stop=None):
+        ''' fetches all variants within a genomic region
+        
+        Args:
+            chrom: chromosome that variants must be on
+            start: start nucleotide of region. If None, gets all variants on chromosome
+            stop: end nucleotide of region. If None, gets variants with positions after start
+        
+        Yields:
+            BgenVars for variants within the genome region
+        '''
+        if not self.is_open:
+            raise ValueError('bgen file is closed')
+        
+        if not self.index:
+            raise ValueError("can't fetch variants without index")
+        
+        for offset in self.index.fetch(chrom, start, stop):
+            yield BgenVar(self.handle, offset, self.thisptr.header.layout,
+                self.thisptr.header.compression, self.thisptr.header.nsamples)
+    
     def with_rsid(self, rsid):
       ''' get BgenVar from file given an rsID
       '''

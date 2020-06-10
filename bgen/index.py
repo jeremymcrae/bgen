@@ -16,6 +16,39 @@ class Index:
         self._positions = None
         self._masked = None
     
+    def fetch(self, chrom, start=None, stop=None):
+        ''' get file offsets for variants within a genome region in a bgen file
+        
+        Args:
+            chrom: chromosome that variants must be on
+            start: start nucleotide of region. If None, gets offsets for all
+                variants on chromosome
+            stop: end nucleotide of region. If None, gets offsets for variants
+                with positions after start
+        
+        Yields:
+            file offsets for variants within the genome region
+        '''
+        with sqlite3.connect(self.path) as conn:
+            if start is None and stop is None:
+                query = 'SELECT file_start_position FROM Variant WHERE chromosome=?'
+                params = (chrom, )
+            elif stop is None:
+                query = 'SELECT file_start_position FROM Variant \
+                         WHERE chromosome=? AND position >= ?'
+                params = (chrom, start)
+            else:
+                query = 'SELECT file_start_position FROM Variant \
+                         WHERE chromosome=? AND position >= ? AND position <= ?'
+                params = (chrom, start, stop)
+        
+        query = conn.execute(query, params)
+        while True:
+            res = query.fetchone()
+            if not res:
+                break
+            yield res[0]
+    
     def offset_by_index(self, index):
         ''' get file offset of bgen variant given a variant index
         '''
