@@ -208,12 +208,10 @@ cdef class BgenVar:
         then get a memory view on that data, and finally return as a numpy array
         '''
         # get the vector data for the dosage. We use a cython memoryview to
-        # quickly convert to a nunmpy array, and freturn a copy of that, so the
-        # underlying memory doesn't go out of scope
+        # quickly convert to a numpy array
         # https://cython.readthedocs.io/en/latest/src/userguide/memoryviews.html#coercion-to-numpy
         cdef float * dosage = self.thisptr.minor_allele_dosage()
-        data = np.copy(np.asarray(<float [:self.expected_n]>dosage))
-        return data
+        return np.asarray(<float [:self.expected_n]>dosage)
     @property
     def probabilities(self):
         ''' get the allelic probabilities for a variant
