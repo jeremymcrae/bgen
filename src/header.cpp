@@ -9,11 +9,15 @@
 namespace bgen {
 
 Header::Header(std::ifstream & handle) {
-  handle.read(reinterpret_cast<char*>(&offset), sizeof(std::uint32_t));
-  handle.read(reinterpret_cast<char*>(&header_length), sizeof(std::uint32_t));
-  handle.read(reinterpret_cast<char*>(&nvariants), sizeof(std::uint32_t));
-  handle.read(reinterpret_cast<char*>(&nsamples), sizeof(std::uint32_t));
-  std::copy_n(std::istream_iterator<char>(handle), sizeof(std::uint32_t), std::back_inserter(magic));
+  handle.seekg(0);
+  char buff[20];
+  handle.read(&buff[0], 20);
+  
+  offset = *reinterpret_cast<const std::uint32_t*>(&buff[0]);
+  header_length = *reinterpret_cast<const std::uint32_t*>(&buff[4]);
+  nvariants = *reinterpret_cast<const std::uint32_t*>(&buff[8]);
+  nsamples = *reinterpret_cast<const std::uint32_t*>(&buff[12]);
+  magic = std::string(&buff[16], 4);
   
   // make sure we are reading a bgen file
   if ((magic != "bgen") & (magic != "0000")) {
