@@ -146,3 +146,6 @@ class TestBgenFile(unittest.TestCase):
             self.assertEqual(x.rsid, y.rsid)
             self.assertEqual(x.chrom, y.chrom)
             self.assertEqual(x.pos, y.pos)
+        
+        # check that we don't get any variants in a region without any
+        self.assertEqual(list(bfile.fetch(chrom, start * 1000, stop * 1000)), [])
