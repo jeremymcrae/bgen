@@ -111,6 +111,8 @@ class TestBgenFile(unittest.TestCase):
         self.assertTrue(list(bfile.fetch('02')) == [])
     
     def test_fetch_whole_chrom(self):
+        ''' fetching just with chrom gives all variants on chromosome
+        '''
         chrom, start, stop = '01', 5000, 50000
         bfile = BgenFile(self.folder / 'example.16bits.bgen')
         
@@ -122,7 +124,7 @@ class TestBgenFile(unittest.TestCase):
             self.assertEqual(x.pos, y.pos)
     
     def test_fetch_after_position(self):
-        '''
+        ''' fetching variants with chrom and start gives all variants after pos
         '''
         chrom, start, stop = '01', 5000, 50000
         bfile = BgenFile(self.folder / 'example.16bits.bgen')
@@ -135,7 +137,7 @@ class TestBgenFile(unittest.TestCase):
             self.assertEqual(x.pos, y.pos)
     
     def test_fetch_in_region(self):
-        '''
+        ''' fetching variants with chrom, start, stop gives variants in region
         '''
         chrom, start, stop = '01', 5000, 50000
         bfile = BgenFile(self.folder / 'example.16bits.bgen')
