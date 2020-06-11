@@ -6,9 +6,15 @@ import numpy as np
 
 from bgen.reader import BgenFile
 
+from tests.utils import load_gen_data
+
 class TestBgenFile(unittest.TestCase):
     ''' class to make sure BgenFile works correctly
     '''
+    
+    @classmethod
+    def setUpClass(cls):
+        cls.gen_data = load_gen_data()
     
     def setUp(self):
         ''' set path to folder with test data
@@ -94,3 +100,49 @@ class TestBgenFile(unittest.TestCase):
         
         with self.assertRaises(ValueError):
              var = bfile.with_rsid('rs111')
+    
+    def test_fetch(self):
+        ''' can fetch variants within a genomic region
+        '''
+        chrom, start, stop = '01', 5000, 50000
+        bfile = BgenFile(self.folder / 'example.16bits.bgen')
+        self.assertTrue(bfile._check_for_index(str(self.folder / 'example.16bits.bgen')))
+        
+        self.assertTrue(list(bfile.fetch('02')) == [])
+    
+    def test_fetch_whole_chrom(self):
+        chrom, start, stop = '01', 5000, 50000
+        bfile = BgenFile(self.folder / 'example.16bits.bgen')
+        
+        # test fetching a whole chromosome
+        sortkey = lambda x: (x.chrom, x.pos)
+        for x, y in zip(sorted(bfile.fetch(chrom), key=sortkey), sorted(self.gen_data, key=sortkey)):
+            self.assertEqual(x.rsid, y.rsid)
+            self.assertEqual(x.chrom, y.chrom)
+            self.assertEqual(x.pos, y.pos)
+    
+    def test_fetch_after_position(self):
+        '''
+        '''
+        chrom, start, stop = '01', 5000, 50000
+        bfile = BgenFile(self.folder / 'example.16bits.bgen')
+        
+        sortkey = lambda x: (x.chrom, x.pos)
+        gen_vars = [x for x in sorted(self.gen_data, key=sortkey) if start <= x.pos]
+        for x, y in zip(sorted(bfile.fetch(chrom, start), key=sortkey), gen_vars):
+            self.assertEqual(x.rsid, y.rsid)
+            self.assertEqual(x.chrom, y.chrom)
+            self.assertEqual(x.pos, y.pos)
+    
+    def test_fetch_in_region(self):
+        '''
+        '''
+        chrom, start, stop = '01', 5000, 50000
+        bfile = BgenFile(self.folder / 'example.16bits.bgen')
+        
+        sortkey = lambda x: (x.chrom, x.pos)
+        gen_vars = [x for x in sorted(self.gen_data, key=sortkey) if start <= x.pos <= stop]
+        for x, y in zip(sorted(bfile.fetch(chrom, start, stop), key=sortkey), gen_vars):
+            self.assertEqual(x.rsid, y.rsid)
+            self.assertEqual(x.chrom, y.chrom)
+            self.assertEqual(x.pos, y.pos)
