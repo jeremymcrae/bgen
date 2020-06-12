@@ -115,7 +115,7 @@ float * Genotypes::parse_layout1(char * uncompressed) {
   float factor = 1.0 / 32768;
   float prob;
   uint offset;
-  for (int n=0; n<n_samples; n++) {
+  for (uint n=0; n<n_samples; n++) {
     offset = max_probs * n;
     for (int x=0; x<3; x++) {
       prob = (float) *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) * factor;
@@ -173,7 +173,7 @@ float * Genotypes::parse_layout2(char * uncompressed) {
     if (constant_ploidy) {
       nrows = n_samples * max_ploidy;
     } else {
-      for (int n=0; n<n_samples; n++) { nrows += ploidy[n]; }
+      for (uint n=0; n<n_samples; n++) { nrows += ploidy[n]; }
     }
   }
   probs = new float[max_probs * nrows];

@@ -16,11 +16,11 @@ class Genotypes {
   int layout;
   int compression;
   int n_alleles;
-  int n_samples;
+  uint n_samples;
   float * probs;
   std::vector<int> missing;
 public:
-  Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, int n_samples) :
+  Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, uint n_samples) :
     handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples) {
       std::uint32_t length;
       handle->read(reinterpret_cast<char*>(&length), sizeof(length));
