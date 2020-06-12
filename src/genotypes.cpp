@@ -83,17 +83,20 @@ void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
   
   // we want to avoid parsing the ploidy states if  every sample has the same
   // ploidy. If we have a constant ploidy, set all entries to the same value
+  std::uint8_t mask = 63;
   if (constant_ploidy) {
     std::memset(ploidy, max_ploidy, n_samples);
-  }
-  
-  std::uint8_t mask = 63;
-  for (uint x=0; x < (uint) n_samples; x++) {
-    if (!constant_ploidy) {
-      ploidy[x] = mask & uncompressed[idx + x];
+    for (uint x=0; x < n_samples; x++) {
+      if (uncompressed[idx + x] & 0x80) {
+        missing.push_back(x);
+      }
     }
-    if (uncompressed[idx + x] & 0x80) {
-      missing.push_back(x);
+  } else {
+    for (uint x=0; x < n_samples; x++) {
+      ploidy[x] = mask & uncompressed[idx + x];
+      if (uncompressed[idx + x] & 0x80) {
+        missing.push_back(x);
+      }
     }
   }
   idx += n_samples;
