@@ -20,7 +20,7 @@ Header::Header(std::ifstream & handle) {
   magic = std::string(&buff[16], 4);
   
   // make sure we are reading a bgen file
-  if ((magic != "bgen") & (magic != "0000")) {
+  if ((magic != "bgen") & ((int) (magic[0] & magic[1] & magic[2] & magic[3]) != 0)) {
     throw std::invalid_argument("doesn't appear to be a bgen file");
   }
   
