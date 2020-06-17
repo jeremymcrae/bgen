@@ -87,5 +87,5 @@ setup(name='bgen',
         'Topic :: Scientific/Engineering :: Bio-Informatics',
     ],
     ext_modules=reader,
-    test_suite='tests',
+    test_loader='unittest:TestLoader',
     )

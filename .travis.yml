@@ -1,20 +1,29 @@
+language: python
+
+env:
+  global:
+    - CIBW_BUILD="cp37-* cp38-*"
+    - CIBW_TEST_COMMAND="python -m unittest discover -s {project}"
+    - TWINE_USERNAME=__token__
+
 jobs:
   include:
-    - name: "Python 3.8.0 on Bionic Linux"
-      dist: bionic
-      language: python
-      python: 3.8
+    - services: docker
+      env:
+        - CIBW_BEFORE_BUILD="yum install -y zlib-devel"
     - name: "Python 3.7.4 on macOS"
       os: osx
-      osx_image: xcode11.2  # Python 3.7.4 running on macOS 10.14.4
+      osx_image: xcode11.2
       language: shell
 
 before_install:
- - pip3 install --only-binary=all cython numpy coveralls
-install:
- - python3 setup.py install
+ - pip3 install --only-binary=all cython cibuildwheel==1.4.2
 script:
  - python3 setup.py test
- - python3 -m coverage run --source=./bgen -m unittest discover
+ - cibuildwheel --output-dir wheelhouse
 after_success:
- - coveralls
+ - |
+    if [[ $TRAVIS_TAG ]]; then
+      python3 -m pip install twine
+      twine upload --skip-existing wheelhouse/*.whl
+    fi
