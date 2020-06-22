@@ -288,15 +288,18 @@ cdef class BgenFile:
         return f'BgenFile("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
     
     def __iter__(self):
+        return self
+    
+    def __next__(self):
         ''' iterate through all variants in the bgen file
         '''
-        while True:
-            try:
-                offset = self.thisptr.next_var().offset
-                yield BgenVar(self.handle, offset, self.thisptr.header.layout,
-                    self.thisptr.header.compression, self.thisptr.header.nsamples)
-            except IndexError:
-                raise StopIteration
+        # while True:
+        try:
+            offset = self.thisptr.next_var().offset
+            return BgenVar(self.handle, offset, self.thisptr.header.layout,
+                self.thisptr.header.compression, self.thisptr.header.nsamples)
+        except IndexError:
+            raise StopIteration
     
     def __len__(self):
       if not self.is_open:
