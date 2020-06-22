@@ -80,7 +80,6 @@ setup(name='bgen',
     packages=['bgen'],
     package_dir={'': 'src'},
     install_requires=[
-        'cython',
         'numpy',
     ],
     classifiers=[
