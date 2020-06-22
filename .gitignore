@@ -2,8 +2,8 @@
 __pycache__/
 dist/
 build/
-bgen/*.cpp
-bgen/*.so
+src/bgen/*.cpp
+src/bgen/*.so
 *.egg
 *.egg-info/
 *.DS_Store
