@@ -4,12 +4,13 @@
 This is a package for reading [bgen files](https://www.well.ox.ac.uk/~gav/bgen_format).
 
 This package uses cython to wrap c++ code for parsing bgen files. It's fairly
-quick, it can parse genotypes from 500,000 individuals at ~200 variants per
-second within a single python process.
+quick, it can parse genotypes from 500,000 individuals at ~300 variants per
+second within a single python process (~450 million probabilities per second
+with a 3GHz CPU).
 
-This has been primarily been designed around UKBiobank bgen files (i.e. bgen
-version 1.2 with zlib compressed genotype probabilities, but the other versions
-and compression schemes have also been tested using example bgen files).
+This has been optimized for UKBiobank bgen files (i.e. bgen version 1.2 with
+zlib compressed 8-bit genotype probabilities, but the other bgen versions and
+zstd compression have also been tested using example bgen files).
 
 #### Install
 `pip install bgen`
