@@ -165,21 +165,18 @@ float * Genotypes::parse_layout1(char * uncompressed) {
   max_ploidy = 2;
   constant_ploidy = (min_ploidy == max_ploidy);
   ploidy = new std::uint8_t[n_samples];
+  std::memset(ploidy, max_ploidy, n_samples);
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
   probs = new float[max_probs * n_samples];
   
   uint idx = 0;
-  uint bit_len = 2;
   float factor = 1.0 / 32768;
-  float prob;
-  uint offset;
-  for (uint n=0; n<n_samples; n++) {
-    offset = max_probs * n;
-    for (int x=0; x<3; x++) {
-      prob = (float) *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) * factor;
-      probs[offset + x] = prob;
-      idx += bit_len;
-    }
+  for (uint offset=0; offset<n_samples * max_probs; offset+=max_probs) {
+    probs[offset] = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) * factor;
+    probs[offset + 1] = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx + 2]) * factor;
+    probs[offset + 2] = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx + 4]) * factor;
+    idx += 6;
+    
     if ((probs[offset] == 0.0) & (probs[offset + 1] == 0.0) & (probs[offset + 2] == 0.0)) {
       probs[offset] = std::nan("1");
       probs[offset + 1] = std::nan("1");
