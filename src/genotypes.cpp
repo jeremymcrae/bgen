@@ -252,35 +252,15 @@ float * Genotypes::parse_layout2(char * uncompressed) {
     // sample. This is ~2.5X faster than the standard route to compute
     // probabilities, and diploid samples with 8 bits/prob is likely the most
     // common use case, so the speed-up justifies this special case.
-    std::uint64_t adjacent;
     std::uint64_t idx2 = 0;
-    for (uint offset=0; offset < (nrows * 3  - ((nrows % 4) * 3)); offset += 12) {
-      adjacent = *reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + idx2]);
-      probs[offset] = lut8[adjacent & probs_mask];
-      probs[offset + 1] = lut8[(adjacent >> 8) & probs_mask];
-      probs[offset + 2] = lut8[255 - (adjacent & probs_mask) - ((adjacent >> 8) & probs_mask)];
-      
-      probs[offset + 3] = lut8[(adjacent >> 16) & probs_mask];
-      probs[offset + 4] = lut8[(adjacent >> 24) & probs_mask];
-      probs[offset + 5] = lut8[255 - ((adjacent >> 16) & probs_mask) - ((adjacent >> 24) & probs_mask)];
-      
-      probs[offset + 6] = lut8[(adjacent >> 32) & probs_mask];
-      probs[offset + 7] = lut8[(adjacent >> 40) & probs_mask];
-      probs[offset + 8] = lut8[255 - ((adjacent >> 32) & probs_mask) - ((adjacent >> 40) & probs_mask)];
-      
-      probs[offset + 9] = lut8[(adjacent >> 48) & probs_mask];
-      probs[offset + 10] = lut8[(adjacent >> 56) & probs_mask];
-      probs[offset + 11] = lut8[255 - ((adjacent >> 48) & probs_mask) - ((adjacent >> 56) & probs_mask)];
-      
-      idx2 += 8;
-    }
-    std::uint16_t adjacent2;
-    idx2 = 0;
-    for (uint offset=(nrows * 3  - ((nrows % 4) * 3)); offset < (nrows * 3); offset += 3) {
-      adjacent2 = *reinterpret_cast<const std::uint16_t* >(&uncompressed[idx + idx2]);
-      probs[offset] = lut8[adjacent2 & probs_mask];
-      probs[offset + 1] = lut8[(adjacent2 >> 8) & probs_mask];
-      probs[offset + 2] = lut8[255 - (adjacent2 & probs_mask) - ((adjacent2 >> 8) & probs_mask)];
+    std::uint8_t first;
+    std::uint8_t second;
+    for (uint offset=0; offset < nrows * 3; offset += 3) {
+      first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + idx2]);
+      second = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + idx2 + 1]);
+      probs[offset] = lut8[first];
+      probs[offset + 1] = lut8[second];
+      probs[offset + 2] = lut8[255 - first - second];
       idx2 += 2;
     }
   } else {
