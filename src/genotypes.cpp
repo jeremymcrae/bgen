@@ -85,25 +85,6 @@ void zstd_uncompress(char * input, int compressed_len, char * decompressed,  int
   }
 }
 
-void Genotypes::decompress(char * bytes, int compressed_len, char * decompressed, int decompressed_len) {
-  /* decompress the probabilty data
-  */
-  switch (compression) {
-    case 0: { // no compression
-      decompressed = bytes;
-      break;
-    }
-    case 1: { // zlib
-      zlib_uncompress(bytes, compressed_len, decompressed, decompressed_len);
-      break;
-    }
-    case 2: { //zstd
-      zstd_uncompress(bytes, compressed_len, decompressed, decompressed_len);
-      break;
-    }
-  }
-}
-
 uint get_max_probs(int max_ploidy, int n_alleles, bool phased) {
   // figure out the maximum number of probabilities across the individuals
   uint max_probs;
@@ -298,14 +279,9 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   return probs;
 }
 
-float * Genotypes::probabilities() {
-  /* parse genotype data for a single variant
+void Genotypes::decompress() {
+  /* read genotype data for a variant from disk and decompress
   */
-  // avoid recomputation if called repeatedly for same variant
-  if (max_probs > 0) {
-    return probs;
-  }
-  
   handle->seekg(offset);  // about 1 microsecond
   
   bool decompressed_field = false;
@@ -320,10 +296,27 @@ float * Genotypes::probabilities() {
   }
   
   std::uint32_t compressed_len = next_var_offset - offset - decompressed_field * 4;
-  char geno[compressed_len];
-  char uncompressed[decompressed_len];
-  handle->read(&geno[0], compressed_len); // about 20 microseconds
-  decompress(geno, (int) compressed_len, uncompressed, (int) decompressed_len);  // about 2 milliseconds
+  char compressed[compressed_len];
+  uncompressed = new char[decompressed_len];
+  handle->read(&compressed[0], compressed_len); // about 20 microseconds
+  
+  if (compression == 0) { //no compression
+    uncompressed = compressed;
+  } else if (compression == 1) { // zlib
+    zlib_uncompress(compressed, (int) compressed_len, uncompressed, (int) decompressed_len);  // about 2 milliseconds
+  } else if (compression == 2) { // zstd
+    zstd_uncompress(compressed, (int) compressed_len, uncompressed, (int) decompressed_len);
+  }
+}
+
+float * Genotypes::probabilities() {
+  /* parse genotype data for a single variant
+  */
+  // avoid recomputation if called repeatedly for same variant
+  if (max_probs > 0) {
+    return probs;
+  }
+  decompress();
   
   switch (layout) {
     case 1: {
@@ -342,6 +335,7 @@ void Genotypes::clear_probs() {
   if (max_probs > 0) {
     delete[] probs;
     delete[] ploidy;
+    delete[] uncompressed;
     missing.clear();
   }
   max_probs = 0;

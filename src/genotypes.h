@@ -17,6 +17,7 @@ class Genotypes {
   int compression;
   int n_alleles;
   uint n_samples;
+  char * uncompressed;
   float * probs;
   std::vector<int> missing;
 public:
@@ -29,10 +30,10 @@ public:
   };
   Genotypes() {};
   ~Genotypes() { clear_probs(); };
-  void decompress(char * bytes, int compressed_len, char * decompressed, int decompressed_len);
   void parse_ploidy(char * uncompressed, uint & idx);
   float * parse_layout1(char *);
   float * parse_layout2(char *);
+  void decompress();
   float * probabilities();
   void clear_probs();
   bool phased;
