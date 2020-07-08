@@ -142,12 +142,9 @@ void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
   idx += n_samples;
 }
 
-float * Genotypes::parse_layout1(char * uncompressed) {
+float * Genotypes::parse_layout1(char * uncompressed, uint & idx) {
   /* parse probabilities for layout1
   */
-  uint idx = 0;
-  parse_preamble(uncompressed, idx);
-  
   probs = new float[max_probs * n_samples];
   
   float factor = 1.0 / 32768;
@@ -163,6 +160,7 @@ float * Genotypes::parse_layout1(char * uncompressed) {
       probs[offset + 2] = std::nan("1");
     }
   }
+  probs_parsed = true;
   return probs;
 }
 
@@ -206,16 +204,12 @@ void Genotypes::parse_preamble(char * uncompressed, uint & idx) {
     }
     idx += sizeof(std::uint8_t);
   }
-  
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
 }
 
-float * Genotypes::parse_layout2(char * uncompressed) {
+float * Genotypes::parse_layout2(char * uncompressed, uint & idx) {
   /* parse probabilities for layout2
   */
-  uint idx = 0;
-  parse_preamble(uncompressed, idx);
-  
   uint nrows = 0;
   if (!phased) {
     nrows = n_samples;
@@ -292,12 +286,18 @@ float * Genotypes::parse_layout2(char * uncompressed) {
       probs[offset + x] = std::nan("1");
     }
   }
+  probs_parsed = true;
   return probs;
 }
 
 void Genotypes::decompress() {
   /* read genotype data for a variant from disk and decompress
   */
+  if (is_decompressed) {
+    // don't decompress if already available
+    return;
+  }
+  
   handle->seekg(offset);  // about 1 microsecond
   
   bool decompressed_field = false;
@@ -323,31 +323,36 @@ void Genotypes::decompress() {
   } else if (compression == 2) { // zstd
     zstd_uncompress(compressed, (int) compressed_len, uncompressed, (int) decompressed_len);
   }
+  is_decompressed = true;
 }
 
 float * Genotypes::probabilities() {
   /* parse genotype data for a single variant
   */
   // avoid recomputation if called repeatedly for same variant
-  if (max_probs > 0) {
+  if ((max_probs > 0) & probs_parsed) {
     return probs;
   }
   decompress();
+  uint idx = 0;
+  parse_preamble(uncompressed, idx);
   
   if (layout == 1) {
-    probs = parse_layout1(uncompressed);
+    probs = parse_layout1(uncompressed, idx);
   } else if (layout == 2) {
-    probs = parse_layout2(uncompressed);  // about 3 milliseconds
+    probs = parse_layout2(uncompressed, idx);  // about 3 milliseconds
   }
   return probs;
 }
 
 void Genotypes::clear_probs() {
   if (max_probs > 0) {
-    delete[] probs;
     delete[] ploidy;
     delete[] uncompressed;
     missing.clear();
+  }
+  if (probs_parsed) {
+    delete[] probs;
   }
   max_probs = 0;
 }

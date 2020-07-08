@@ -20,6 +20,9 @@ class Genotypes {
   uint bit_depth;
   char * uncompressed;
   float * probs;
+  bool is_decompressed = false;
+  bool probs_parsed = false;
+  bool dosage_parsed = false;
   std::vector<int> missing;
 public:
   Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, uint n_samples) :
@@ -33,8 +36,8 @@ public:
   ~Genotypes() { clear_probs(); };
   void parse_preamble(char * uncompressed, uint & idx);
   void parse_ploidy(char * uncompressed, uint & idx);
-  float * parse_layout1(char *);
-  float * parse_layout2(char *);
+  float * parse_layout1(char *, uint & idx);
+  float * parse_layout2(char *, uint & idx);
   void decompress();
   float * probabilities();
   void clear_probs();
