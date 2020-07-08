@@ -2,6 +2,7 @@
 #define BGEN_UTILS_H_
 
 #include <bitset>
+#include <cmath>
 #include <fstream>
 #include <map>
 #include <string>
@@ -11,6 +12,7 @@
 namespace bgen {
 
 uint n_choose_k(int n, int k);
+bool minor_certain(double freq, int n_checked, double z);
 
 } // namespace bgen
 

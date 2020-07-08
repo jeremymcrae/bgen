@@ -9,6 +9,7 @@
 #include <iterator>
 
 #include "genotypes.h"
+#include "utils.h"
 
 namespace bgen {
 
