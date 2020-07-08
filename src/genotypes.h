@@ -17,6 +17,7 @@ class Genotypes {
   int compression;
   int n_alleles;
   uint n_samples;
+  uint bit_depth;
   char * uncompressed;
   float * probs;
   std::vector<int> missing;
@@ -30,6 +31,7 @@ public:
   };
   Genotypes() {};
   ~Genotypes() { clear_probs(); };
+  void parse_preamble(char * uncompressed, uint & idx);
   void parse_ploidy(char * uncompressed, uint & idx);
   float * parse_layout1(char *);
   float * parse_layout2(char *);

@@ -100,6 +100,10 @@ void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
   // get ploidy and missingness for layout2. this uses 100 microseconds for 500k samples
   
   ploidy = new std::uint8_t[n_samples];
+  if (layout == 1) {
+    std::memset(ploidy, max_ploidy, n_samples);
+    return;
+  }
   
   // we want to avoid parsing the ploidy states if  every sample has the same
   // ploidy. If we have a constant ploidy, set all entries to the same value
@@ -141,16 +145,11 @@ void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
 float * Genotypes::parse_layout1(char * uncompressed) {
   /* parse probabilities for layout1
   */
-  phased = false;
-  min_ploidy = 2;
-  max_ploidy = 2;
-  constant_ploidy = (min_ploidy == max_ploidy);
-  ploidy = new std::uint8_t[n_samples];
-  std::memset(ploidy, max_ploidy, n_samples);
-  max_probs = get_max_probs(max_ploidy, n_alleles, phased);
+  uint idx = 0;
+  parse_preamble(uncompressed, idx);
+  
   probs = new float[max_probs * n_samples];
   
-  uint idx = 0;
   float factor = 1.0 / 32768;
   for (uint offset=0; offset<n_samples * max_probs; offset+=max_probs) {
     probs[offset] = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) * factor;
@@ -167,40 +166,56 @@ float * Genotypes::parse_layout1(char * uncompressed) {
   return probs;
 }
 
-float * Genotypes::parse_layout2(char * uncompressed) {
-  /* parse probabilities for layout2
-  */
-  uint idx = 0;
-  std::uint32_t nn_samples = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]);
-  idx += sizeof(std::uint32_t);
-  std::uint16_t allele_check = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]);
-  idx += sizeof(std::uint16_t);
-  if (nn_samples != (std::uint32_t) n_samples) {
-    throw std::invalid_argument("number of samples doesn't match!");
-  }
-  if (allele_check != n_alleles) {
-    throw std::invalid_argument("number of alleles doesn't match!");
-  }
+void Genotypes::parse_preamble(char * uncompressed, uint & idx) {
+  /* code to parse the initial data that defines the ploidy and phased status
   
-  min_ploidy = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
-  idx += sizeof(std::uint8_t);
-  max_ploidy = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
-  idx += sizeof(std::uint8_t);
+  The code in here depends on the layout version. Mostly layout 1 is assigned
+  default values, while layout2 parses values from the uncompressed data.
+  */
+  if (layout == 1) {
+    phased = false;
+    min_ploidy = 2;
+    max_ploidy = 2;
+  } else if (layout == 2) {
+    std::uint32_t nn_samples = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]);
+    idx += sizeof(std::uint32_t);
+    std::uint16_t allele_check = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]);
+    idx += sizeof(std::uint16_t);
+    if (nn_samples != (std::uint32_t) n_samples) {
+      throw std::invalid_argument("number of samples doesn't match!");
+    }
+    if (allele_check != n_alleles) {
+      throw std::invalid_argument("number of alleles doesn't match!");
+    }
+    
+    min_ploidy = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
+    idx += sizeof(std::uint8_t);
+    max_ploidy = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
+    idx += sizeof(std::uint8_t);
+  }
   
   constant_ploidy = (min_ploidy == max_ploidy);
   parse_ploidy(uncompressed, idx);
   
-  phased = (bool) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
-  idx += sizeof(std::uint8_t);
-  uint bit_depth = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
-  if ((bit_depth < 1) | (bit_depth > 32)) {
-    throw std::invalid_argument("probabilities bit depth out of bounds");
+  if (layout == 2) {
+    phased = (bool) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
+    idx += sizeof(std::uint8_t);
+    bit_depth = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
+    if ((bit_depth < 1) | (bit_depth > 32)) {
+      throw std::invalid_argument("probabilities bit depth out of bounds");
+    }
+    idx += sizeof(std::uint8_t);
   }
   
-  idx += sizeof(std::uint8_t);
-  float factor = 1.0 / ((float) (std::pow(2, (int) bit_depth)) - 1);
-  
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
+}
+
+float * Genotypes::parse_layout2(char * uncompressed) {
+  /* parse probabilities for layout2
+  */
+  uint idx = 0;
+  parse_preamble(uncompressed, idx);
+  
   uint nrows = 0;
   if (!phased) {
     nrows = n_samples;
@@ -221,6 +236,7 @@ float * Genotypes::parse_layout2(char * uncompressed) {
   float remainder;
   
   // define variables for parsing depths not aligned with 8 bit char array
+  float factor = 1.0 / ((float) (std::pow(2, (int) bit_depth)) - 1);
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
   uint bit_idx = 0;  // index position in bits
   
@@ -318,15 +334,10 @@ float * Genotypes::probabilities() {
   }
   decompress();
   
-  switch (layout) {
-    case 1: {
-      probs = parse_layout1(uncompressed);
-      break;
-    }
-    case 2: {
-      probs = parse_layout2(uncompressed);  // about 3 milliseconds
-      break;
-    }
+  if (layout == 1) {
+    probs = parse_layout1(uncompressed);
+  } else if (layout == 2) {
+    probs = parse_layout2(uncompressed);  // about 3 milliseconds
   }
   return probs;
 }
