@@ -20,6 +20,7 @@ class Genotypes {
   uint bit_depth;
   char * uncompressed;
   float * probs;
+  float * dose;
   bool is_decompressed = false;
   bool probs_parsed = false;
   bool dosage_parsed = false;
@@ -40,12 +41,15 @@ public:
   float * parse_layout2(char *, uint & idx);
   void decompress();
   float * probabilities();
+  int find_minor_allele(char *, uint & idx);
+  float * minor_allele_dosage();
   void clear_probs();
   bool phased;
   uint max_probs = 0;
   bool constant_ploidy;
   int min_ploidy;
   int max_ploidy;
+  int minor_idx;
   std::uint8_t * ploidy;
   std::uint64_t next_var_offset;
 };

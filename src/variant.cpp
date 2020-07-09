@@ -95,91 +95,11 @@ float * Variant::probs_1d() {
   return geno.probabilities();
 }
 
-void Variant::dosages() {
-  /* get allele dosages (assumes biallelic variant)
-  */
-  if (n_alleles != 2) {
-    throw std::invalid_argument("can't get allele dosages for non-biallelic var.");
-  }
-  
-  dose = new float[n_samples];
-  float * probs = geno.probabilities();
-  
-  int offset;
-  int batchsize = 1000;
-  int increment = std::max(n_samples / batchsize, (uint) 1);
-  float sums[2] = {0, 0};
-  float ploidy = geno.max_ploidy;
-  float half_ploidy = ploidy / 2;
-  float halved;
-  int total;
-  
-  // rather than checking every individual to see which is the minor allele, we
-  // check subsets, in batches of 1000. We obtain alleles for individuals in the
-  // batch, then check if a confidence interval for the frequency of the less
-  // frequent allele could overlap 0.5. If not, we can be reasonably certain the
-  // less frequent allele is the true minor allele, without having to check the
-  // full cohort. This can be 60X faster than checking the full cohort in larger
-  // populations.
-  
-  // To make sure we don't hit weird groupings of alleles in individuals, this
-  // picks samples uniformly thoughout the population, by using an appropriate
-  // step size.
-  for (int idx=0; idx<increment; idx++) {
-    for (uint n=idx; n<n_samples; n += increment) {
-      offset = n * geno.max_probs;
-      if (!geno.constant_ploidy) {
-        ploidy = (float) geno.ploidy[n];
-        half_ploidy = ploidy / 2;
-      }
-      halved = probs[offset + 1] * half_ploidy;
-      sums[0] += (probs[offset] * ploidy) + halved;
-      sums[1] += (probs[offset + 2] * ploidy) + halved;
-    }
-    total = sums[0] + sums[1];
-    double freq = (double) std::min(sums[0], sums[1]) / total;
-    if (minor_certain(freq, batchsize * (idx + 1), 10.0)) {
-      break;
-    }
-  }
-  
-  int geno_idx = 0;
-  if (sums[0] < sums[1]) {
-    minor_idx = 0;
-  } else if (sums[1] < sums[0]) {
-    minor_idx = 1;
-    geno_idx = 2;
-  } else {
-    minor_idx = 0; // pick the first if the alelles are 50:50
-  }
-  
-  // now that we know which allele to use, calculate dosage for all samples
-  if (geno.constant_ploidy) {
-    for (uint n=0; n<n_samples; n++) {
-      offset = n * geno.max_probs;
-      dose[n] = (probs[offset + geno_idx] * ploidy) + probs[offset + 1] * half_ploidy;
-    }
-  } else {
-    for (uint n=0; n<n_samples; n++) {
-      offset = n * geno.max_probs;
-      ploidy = (float) geno.ploidy[n];
-      half_ploidy = ploidy / 2;
-      dose[n] = (probs[offset + geno_idx] * ploidy) + probs[offset + 1] * half_ploidy;
-    }
-  }
-}
-
 float * Variant::minor_allele_dosage() {
   /* get dosage of the minor allele (only works for biallelic variants)
   */
-  // avoid recomputation if getting dosage repeatedly for same variant
-  if (minor_idx != -1) {
-    return dose;
-  }
-  
-  dosages();
-  
-  minor_allele = alleles[minor_idx];
+  float * dose = geno.minor_allele_dosage();
+  minor_allele = alleles[geno.minor_idx];
   return dose;
 }
 

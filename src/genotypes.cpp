@@ -15,8 +15,11 @@
 
 namespace bgen {
   
-// create lookup table of all probs for 8 bit integers
-float lut8[256] = {0.0000000, 0.0039216, 0.0078431, 0.0117647, 0.0156863, 0.0196078,
+// create lookup table of all probs for 8 bit integers. This has 511 entries, in
+// order to allow for looking up values for the minor allele dosage, which can
+// be up to 2.0 if a sample contains both copies are of the minor allele
+// (2.0=255 + 255).
+float lut8[511] = {0.0000000, 0.0039216, 0.0078431, 0.0117647, 0.0156863, 0.0196078,
   0.0235294, 0.0274510, 0.0313725, 0.0352941, 0.0392157, 0.0431373, 0.0470588,
   0.0509804, 0.0549020, 0.0588235, 0.0627451, 0.0666667, 0.0705882, 0.0745098,
   0.0784314, 0.0823529, 0.0862745, 0.0901961, 0.0941176, 0.0980392, 0.1019608,
@@ -52,7 +55,44 @@ float lut8[256] = {0.0000000, 0.0039216, 0.0078431, 0.0117647, 0.0156863, 0.0196
   0.9019608, 0.9058824, 0.9098039, 0.9137255, 0.9176471, 0.9215686, 0.9254902,
   0.9294118, 0.9333333, 0.9372549, 0.9411765, 0.9450980, 0.9490196, 0.9529412,
   0.9568627, 0.9607843, 0.9647059, 0.9686275, 0.9725490, 0.9764706, 0.9803922,
-  0.9843137, 0.9882353, 0.9921569, 0.9960784, 1.0000000};
+  0.9843137, 0.9882353, 0.9921569, 0.9960784, 1.0000000, 1.0039216, 1.0078431,
+  1.0117647, 1.0156863, 1.0196078, 1.0235294, 1.0274510, 1.0313725, 1.0352941,
+  1.0392157, 1.0431373, 1.0470588, 1.0509804, 1.0549020, 1.0588235, 1.0627451,
+  1.0666667, 1.0705882, 1.0745098, 1.0784314, 1.0823529, 1.0862745, 1.0901961,
+  1.0941176, 1.0980392, 1.1019608, 1.1058824, 1.1098039, 1.1137255, 1.1176471,
+  1.1215686, 1.1254902, 1.1294118, 1.1333333, 1.1372549, 1.1411765, 1.1450980,
+  1.1490196, 1.1529412, 1.1568627, 1.1607843, 1.1647059, 1.1686275, 1.1725490,
+  1.1764706, 1.1803922, 1.1843137, 1.1882353, 1.1921569, 1.1960784, 1.2000000,
+  1.2039216, 1.2078431, 1.2117647, 1.2156863, 1.2196078, 1.2235294, 1.2274510,
+  1.2313725, 1.2352941, 1.2392157, 1.2431373, 1.2470588, 1.2509804, 1.2549020,
+  1.2588235, 1.2627451, 1.2666667, 1.2705882, 1.2745098, 1.2784314, 1.2823529,
+  1.2862745, 1.2901961, 1.2941176, 1.2980392, 1.3019608, 1.3058824, 1.3098039,
+  1.3137255, 1.3176471, 1.3215686, 1.3254902, 1.3294118, 1.3333333, 1.3372549,
+  1.3411765, 1.3450980, 1.3490196, 1.3529412, 1.3568627, 1.3607843, 1.3647059,
+  1.3686275, 1.3725490, 1.3764706, 1.3803922, 1.3843137, 1.3882353, 1.3921569,
+  1.3960784, 1.4000000, 1.4039216, 1.4078431, 1.4117647, 1.4156863, 1.4196078,
+  1.4235294, 1.4274510, 1.4313725, 1.4352941, 1.4392157, 1.4431373, 1.4470588,
+  1.4509804, 1.4549020, 1.4588235, 1.4627451, 1.4666667, 1.4705882, 1.4745098,
+  1.4784314, 1.4823529, 1.4862745, 1.4901961, 1.4941176, 1.4980392, 1.5019608,
+  1.5058824, 1.5098039, 1.5137255, 1.5176471, 1.5215686, 1.5254902, 1.5294118,
+  1.5333333, 1.5372549, 1.5411765, 1.5450980, 1.5490196, 1.5529412, 1.5568627,
+  1.5607843, 1.5647059, 1.5686275, 1.5725490, 1.5764706, 1.5803922, 1.5843137,
+  1.5882353, 1.5921569, 1.5960784, 1.6000000, 1.6039216, 1.6078431, 1.6117647,
+  1.6156863, 1.6196078, 1.6235294, 1.6274510, 1.6313725, 1.6352941, 1.6392157,
+  1.6431373, 1.6470588, 1.6509804, 1.6549020, 1.6588235, 1.6627451, 1.6666667,
+  1.6705882, 1.6745098, 1.6784314, 1.6823529, 1.6862745, 1.6901961, 1.6941176,
+  1.6980392, 1.7019608, 1.7058824, 1.7098039, 1.7137255, 1.7176471, 1.7215686,
+  1.7254902, 1.7294118, 1.7333333, 1.7372549, 1.7411765, 1.7450980, 1.7490196,
+  1.7529412, 1.7568627, 1.7607843, 1.7647059, 1.7686275, 1.7725490, 1.7764706,
+  1.7803922, 1.7843137, 1.7882353, 1.7921569, 1.7960784, 1.8000000, 1.8039216,
+  1.8078431, 1.8117647, 1.8156863, 1.8196078, 1.8235294, 1.8274510, 1.8313725,
+  1.8352941, 1.8392157, 1.8431373, 1.8470588, 1.8509804, 1.8549020, 1.8588235,
+  1.8627451, 1.8666667, 1.8705882, 1.8745098, 1.8784314, 1.8823529, 1.8862745,
+  1.8901961, 1.8941176, 1.8980392, 1.9019608, 1.9058824, 1.9098039, 1.9137255,
+  1.9176471, 1.9215686, 1.9254902, 1.9294118, 1.9333333, 1.9372549, 1.9411765,
+  1.9450980, 1.9490196, 1.9529412, 1.9568627, 1.9607843, 1.9647059, 1.9686275,
+  1.9725490, 1.9764706, 1.9803922, 1.9843137, 1.9882353, 1.9921569, 1.9960784,
+  2.0000000};
 
 void zlib_uncompress(char * input, int compressed_len, char * decompressed, int decompressed_len) {
   /* uncompress a char array with zlib
@@ -345,6 +385,125 @@ float * Genotypes::probabilities() {
   return probs;
 }
 
+int Genotypes::find_minor_allele(char * uncompressed, uint & idx) {
+  /*  find which allele corresponds to the minor allele
+  */
+  
+  // rather than checking every individual to see which is the minor allele, we
+  // check subsets, in batches of 100. We obtain alleles for individuals in the
+  // batch, then check if a confidence interval for the frequency of the less
+  // frequent allele could overlap 0.5. If not, we can be reasonably certain the
+  // less frequent allele is the true minor allele, without having to check the
+  // full cohort. This can be 600X faster than checking the full cohort in larger
+  // populations.
+  uint batchsize = 100;
+  uint increment = std::max(n_samples / batchsize, (uint) 1);
+  std::uint64_t sums[2] = {0, 0};
+  
+  uint ploidy = max_ploidy;
+  uint half_ploidy = ploidy / 2;
+  
+  // To make sure we don't hit weird groupings of alleles in individuals, this
+  // picks samples uniformly thoughout the population, by using an appropriate
+  // step size.
+  std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
+  uint bit_idx = 0;  // index position in bits
+  uint halved;
+  std::uint64_t total;
+  std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
+  for (uint idx2=0; idx2<increment; idx2++) {
+    std::uint32_t first;
+    std::uint32_t second;
+    for (uint n=idx2; n<n_samples; n += increment) {
+      bit_idx = n * bit_depth * 2;
+      first = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
+      bit_idx += bit_depth;
+      second = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
+      
+      halved = second * half_ploidy;
+      sums[0] += (first * ploidy) + halved;
+      sums[1] += ((maxval - first - second) * ploidy) + halved;
+    }
+    total = sums[0] + sums[1];
+    double freq = (double) std::min(sums[0], sums[1]) / total;
+    if (minor_certain(freq, batchsize * (idx2 + 1), 5.0)) {
+      break;
+    }
+  }
+  
+  if (sums[0] < sums[1]) {
+    return 0;
+  } else if (sums[1] < sums[0]) {
+    return 1;
+  } else {
+    return 0; // pick the first if the alelles are 50:50
+  }
+}
+
+float * Genotypes::minor_allele_dosage() {
+  /* calculate minor allele dosage from the genotype probabilities
+  */
+  if ((max_probs > 0) & dosage_parsed) {
+    return dose;
+  }
+  decompress();
+  uint idx = 0;
+  parse_preamble(uncompressed, idx);
+  
+  if (n_alleles != 2) {
+    throw std::invalid_argument("can't get allele dosages for non-biallelic var.");
+  }
+  dose = new float[n_samples];
+  
+  minor_idx = find_minor_allele(uncompressed, idx);
+  int geno_idx = (minor_idx == 0) ? 0 : 2;
+  uint ploidy = max_ploidy;
+  uint half_ploidy = ploidy / 2;
+  
+  // now that we know which allele to use, calculate dosage for all samples
+  std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
+  float factor = 1.0f / (float) maxval;
+  std::uint32_t hom;
+  std::uint32_t het;
+  std::uint32_t first;
+  std::uint32_t third;
+  if (constant_ploidy & (max_probs == 3) & (bit_depth == 8)) {
+    // a fast path when we know the ploidy is constant and the bit depth is 8,
+    // this avoids the bit shifts/masks used in the variable bit_depth path
+    for (uint n=0; n<n_samples; n++) {
+      offset = idx + n * (max_probs - 1);
+      first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[offset]);
+      het = *reinterpret_cast<const std::uint8_t*>(&uncompressed[offset + 1]);
+      third = maxval - het - first;
+      hom = geno_idx ? third : first;
+      dose[n] = ((hom * ploidy) + het * half_ploidy) * factor;
+    }
+  } else {
+    std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
+    uint bit_idx = 0;  // index position in bits
+    for (uint n=0; n<n_samples; n++) {
+      if (!constant_ploidy) {
+        ploidy = this->ploidy[n];
+        half_ploidy = ploidy / 2;
+      }
+      first = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
+      bit_idx += bit_depth;
+      het = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
+      bit_idx += bit_depth;
+      third = maxval - het - first;
+      hom = geno_idx ? third : first;
+      dose[n] = ((hom * ploidy) + het * half_ploidy) * factor;
+    }
+  }
+  // for samples with missing data, just set values to NA
+  for (auto n: missing) {
+    dose[n] = std::nan("1");
+  }
+  
+  dosage_parsed = true;
+  return dose;
+}
+
 void Genotypes::clear_probs() {
   if (max_probs > 0) {
     delete[] ploidy;
@@ -353,6 +512,9 @@ void Genotypes::clear_probs() {
   }
   if (probs_parsed) {
     delete[] probs;
+  }
+  if (dosage_parsed) {
+    delete[] dose;
   }
   max_probs = 0;
 }
