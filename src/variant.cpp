@@ -107,7 +107,7 @@ void Variant::dosages() {
   
   int offset;
   int batchsize = 1000;
-  int increment = n_samples / batchsize;
+  int increment = std::max(n_samples / batchsize, (uint) 1);
   float sums[2] = {0, 0};
   float ploidy = geno.max_ploidy;
   float half_ploidy = ploidy / 2;
