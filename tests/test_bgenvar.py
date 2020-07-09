@@ -27,16 +27,14 @@ class TestBgenVar(unittest.TestCase):
                   
                   # calculate dosages for each allele
                   a1 = (probs[:, 0] * 2 + probs[:, 1])
-                  a2 = (probs[:, 2] * 2 + probs[0, 1])
+                  a2 = (probs[:, 2] * 2 + probs[:, 1])
                   
                   # get delta between var.minor_allele_dosage and values calculated here
-                  if np.nansum(a1) >= np.nansum(a2):
-                      delta = abs(dose - a1)
-                  else:
-                      delta = abs(dose - a1)
+                  recomputed = a2 if np.nansum(a1) >= np.nansum(a2) else a1
+                  delta = abs(dose - recomputed)
                   
                   # check difference between the two estimates is sufficiently low
-                  self.assertTrue(np.nanmax(delta) < 1e-15)
+                  self.assertTrue(np.nanmax(delta) < 2e-7)
     
     def test_pickling(self):
         ''' BgenVar should pickle and unpickle
