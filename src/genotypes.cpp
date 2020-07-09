@@ -440,6 +440,78 @@ int Genotypes::find_minor_allele(char * uncompressed, uint & idx) {
   }
 }
 
+void Genotypes::fast_dosage_minor_first(char * uncompressed, uint & idx) {
+  // this is optimised for 8-bit genotypes and constant_ploidy. This function
+  // pulls the homozygous minor allele genotype from the first genotype
+  // probability. See fast_dosage_minor_second() for getting dosage when the minor
+  // allele is the second allele.
+  for (uint n=0; n<(n_samples - (n_samples % 2)); n+=2) {
+    // speed up throughpot by calculating two samples at a time
+    dose[n] = lut8[*reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) * 2 +
+      *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 1])];
+    dose[n+1] = lut8[*reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 2]) * 2 +
+      *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 4])];
+    idx += 4;
+  }
+  // and finish off the final sample/s
+  if (n_samples % 2) {
+    dose[n_samples - 1] = lut8[*reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) * 2 +
+      *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 1])];
+  }
+}
+
+void Genotypes::fast_dosage_minor_second(char * uncompressed, uint & idx) {
+  // this is optimised for 8-bit genotypes and constant_ploidy. This function
+  // pulls the homozygous minor allele genotype from the second genotype
+  // probability. See fast_dosage_minor_first() for getting dosage when the minor
+  // allele is the first allele.
+  std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
+  std::uint32_t het;
+  std::uint32_t het2;
+  for (uint n=0; n<(n_samples - (n_samples % 2)); n+=2) {
+    // speed up throughput by calculating two samples at a time.
+    het = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 1]);
+    dose[n] = lut8[(maxval - het - *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx])) * 2 + het];
+    het2 = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 3]);
+    dose[n+1] = lut8[(maxval - het2 - *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 2])) * 2 + het2];
+    idx += 4;
+  }
+  // // and finish off the final sample/s
+  if (n_samples % 2) {
+    het = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 1]);
+    dose[n_samples - 1] = lut8[(maxval - het - *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx])) * 2 + het];
+  }
+}
+
+void Genotypes::slow_dosage(char * uncompressed, uint & idx, int & geno_idx) {
+  // The slow path, loops across samples. Figures out ploidy at each step,
+  // and the homozygous genotype for the minor allele. Can use any bit depth.
+  uint ploidy = max_ploidy;
+  uint half_ploidy = ploidy / 2;
+  
+  std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
+  float factor = 1.0f / (float) maxval;
+  std::uint32_t first;
+  std::uint32_t het;
+  std::uint32_t hom;
+  std::uint32_t third;
+  std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
+  uint bit_idx = 0;  // index position in bits
+  for (uint n=0; n<n_samples; n++) {
+    if (!constant_ploidy) {
+      ploidy = this->ploidy[n];
+      half_ploidy = ploidy / 2;
+    }
+    first = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
+    bit_idx += bit_depth;
+    het = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
+    bit_idx += bit_depth;
+    third = maxval - het - first;
+    hom = geno_idx ? third : first;
+    dose[n] = ((hom * ploidy) + het * half_ploidy) * factor;
+  }
+}
+
 float * Genotypes::minor_allele_dosage() {
   /* calculate minor allele dosage from the genotype probabilities
   */
@@ -453,47 +525,22 @@ float * Genotypes::minor_allele_dosage() {
   if (n_alleles != 2) {
     throw std::invalid_argument("can't get allele dosages for non-biallelic var.");
   }
-  dose = new float[n_samples];
   
+  dose = new float[n_samples];
   minor_idx = find_minor_allele(uncompressed, idx);
   int geno_idx = (minor_idx == 0) ? 0 : 2;
-  uint ploidy = max_ploidy;
-  uint half_ploidy = ploidy / 2;
   
   // now that we know which allele to use, calculate dosage for all samples
-  std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
-  float factor = 1.0f / (float) maxval;
-  std::uint32_t hom;
-  std::uint32_t het;
-  std::uint32_t first;
-  std::uint32_t third;
   if (constant_ploidy & (max_probs == 3) & (bit_depth == 8)) {
-    // a fast path when we know the ploidy is constant and the bit depth is 8,
-    // this avoids the bit shifts/masks used in the variable bit_depth path
-    for (uint n=0; n<n_samples; n++) {
-      offset = idx + n * (max_probs - 1);
-      first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[offset]);
-      het = *reinterpret_cast<const std::uint8_t*>(&uncompressed[offset + 1]);
-      third = maxval - het - first;
-      hom = geno_idx ? third : first;
-      dose[n] = ((hom * ploidy) + het * half_ploidy) * factor;
+    // A fast path when we know the ploidy is constant and the bit depth is 8,
+    // this avoids the bit shifts/masks used in the variable bit_depth path.
+    if (geno_idx == 0) {
+      fast_dosage_minor_first(uncompressed, idx);
+    } else {
+      fast_dosage_minor_second(uncompressed, idx);
     }
   } else {
-    std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
-    uint bit_idx = 0;  // index position in bits
-    for (uint n=0; n<n_samples; n++) {
-      if (!constant_ploidy) {
-        ploidy = this->ploidy[n];
-        half_ploidy = ploidy / 2;
-      }
-      first = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
-      bit_idx += bit_depth;
-      het = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
-      bit_idx += bit_depth;
-      third = maxval - het - first;
-      hom = geno_idx ? third : first;
-      dose[n] = ((hom * ploidy) + het * half_ploidy) * factor;
-    }
+    slow_dosage(uncompressed, idx, geno_idx);
   }
   // for samples with missing data, just set values to NA
   for (auto n: missing) {
@@ -508,7 +555,6 @@ void Genotypes::clear_probs() {
   if (max_probs > 0) {
     delete[] ploidy;
     delete[] uncompressed;
-    missing.clear();
   }
   if (probs_parsed) {
     delete[] probs;

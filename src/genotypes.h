@@ -43,6 +43,9 @@ public:
   float * probabilities();
   int find_minor_allele(char *, uint & idx);
   float * minor_allele_dosage();
+  void fast_dosage_minor_first(char * uncompressed, uint & idx);
+  void fast_dosage_minor_second(char * uncompressed, uint & idx);
+  void slow_dosage(char * uncompressed, uint & idx, int & geno_idx);
   void clear_probs();
   bool phased;
   uint max_probs = 0;
