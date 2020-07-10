@@ -450,7 +450,7 @@ void Genotypes::fast_dosage_minor_first(char * uncompressed, uint & idx) {
     dose[n] = lut8[*reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) * 2 +
       *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 1])];
     dose[n+1] = lut8[*reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 2]) * 2 +
-      *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 4])];
+      *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 3])];
     idx += 4;
   }
   // and finish off the final sample/s
