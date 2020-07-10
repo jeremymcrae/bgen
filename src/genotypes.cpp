@@ -7,13 +7,13 @@
 #include <cassert>
 #include <cstring>
 
+#include <immintrin.h>
+
 #include "zstd.h"
 #include <zlib.h>
 
 #include "genotypes.h"
 #include "utils.h"
-
-#include <iostream>
 
 namespace bgen {
   
@@ -449,15 +449,11 @@ void Genotypes::ref_dosage_fast(char * uncompressed, uint & idx) {
 void Genotypes::alt_dosage() {
   // calculate the dossage for the alternate (second) allele for all samples
   //
+  __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
+  __m256 batch;
   for (uint n=0; n<(n_samples - (n_samples % 8)); n+=8) {
-    dose[n] = 2.0f - dose[n];
-    dose[n+1] = 2.0f - dose[n+1];
-    dose[n+2] = 2.0f - dose[n+2];
-    dose[n+3] = 2.0f - dose[n+3];
-    dose[n+4] = 2.0f - dose[n+4];
-    dose[n+5] = 2.0f - dose[n+5];
-    dose[n+6] = 2.0f - dose[n+6];
-    dose[n+7] = 2.0f - dose[n+7];
+    batch = _mm256_loadu_ps(dose + n);
+    _mm256_storeu_ps(dose + n, _mm256_sub_ps(k, batch));
   }
   for (uint n=(n_samples - (n_samples % 8)); n<n_samples; n++) {
     dose[n] = 2.0f - dose[n];

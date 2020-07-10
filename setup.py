@@ -8,7 +8,7 @@ from distutils.core import Extension
 from distutils.ccompiler import new_compiler
 from Cython.Build import cythonize
 
-EXTRA_COMPILE_ARGS = ['-std=c++11', '-I/usr/include']
+EXTRA_COMPILE_ARGS = ['-std=c++11', '-I/usr/include', '-mavx']
 EXTRA_LINK_ARGS = []
 if sys.platform == "darwin":
     EXTRA_COMPILE_ARGS += ["-stdlib=libc++",
