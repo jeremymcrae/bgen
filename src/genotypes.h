@@ -41,11 +41,11 @@ public:
   float * parse_layout2(char *, uint & idx);
   void decompress();
   float * probabilities();
-  int find_minor_allele(char *, uint & idx);
+  int find_minor_allele(float * dose);
   float * minor_allele_dosage();
-  void fast_dosage_minor_first(char * uncompressed, uint & idx);
-  void fast_dosage_minor_second(char * uncompressed, uint & idx);
-  void slow_dosage(char * uncompressed, uint & idx, int & geno_idx);
+  void ref_dosage_fast(char * uncompressed, uint & idx);
+  void alt_dosage();
+  void ref_dosage_slow(char * uncompressed, uint & idx);
   void clear_probs();
   bool phased;
   uint max_probs = 0;
