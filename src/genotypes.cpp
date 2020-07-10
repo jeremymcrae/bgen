@@ -401,8 +401,8 @@ int Genotypes::find_minor_allele(float * dose) {
   uint batchsize = 100;
   uint increment = std::max(n_samples / batchsize, (uint) 1);
   
-  double total;
-  double freq;
+  double total = 0;
+  double freq = 0;
   
   // To make sure we don't hit weird groupings of alleles in individuals, this
   // picks samples uniformly thoughout the population, by using an appropriate
