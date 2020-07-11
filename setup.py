@@ -3,12 +3,13 @@ import io
 from pathlib import Path
 from setuptools import setup
 import sys
+import platform
 
 from distutils.core import Extension
 from distutils.ccompiler import new_compiler
 from Cython.Build import cythonize
 
-EXTRA_COMPILE_ARGS = ['-std=c++11', '-I/usr/include', '-mavx']
+EXTRA_COMPILE_ARGS = ['-std=c++11', '-I/usr/include']
 EXTRA_LINK_ARGS = []
 if sys.platform == "darwin":
     EXTRA_COMPILE_ARGS += ["-stdlib=libc++",
@@ -16,6 +17,9 @@ if sys.platform == "darwin":
         "-I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
         ]
     EXTRA_LINK_ARGS += ["-stdlib=libc++", "-mmacosx-version-min=10.9"]
+
+if platform.machine() == 'x86_64':
+    EXTRA_COMPILE_ARGS += ['-mavx']
 
 def flatten(*lists):
     return [str(x) for sublist in lists for x in sublist]

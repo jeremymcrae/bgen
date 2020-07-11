@@ -7,7 +7,9 @@
 #include <cassert>
 #include <cstring>
 
-#include <immintrin.h>
+#if defined(__x86_64__)
+  #include <immintrin.h>
+#endif
 
 #include "zstd.h"
 #include <zlib.h>
@@ -449,6 +451,7 @@ void Genotypes::ref_dosage_fast(char * uncompressed, uint & idx) {
 void Genotypes::alt_dosage() {
   // calculate the dossage for the alternate (second) allele for all samples
   //
+#if defined(__x86_64__)
   __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
   __m256 batch;
   for (uint n=0; n<(n_samples - (n_samples % 8)); n+=8) {
@@ -458,6 +461,23 @@ void Genotypes::alt_dosage() {
   for (uint n=(n_samples - (n_samples % 8)); n<n_samples; n++) {
     dose[n] = 2.0f - dose[n];
   }
+#else
+  // TODO: add in vectorized version to speed up function on aarch64
+  // alternative for when x86 vectorized oeprations are not available
+  for (uint n=0; n<(n_samples - (n_samples % 8)); n+=8) {
+    dose[n] = 2.0f - dose[n];
+    dose[n+1] = 2.0f - dose[n+1];
+    dose[n+2] = 2.0f - dose[n+2];
+    dose[n+3] = 2.0f - dose[n+3];
+    dose[n+4] = 2.0f - dose[n+4];
+    dose[n+5] = 2.0f - dose[n+5];
+    dose[n+6] = 2.0f - dose[n+6];
+    dose[n+7] = 2.0f - dose[n+7];
+  }
+  for (uint n=(n_samples - (n_samples % 8)); n<n_samples; n++) {
+    dose[n] = 2.0f - dose[n];
+  }
+#endif
 }
 
 void Genotypes::ref_dosage_slow(char * uncompressed, uint & idx) {
