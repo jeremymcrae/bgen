@@ -2,7 +2,7 @@ language: python
 
 env:
   global:
-    - CIBW_BUILD="cp36-* cp37-* cp38-*"
+    - CIBW_SKIP="cp27-* cp35-*"
     - CIBW_TEST_COMMAND="python -m unittest discover -s {project}"
     - TWINE_USERNAME=__token__
 
@@ -11,10 +11,6 @@ jobs:
     - services: docker
       env:
         - CIBW_BEFORE_BUILD="yum install -y zlib-devel"
-    - name: "Python 3.7.4 on macOS"
-      os: osx
-      osx_image: xcode11.2
-      language: shell
 
 before_install:
  - pip3 install --only-binary=all cython cibuildwheel==1.4.2
