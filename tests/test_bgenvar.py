@@ -36,6 +36,26 @@ class TestBgenVar(unittest.TestCase):
                   # check difference between the two estimates is sufficiently low
                   self.assertTrue(np.nanmax(delta) < 2e-7)
     
+    def test_minor_allele_dosage_fast(self):
+        ''' test we calculate minor_allele_dosage correctly with the fast path
+        '''
+        path = self.folder / 'example.8bits.bgen'
+        with BgenFile(path) as bfile:
+            for var in bfile:
+                dose = var.minor_allele_dosage
+                probs = var.probabilities
+                
+                # calculate dosages for each allele
+                a1 = (probs[:, 0] * 2 + probs[:, 1])
+                a2 = (probs[:, 2] * 2 + probs[:, 1])
+                
+                # get delta between var.minor_allele_dosage and values calculated here
+                recomputed = a2 if np.nansum(a1) >= np.nansum(a2) else a1
+                delta = abs(dose - recomputed)
+                
+                # check difference between the two estimates is sufficiently low
+                self.assertTrue(np.nanmax(delta) < 3e-7)
+    
     def test_pickling(self):
         ''' BgenVar should pickle and unpickle
         '''
