@@ -19,7 +19,7 @@ if sys.platform == "darwin":
     EXTRA_LINK_ARGS += ["-stdlib=libc++", "-mmacosx-version-min=10.9"]
 
 if platform.machine() == 'x86_64':
-    EXTRA_COMPILE_ARGS += ['-mavx']
+    EXTRA_COMPILE_ARGS += ['-mavx', '-mavx2']
 
 def flatten(*lists):
     return [str(x) for sublist in lists for x in sublist]
