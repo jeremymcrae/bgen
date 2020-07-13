@@ -447,10 +447,10 @@ void Genotypes::ref_dosage_fast(char * uncompressed, uint & idx) {
   __m256i second;
   __m128i lo16;
   __m256i lo;
-  __m128i lo_mul;
+  __m256 lo_float;
   __m128i hi16;
   __m256i hi;
-  __m128i hi_mul;
+  __m256 hi_float;
   for (uint n=0; n<(n_samples - (n_samples % 16)); n+=16) {
     initial = _mm256_loadu_si256((__m256i *) &uncompressed[idx]);
     
@@ -474,15 +474,15 @@ void Genotypes::ref_dosage_fast(char * uncompressed, uint & idx) {
     // convert the first half to floats, via 32 bit ints
     lo16 = _mm256_castsi256_si128(initial);
     lo = _mm256_cvtepi16_epi32(lo16);
-    first = _mm256_cvtepi32_ps(lo);
+    lo_float = _mm256_cvtepi32_ps(lo);
     
     // convert the second half to floats, via 32 bit ints
     hi16 = _mm256_extractf128_si256(initial, 1);
     hi = _mm256_cvtepi16_epi32(hi16);
-    second = _mm256_cvtepi32_ps(hi);
+    hi_float = _mm256_cvtepi32_ps(hi);
     
-    _mm256_storeu_ps(&dose[n], _mm256_mul_ps(first, k));
-    _mm256_storeu_ps(&dose[n + 8], _mm256_mul_ps(second, k));
+    _mm256_storeu_ps(&dose[n], _mm256_mul_ps(lo_float, k));
+    _mm256_storeu_ps(&dose[n + 8], _mm256_mul_ps(hi_float, k));
     
     idx += 32;
   }
