@@ -2,7 +2,7 @@ language: python
 
 env:
   global:
-    - CIBW_SKIP="cp27-* cp35-*"
+    - CIBW_SKIP="cp27-* cp35-* pp*"
     - CIBW_TEST_COMMAND="python -m unittest discover -s {project}"
     - TWINE_USERNAME=__token__
 
