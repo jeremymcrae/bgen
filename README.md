@@ -6,8 +6,9 @@ This is a package for reading [bgen files](https://www.well.ox.ac.uk/~gav/bgen_f
 This package uses cython to wrap c++ code for parsing bgen files. It's fairly
 quick, it can parse genotypes from 500,000 individuals at ~300 variants per
 second within a single python process (~450 million probabilities per second
-with a 3GHz CPU). Using zstd compressed genotypes would be even faster, maybe
-1.5X faster?
+with a 3GHz CPU). Decompressing the genotype probabilities is the slow step,
+zlib decompression takes 80% of the total time, using zstd compressed genotypes
+would be much faster, maybe 2-3X faster?
 
 This has been optimized for UKBiobank bgen files (i.e. bgen version 1.2 with
 zlib compressed 8-bit genotype probabilities, but the other bgen versions and
