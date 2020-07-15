@@ -23,7 +23,7 @@ namespace bgen {
 // order to allow for looking up values for the minor allele dosage, which can
 // be up to 2.0 if a sample contains both copies are of the minor allele
 // (2.0=255 + 255).
-float lut8[511] = {0.0000000, 0.0039216, 0.0078431, 0.0117647, 0.0156863, 0.0196078,
+const float lut8[511] = {0.0000000, 0.0039216, 0.0078431, 0.0117647, 0.0156863, 0.0196078,
   0.0235294, 0.0274510, 0.0313725, 0.0352941, 0.0392157, 0.0431373, 0.0470588,
   0.0509804, 0.0549020, 0.0588235, 0.0627451, 0.0666667, 0.0705882, 0.0745098,
   0.0784314, 0.0823529, 0.0862745, 0.0901961, 0.0941176, 0.0980392, 0.1019608,
@@ -98,9 +98,8 @@ float lut8[511] = {0.0000000, 0.0039216, 0.0078431, 0.0117647, 0.0156863, 0.0196
   1.9725490, 1.9764706, 1.9803922, 1.9843137, 1.9882353, 1.9921569, 1.9960784,
   2.0000000};
 
+// uncompress a char array with zlib
 void zlib_uncompress(char * input, int compressed_len, char * decompressed, int decompressed_len) {
-  /* uncompress a char array with zlib
-  */
   z_stream infstream;
   infstream.zalloc = Z_NULL;
   infstream.zfree = Z_NULL;
@@ -120,17 +119,21 @@ void zlib_uncompress(char * input, int compressed_len, char * decompressed, int 
   }
 }
 
+// uncompress a char array with zstd
 void zstd_uncompress(char * input, int compressed_len, char * decompressed,  int decompressed_len) {
-  /* uncompress a char array with zstd
-  */
   std::size_t total_out = ZSTD_decompress(decompressed, decompressed_len, input, compressed_len);
   if (decompressed_len != (int) total_out) {
     throw std::invalid_argument("zstd decompression gave data of wrong length");
   }
 }
 
+/// figure out the maximum number of probabilities across the individuals
+///
+/// @param max_ploidy maximum ploidy value across all samples
+/// @param n_alleles number of alleles for the variant
+/// @param phased whether the genotypes are phased
+/// @return integer for maximum number of possible probabilites per sample
 uint get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
-  // figure out the maximum number of probabilities across the individuals
   uint max_probs;
   if (phased) {
     max_probs = n_alleles;
@@ -140,9 +143,15 @@ uint get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
   return max_probs;
 }
 
+/// get ploidy state for all samples (and missingness for layout2).
+///
+/// ploidy state is stored in ploidy member. Missingness is stored as indices of
+/// samples This takes 100 microseconds for 500k samples. Layout 1 variants lack
+/// ploidy info, and are assigned the same ploidy for all samples.
+///
+/// @param uncompressed char array possibly containing ploidy information
+/// @param idx uint position where the ploidy data begins
 void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
-  // get ploidy and missingness for layout2. this uses 100 microseconds for 500k samples
-  
   ploidy = new std::uint8_t[n_samples];
   if (layout == 1) {
     std::memset(ploidy, max_ploidy, n_samples);
@@ -186,9 +195,16 @@ void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
   idx += n_samples;
 }
 
+/// parse probabilities for layout1.
+///
+/// Layout 1 genotype probabilities are simple to parse, they are just 16-bit ints
+/// one for each of the three possible genotypes. Missingness is encoded for a
+/// sample when all probabilties are zero.
+///
+/// @param uncompressed char array containing genotype probabilities
+/// @param idx uint position where the genotype probabilties begin
+/// @return 1D float array of genotype probabilties (each from 0.0-1.0).
 float * Genotypes::parse_layout1(char * uncompressed, uint & idx) {
-  /* parse probabilities for layout1
-  */
   probs = new float[max_probs * n_samples];
   
   float factor = 1.0 / 32768;
@@ -208,12 +224,14 @@ float * Genotypes::parse_layout1(char * uncompressed, uint & idx) {
   return probs;
 }
 
+/// parse the initial data that defines the ploidy and phased status.
+///
+/// Layout 1 doesn't store any information before the genotype probabilities,
+/// so layout 1 just receives default values.
+///
+/// @param uncompressed char array containing genotype probabilities
+/// @param idx uint position where the genotype probabilties begin
 void Genotypes::parse_preamble(char * uncompressed, uint & idx) {
-  /* code to parse the initial data that defines the ploidy and phased status
-  
-  The code in here depends on the layout version. Mostly layout 1 is assigned
-  default values, while layout2 parses values from the uncompressed data.
-  */
   if (layout == 1) {
     phased = false;
     min_ploidy = 2;
@@ -252,9 +270,19 @@ void Genotypes::parse_preamble(char * uncompressed, uint & idx) {
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
 }
 
+/// parse probabilities for layout2
+///
+/// This is a fairly complex function, due to how the probabilties are encoded.
+/// We need to extract probabilites per sample, but the final probability is
+/// inferred as the remainder after all other genotype probabilties are parsed.
+/// The number of bits used for encoding probabilties can differ between variants,
+/// so there's a fast method for parsing 8-bit encoded probabilties, since that
+/// is a common use case.
+///
+/// @param uncompressed char array containing genotype probabilities
+/// @param idx uint position where the genotype probabilties begin
+/// @return 1D float array of genotype probabilties (each from 0.0-1.0).
 float * Genotypes::parse_layout2(char * uncompressed, uint & idx) {
-  /* parse probabilities for layout2
-  */
   uint nrows = 0;
   if (!phased) {
     nrows = n_samples;
@@ -335,9 +363,12 @@ float * Genotypes::parse_layout2(char * uncompressed, uint & idx) {
   return probs;
 }
 
+/// Read genotype data for a variant from disk and decompress.
+///
+/// The decompressed data is stored in the 'uncompressed' member. Decompression
+/// is handled internally by either zlib_decompress, or zstd_decompress,
+/// depending on compression scheme.
 void Genotypes::decompress() {
-  /* read genotype data for a variant from disk and decompress
-  */
   if (is_decompressed) {
     // don't decompress if already available
     return;
@@ -371,9 +402,10 @@ void Genotypes::decompress() {
   is_decompressed = true;
 }
 
+/// parse genotype data for a single variant
+///
+/// @return 1D float array of genotype probabilties (each from 0.0-1.0).
 float * Genotypes::probabilities() {
-  /* parse genotype data for a single variant
-  */
   // avoid recomputation if called repeatedly for same variant
   if ((max_probs > 0) & probs_parsed) {
     return probs;
@@ -390,20 +422,21 @@ float * Genotypes::probabilities() {
   return probs;
 }
 
+/// find which allele corresponds to the minor allele
+///
+/// Rather than checking every individual to see which is the minor allele, we
+/// check subsets, in batches of 100. We obtain alleles for individuals in the
+/// batch, then check if a confidence interval for the frequency of the less
+/// frequent allele could overlap 0.5. If not, we can be reasonably certain the
+/// less frequent allele is the true minor allele, without having to check the
+/// full cohort. This can be 600X faster than checking the full cohort in larger
+/// populations.
+///
+/// @param dose float array of dosages for the reference (first) allele
+/// @return index for minor allele (0 or 1)
 int Genotypes::find_minor_allele(float * dose) {
-  /*  find which allele corresponds to the minor allele
-  */
-  
-  // rather than checking every individual to see which is the minor allele, we
-  // check subsets, in batches of 100. We obtain alleles for individuals in the
-  // batch, then check if a confidence interval for the frequency of the less
-  // frequent allele could overlap 0.5. If not, we can be reasonably certain the
-  // less frequent allele is the true minor allele, without having to check the
-  // full cohort. This can be 600X faster than checking the full cohort in larger
-  // populations.
   uint batchsize = 100;
   uint increment = std::max(n_samples / batchsize, (uint) 1);
-  
   double total = 0;
   double freq = 0;
   
@@ -427,14 +460,20 @@ int Genotypes::find_minor_allele(float * dose) {
   }
 }
 
+/// calculate dosage of the reference (first) allele for all samples.
+///
+/// Writes dosage float values to the dose member.
+///
+/// This is optimised for 8-bit genotypes and constant_ploidy. This function
+/// pulls the homozygous minor allele genotype from the first genotype
+/// probability. See fast_dosage_minor_second() for getting dosage when the minor
+/// allele is the second allele.
+///
+/// This uses AVX2 vectorization to speed up calculations on x86_64 hardware.
+///
+/// @param uncompressed char array containing genotype probabilities
+/// @param idx uint position where the genotype probabilties begin
 void Genotypes::ref_dosage_fast(char * uncompressed, uint & idx) {
-  // calculate dosage of the reference (first) allele for all samples
-  //
-  // this is optimised for 8-bit genotypes and constant_ploidy. This function
-  // pulls the homozygous minor allele genotype from the first genotype
-  // probability. See fast_dosage_minor_second() for getting dosage when the minor
-  // allele is the second allele.
-
 #if defined(__x86_64__)
   __m256i mask_odd = _mm256_set_epi8(0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
     -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,  -1, 0, -1, 0, -1, 0, -1);
@@ -487,15 +526,14 @@ void Genotypes::ref_dosage_fast(char * uncompressed, uint & idx) {
     
     idx += 32;
   }
-  // finish off the last few samples
+  // finish off the final unvectorized samples
   for (uint n=(n_samples - (n_samples % 16)); n<n_samples; n++) {
-    // speed up throughpot by calculating two samples at a time
     dose[n] = lut8[*reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) * 2 +
     *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 1])];
     idx += 2;
   }
 #else
-  // the unverctorized slow path. This is ~50% slower
+  // the unvectorized slow path. This is ~50% slower
   for (uint n=0; n<(n_samples - (n_samples % 2)); n+=2) {
     // speed up throughpot by calculating two samples at a time
     dose[n] = lut8[*reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) * 2 +
@@ -512,9 +550,13 @@ void Genotypes::ref_dosage_fast(char * uncompressed, uint & idx) {
 #endif
 }
 
+/// calculate the dosage for the alternate (second) allele for all samples
+///
+/// This replaces the values in the dose member with 2.0 - value.
+///
+/// This uses AVX vectorization to speed up calculations on x86_64 hardware.
+/// This assumes AVX is available on x86_64 machines, which isn't always true.
 void Genotypes::alt_dosage() {
-  // calculate the dossage for the alternate (second) allele for all samples
-  //
 #if defined(__x86_64__)
   __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
   __m256 batch;
@@ -544,11 +586,22 @@ void Genotypes::alt_dosage() {
 #endif
 }
 
+/// calculate dosage of the reference (first) allele for all samples
+///
+/// The slow path, loops across samples. Figures out ploidy at each step,
+/// and the homozygous genotype for the minor allele. Can use any bit depth.
+/// For the most part we just have to use the first and second probabilities for
+/// a sample, since they correspond to first hom, and het genotypes. This assumes
+/// the first allele is for the ref genotype (but this isn't exposed externally,
+/// since the calling function always converts to the minor allele dosage).
+///
+/// Variants encoded with layout 1 need a little bit more work, since we need to
+/// skip over the second homozygous probability, and figure out missingness from
+/// the probabilities.
+///
+/// @param uncompressed char array of genotype probabilities (encoding depends on layout)
+/// @param idx uint index position in uncompressed where genotype probabilities start
 void Genotypes::ref_dosage_slow(char * uncompressed, uint & idx) {
-  // calculate dosage of the reference (first) allele for all samples
-  //
-  // The slow path, loops across samples. Figures out ploidy at each step,
-  // and the homozygous genotype for the minor allele. Can use any bit depth.
   uint ploidy = max_ploidy;
   uint half_ploidy = ploidy / 2;
   
@@ -580,9 +633,10 @@ void Genotypes::ref_dosage_slow(char * uncompressed, uint & idx) {
   }
 }
 
+/// calculate minor allele dosage from the genotype probabilities
+///
+/// @return float array of dosage values (each from 0.0-2.0)
 float * Genotypes::minor_allele_dosage() {
-  /* calculate minor allele dosage from the genotype probabilities
-  */
   if ((max_probs > 0) & dosage_parsed) {
     return dose;
   }

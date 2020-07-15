@@ -6,13 +6,18 @@
 
 namespace bgen {
 
+/// initialise a single variant with chrom, pos, rsID identifiers
+///
+/// This starts a Genotypes object, but this doesn't parse the genotypes until
+/// required, just starts it so we can get the offset of the next variant, so as
+/// to parse the bgen variants at speed.
+///
+///  @param handle std::ifstream for bgen file
+///  @param offset start byte for variant in bgen file
+///  @param layout bgen layout version (1 or 2)
+///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
+///  @param expected_n number of samples for variant
 Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) {
-  /* initialise a single variant with chrom, pos, rsID identifiers
-  
-  This starts a Genotypes object, but this doesn't parse the genotypes until
-  required, just starts it so we can get the offset of the next variant, so as
-  to parse the bgen variants at speed.
-  */
   offset = varoffset;
   handle.seekg(offset);
   if (layout == 1) {
@@ -62,9 +67,8 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   geno = Genotypes(&handle, layout, compression, n_alleles, n_samples);
 }
 
+/// uses the genotypes object to find the offset of the next variant
 std::uint64_t Variant::next_variant_offset() {
-  /* uses the genotypes object to find the offset of the next variant
-  */
   return geno.next_var_offset;
 }
 
@@ -86,18 +90,16 @@ std::uint8_t * Variant::ploidy() {
   return geno.ploidy;
 }
 
+/// get genotype probabilities for the variant as a 1-dimensional vector
+///
+/// This makes it easy to pass the data via cython into a numpy array, which can
+/// be reshaped to a 2-D array.
 float * Variant::probs_1d() {
-  /* get genotype probabilities for the variant as a 1-dimensional vector
-  
-  This makes it easy to pass the data via cython into a numpy array, which can
-  be reshaped to a 2-D array.
-  */
   return geno.probabilities();
 }
 
+/// get dosage of the minor allele (only works for biallelic variants)
 float * Variant::minor_allele_dosage() {
-  /* get dosage of the minor allele (only works for biallelic variants)
-  */
   float * dose = geno.minor_allele_dosage();
   minor_allele = alleles[geno.minor_idx];
   return dose;

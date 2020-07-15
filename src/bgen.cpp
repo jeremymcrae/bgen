@@ -37,6 +37,7 @@ Variant Bgen::next_var() {
   return var;
 }
 
+/// load all variants into memory at once
 void Bgen::parse_all_variants() {
   offset = header.offset + 4;
   variants.clear();
@@ -55,9 +56,8 @@ void Bgen::parse_all_variants() {
   offset = header.offset + 4;
 }
 
+/// drop a subset of variants passed in by indexes
 void Bgen::drop_variants(std::vector<int> indices) {
-  /* drop a subset of variants passed in by indexes
-  */
   // sort indices in descending order, so dropping elemtns doesn't affect later items
   std::sort(indices.rbegin(), indices.rend());
   
@@ -77,9 +77,8 @@ void Bgen::drop_variants(std::vector<int> indices) {
           [] (Variant const& a, Variant const& b) { return a.pos < b.pos; });
 }
 
+/// get all the IDs for the variants in the bgen file
 std::vector<std::string> Bgen::varids() {
-  /* get all the IDs for the variants in the bgen file
-  */
   std::vector<std::string> varid(variants.size());
   for (uint x=0; x<variants.size(); x++) {
     varid[x] = variants[x].varid;
@@ -87,9 +86,8 @@ std::vector<std::string> Bgen::varids() {
   return varid;
 }
 
+/// get all the rsIDs for the variants in the bgen file
 std::vector<std::string> Bgen::rsids() {
-  /* get all the rsIDs for the variants in the bgen file
-  */
   std::vector<std::string> rsid(variants.size());
   for (uint x=0; x<variants.size(); x++) {
     rsid[x] = variants[x].rsid;
@@ -97,9 +95,8 @@ std::vector<std::string> Bgen::rsids() {
   return rsid;
 }
 
+/// get all the chroms for the variants in the bgen file
 std::vector<std::string> Bgen::chroms() {
-  /* get all the chroms for the variants in the bgen file
-  */
   std::vector<std::string> chrom(variants.size());
   for (uint x=0; x<variants.size(); x++) {
     chrom[x] = variants[x].chrom;
@@ -107,9 +104,8 @@ std::vector<std::string> Bgen::chroms() {
   return chrom;
 }
 
+/// get all the positions for the variants in the bgen file
 std::vector<std::uint32_t> Bgen::positions() {
-  /* get all the positions for the variants in the bgen file
-  */
   std::vector<std::uint32_t> position(variants.size());
   for (uint x=0; x<variants.size(); x++) {
     position[x] = variants[x].pos;

@@ -22,21 +22,20 @@ uint n_choose_k(int n, int k) {
   return res;
 }
 
+/// check if the minor allele is certain (to 99.9999999999999& confidence)
+///
+///  Take the frequency, and number of individuals checked so far, and see if the
+///  99.99..(fifteen nines) confidence interval overlaps 0.5. If not, then we can
+///  be sure we've identified the minor allele, even without checking the full
+///  population.
+///
+///  @param freq estimated minor allele frequency
+///  @param n_checked number of individsuals checked so far
+///  @param z standard normal deviate (eg 1.96 for 95% CI, here we use 10.0 for
+///    stronger confidence, and the fact the normal approximation for confidence
+///    intervals isn't perfect)
+///  @return True/False for whether to halt the permuations
 bool minor_certain(double freq, int n_checked, double z) {
-    /** check if the minor allele is certain (to 99.9999999999999& confidence)
-    
-    Take the frequency, and number of individuals checked so far, and see if the
-    99.99..(fifteen nines) confidence interval overlaps 0.5. If not, then we can
-    be sure we've identified the minor allele, even without checking the full
-    population.
-    
-      @freq estimated minor allele frequency
-      @n_checked number of individsuals checked so far
-      @z standard normal deviate (eg 1.96 for 95% CI, here we use 10.0 for
-        stronger confidence, and the fact the normal approximation for confidence
-        intervals isn't perfect)
-      @return True/False for whether to halt the permuations
-    */
     double delta = (z * std::sqrt((freq * (1 - freq)) / n_checked));
     
     // check if the confidence interval overlaps 0.5
