@@ -218,6 +218,7 @@ void Genotypes::parse_preamble(char * uncompressed, uint & idx) {
     phased = false;
     min_ploidy = 2;
     max_ploidy = 2;
+    bit_depth = 16;
   } else if (layout == 2) {
     std::uint32_t nn_samples = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]);
     idx += sizeof(std::uint32_t);
@@ -552,9 +553,10 @@ void Genotypes::ref_dosage_slow(char * uncompressed, uint & idx) {
   uint half_ploidy = ploidy / 2;
   
   std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
-  float factor = 1.0f / (float) maxval;
+  float factor = (layout == 2) ? 1.0f / (float) maxval : 1.0f / 32768;
   std::uint32_t het;
   std::uint32_t hom;
+  std::uint32_t hom_alt;
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
   uint bit_idx = 0;  // index position in bits
   for (uint n=0; n<n_samples; n++) {
@@ -567,6 +569,14 @@ void Genotypes::ref_dosage_slow(char * uncompressed, uint & idx) {
     het = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
     bit_idx += bit_depth;
     dose[n] = ((hom * ploidy) + het * half_ploidy) * factor;
+    if (layout == 1) {
+      // layout1 stores hom alt probability, and all zeros indicates missingness
+      hom_alt = *reinterpret_cast<const std::uint16_t* >(&uncompressed[idx + bit_idx / 8]);
+      bit_idx += bit_depth;
+      if ((hom == 0) & (het == 0) & (hom_alt == 0)) {
+        missing.push_back(n);
+      }
+    }
   }
 }
 
