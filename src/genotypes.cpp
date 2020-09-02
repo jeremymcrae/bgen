@@ -152,6 +152,14 @@ uint get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
 /// @param uncompressed char array possibly containing ploidy information
 /// @param idx uint position where the ploidy data begins
 void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
+  if (has_ploidy) {
+    if (layout == 2) {
+      idx += n_samples;
+    }
+    return;
+  }
+  
+  has_ploidy = true;
   ploidy = new std::uint8_t[n_samples];
   if (layout == 1) {
     std::memset(ploidy, max_ploidy, n_samples);

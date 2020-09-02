@@ -22,6 +22,7 @@ class Genotypes {
   float * probs;
   float * dose;
   bool is_decompressed = false;
+  bool has_ploidy = false;
   bool probs_parsed = false;
   bool dosage_parsed = false;
   std::vector<int> missing;
