@@ -11,7 +11,7 @@
   #include <immintrin.h>
 #endif
 
-#include "zstd.h"
+#include "zstd/lib/zstd.h"
 #include <zlib.h>
 
 #include "genotypes.h"
