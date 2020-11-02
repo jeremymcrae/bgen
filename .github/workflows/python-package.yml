@@ -3,7 +3,7 @@ name: Build and upload to PyPI
 on: [push, pull_request]
 
 env:
-  # CIBW_BEFORE_BUILD: "yum install -y zlib-devel"
+  CIBW_BEFORE_BUILD: "yum install -y zlib-devel"
   CIBW_SKIP: "cp27-* cp35-* pp*"
   CIBW_TEST_COMMAND: "python -m unittest discover -s {project}"
 
@@ -44,7 +44,9 @@ jobs:
           python-version: '3.7'
 
       - name: Build sdist
-        run: python setup.py sdist
+        run: 
+          python -m pip install cython
+          python setup.py sdist
 
       - uses: actions/upload-artifact@v2
         with:
