@@ -1,4 +1,4 @@
-name: Build and upload to PyPI
+name: bgen
 
 on: [push, pull_request]
 

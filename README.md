@@ -1,5 +1,5 @@
 ### Another bgen reader
-![travis](https://travis-ci.org/jeremymcrae/bgen.svg?branch=master)
+![bgen](https://github.com/jeremymcrae/bgen/workflows/bgen/badge.svg)
 
 This is a package for reading [bgen files](https://www.well.ox.ac.uk/~gav/bgen_format).
 
