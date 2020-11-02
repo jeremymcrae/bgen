@@ -45,6 +45,7 @@ jobs:
 
       - name: Build sdist
         run: 
+          pip install --upgrade pip
           python -m pip install cython
           python setup.py sdist
 
