@@ -19,7 +19,7 @@ zstd compression have also been tested using example bgen files).
 
 #### Usage
 ```python
-from bgen import BgenFile
+from bgen.reader import BgenFile
 
 bfile = BgenFile(BGEN_PATH)
 rsids = bfile.rsids()
