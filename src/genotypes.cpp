@@ -180,8 +180,8 @@ void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
       // one, provided the proportion of missing samples is low.
       if (*reinterpret_cast<const std::uint64_t*>(&uncompressed[idx + x]) & mask_8) {
         for (uint y=x; y < (x + 8); y++) {
-          if (uncompressed[idx + x] & 0x80) {
-            missing.push_back(x);
+          if (uncompressed[idx + y] & 0x80) {
+            missing.push_back(y);
           }
         }
       }
