@@ -3,7 +3,6 @@ name: bgen
 on: [push, pull_request]
 
 env:
-  # CIBW_BEFORE_BUILD: "yum install -y zlib-devel"
   CIBW_SKIP: "pp*"
   CIBW_TEST_COMMAND: "python -m unittest discover -s {project}"
   CIBW_MANYLINUX_X86_64_IMAGE: "manylinux2014"
@@ -13,11 +12,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v3
         name: Install Python
         with:
           python-version: '3.9'
@@ -37,9 +36,9 @@ jobs:
     name: Build source distribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v3
         name: Install Python
         with:
           python-version: '3.9'
@@ -50,7 +49,7 @@ jobs:
           pip install cython
           python setup.py sdist
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           path: dist/*.tar.gz
 
@@ -62,7 +61,7 @@ jobs:
     # alternatively, to publish when a GitHub Release is created, use the following rule:
     # if: github.event_name == 'release' && github.event.action == 'published'
     steps:
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: artifact
           path: dist
