@@ -35,9 +35,9 @@ cdef extern from 'variant.h' namespace 'bgen':
         # declare class constructor and methods
         Variant(ifstream & handle, uint64_t & offset, int layout, int compression, int expected_n) except +
         Variant() except +
-        float * minor_allele_dosage()
-        float * probs_1d()
-        int probs_per_sample()
+        float * minor_allele_dosage() except +
+        float * probs_1d() except +
+        int probs_per_sample() except +
         bool phased()
         uint8_t * ploidy()
         
