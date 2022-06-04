@@ -16,8 +16,8 @@ class Genotypes {
   int layout;
   int compression;
   int n_alleles;
-  uint n_samples;
-  uint bit_depth;
+  std::uint32_t n_samples;
+  std::uint32_t bit_depth;
   char * uncompressed;
   float * probs;
   float * dose;
@@ -27,7 +27,7 @@ class Genotypes {
   bool dosage_parsed = false;
   std::vector<int> missing;
 public:
-  Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, uint n_samples) :
+  Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, std::uint32_t n_samples) :
     handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples) {
       std::uint32_t length;
       handle->read(reinterpret_cast<char*>(&length), sizeof(length));
@@ -36,20 +36,20 @@ public:
   };
   Genotypes() {};
   ~Genotypes() { clear_probs(); };
-  void parse_preamble(char * uncompressed, uint & idx);
-  void parse_ploidy(char * uncompressed, uint & idx);
-  float * parse_layout1(char *, uint & idx);
-  float * parse_layout2(char *, uint & idx);
+  void parse_preamble(char * uncompressed, std::uint32_t & idx);
+  void parse_ploidy(char * uncompressed, std::uint32_t & idx);
+  float * parse_layout1(char *, std::uint32_t & idx);
+  float * parse_layout2(char *, std::uint32_t & idx);
   void decompress();
   float * probabilities();
   int find_minor_allele(float * dose);
   float * minor_allele_dosage();
-  void ref_dosage_fast(char * uncompressed, uint & idx);
+  void ref_dosage_fast(char * uncompressed, std::uint32_t & idx);
   void alt_dosage();
-  void ref_dosage_slow(char * uncompressed, uint & idx);
+  void ref_dosage_slow(char * uncompressed, std::uint32_t & idx);
   void clear_probs();
   bool phased;
-  uint max_probs = 0;
+  std::uint32_t max_probs = 0;
   bool constant_ploidy;
   int min_ploidy;
   int max_ploidy;

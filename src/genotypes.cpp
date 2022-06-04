@@ -133,8 +133,8 @@ void zstd_uncompress(char * input, int compressed_len, char * decompressed,  int
 /// @param n_alleles number of alleles for the variant
 /// @param phased whether the genotypes are phased
 /// @return integer for maximum number of possible probabilites per sample
-uint get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
-  uint max_probs;
+std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
+  std::uint32_t max_probs;
   if (phased) {
     max_probs = n_alleles;
   } else {
@@ -151,7 +151,7 @@ uint get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
 ///
 /// @param uncompressed char array possibly containing ploidy information
 /// @param idx uint position where the ploidy data begins
-void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
+void Genotypes::parse_ploidy(char * uncompressed, std::uint32_t & idx) {
   if (has_ploidy) {
     if (layout == 2) {
       idx += n_samples;
@@ -172,14 +172,14 @@ void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
   std::uint64_t mask_8 = std::uint64_t(0x8080808080808080);
   if (constant_ploidy) {
     std::memset(ploidy, max_ploidy, n_samples);
-    for (uint x=0; x < (n_samples - (n_samples % 8)); x += 8) {
+    for (std::uint32_t x=0; x < (n_samples - (n_samples % 8)); x += 8) {
       // Simultaneously check if any of the next 8 samples are missing by casting
       // the data for the next 8 samples to an int64, and masking out all but
       // the bits which indicate missingness. Only check individual samples if
       // any are missing. This is ~3X quicker than looping across samples one by
       // one, provided the proportion of missing samples is low.
       if (*reinterpret_cast<const std::uint64_t*>(&uncompressed[idx + x]) & mask_8) {
-        for (uint y=x; y < (x + 8); y++) {
+        for (std::uint32_t y=x; y < (x + 8); y++) {
           if (uncompressed[idx + y] & 0x80) {
             missing.push_back(y);
           }
@@ -187,13 +187,13 @@ void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
       }
     }
     // We looped through in batches of 8, so check the remainder not in an 8-batch
-    for (uint x=(n_samples - (n_samples % 8)); x < n_samples; x++) {
+    for (std::uint32_t x=(n_samples - (n_samples % 8)); x < n_samples; x++) {
       if (uncompressed[idx + x] & 0x80) {
         missing.push_back(x);
       }
     }
   } else {
-    for (uint x=0; x < n_samples; x++) {
+    for (std::uint32_t x=0; x < n_samples; x++) {
       ploidy[x] = mask & uncompressed[idx + x];
       if (uncompressed[idx + x] & 0x80) {
         missing.push_back(x);
@@ -212,11 +212,11 @@ void Genotypes::parse_ploidy(char * uncompressed, uint & idx) {
 /// @param uncompressed char array containing genotype probabilities
 /// @param idx uint position where the genotype probabilties begin
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
-float * Genotypes::parse_layout1(char * uncompressed, uint & idx) {
+float * Genotypes::parse_layout1(char * uncompressed, std::uint32_t & idx) {
   probs = new float[max_probs * n_samples];
   
   float factor = 1.0 / 32768;
-  for (uint offset=0; offset<n_samples * max_probs; offset+=max_probs) {
+  for (std::uint32_t offset=0; offset<n_samples * max_probs; offset+=max_probs) {
     probs[offset] = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) * factor;
     probs[offset + 1] = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx + 2]) * factor;
     probs[offset + 2] = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx + 4]) * factor;
@@ -239,7 +239,7 @@ float * Genotypes::parse_layout1(char * uncompressed, uint & idx) {
 ///
 /// @param uncompressed char array containing genotype probabilities
 /// @param idx uint position where the genotype probabilties begin
-void Genotypes::parse_preamble(char * uncompressed, uint & idx) {
+void Genotypes::parse_preamble(char * uncompressed, std::uint32_t & idx) {
   if (layout == 1) {
     phased = false;
     min_ploidy = 2;
@@ -290,8 +290,8 @@ void Genotypes::parse_preamble(char * uncompressed, uint & idx) {
 /// @param uncompressed char array containing genotype probabilities
 /// @param idx uint position where the genotype probabilties begin
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
-float * Genotypes::parse_layout2(char * uncompressed, uint & idx) {
-  uint nrows = 0;
+float * Genotypes::parse_layout2(char * uncompressed, std::uint32_t & idx) {
+  std::uint32_t nrows = 0;
   if (!phased) {
     nrows = n_samples;
   } else {
@@ -299,21 +299,21 @@ float * Genotypes::parse_layout2(char * uncompressed, uint & idx) {
     if (constant_ploidy) {
       nrows = n_samples * max_ploidy;
     } else {
-      for (uint n=0; n<n_samples; n++) { nrows += ploidy[n]; }
+      for (std::uint32_t n=0; n<n_samples; n++) { nrows += ploidy[n]; }
     }
   }
   probs = new float[max_probs * nrows];
   
   // get genotype/allele probabilities
-  uint n_probs;
-  uint max_less_1 = max_probs - 1;
+  std::uint32_t n_probs;
+  std::uint32_t max_less_1 = max_probs - 1;
   float prob = 0;
   float remainder;
   
   // define variables for parsing depths not aligned with 8 bit char array
   float factor = 1.0 / ((float) (std::pow(2, (int) bit_depth)) - 1);
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
-  uint bit_idx = 0;  // index position in bits
+  std::uint32_t bit_idx = 0;  // index position in bits
   
   if (constant_ploidy & (max_probs == 3) & (bit_depth == 8)) {
     // A fast path for one scenario: all samples have ploidy=2, with 8 bits per
@@ -324,7 +324,7 @@ float * Genotypes::parse_layout2(char * uncompressed, uint & idx) {
     std::uint64_t idx2 = 0;
     std::uint8_t first;
     std::uint8_t second;
-    for (uint offset=0; offset < nrows * 3; offset += 3) {
+    for (std::uint32_t offset=0; offset < nrows * 3; offset += 3) {
       first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + idx2]);
       second = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + idx2 + 1]);
       probs[offset] = lut8[first];
@@ -333,7 +333,7 @@ float * Genotypes::parse_layout2(char * uncompressed, uint & idx) {
       idx2 += 2;
     }
   } else {
-    for (uint offset=0; offset < (nrows * max_probs); offset += max_probs) {
+    for (std::uint32_t offset=0; offset < (nrows * max_probs); offset += max_probs) {
       // calculate the number of probabilities per sample (depends on whether the
       // data is phased, the sample ploidy and the number of alleles)
       if (constant_ploidy) {
@@ -346,24 +346,24 @@ float * Genotypes::parse_layout2(char * uncompressed, uint & idx) {
         n_probs = n_choose_k(ploidy[offset / max_probs] + n_alleles - 1, n_alleles - 1) - 1;
       }
       remainder = 1.0;
-      for (uint x=0; x<n_probs; x++) {
+      for (std::uint32_t x=0; x<n_probs; x++) {
         prob = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask) * factor ;
         bit_idx += bit_depth;
         remainder -= prob;
         probs[offset + x] = prob;
       }
       probs[offset + n_probs] = remainder;
-      for (uint x=(n_probs + 1); x<max_probs; x++) {
+      for (std::uint32_t x=(n_probs + 1); x<max_probs; x++) {
         probs[offset + x] = std::nan("1");
       }
     }
   }
   
-  uint offset;
+  std::uint32_t offset;
   // for samples with missing data, just set values to NA
   for (auto n: missing) {
     offset = max_probs * n;
-    for (uint x=0; x<max_probs; x++) {
+    for (std::uint32_t x=0; x<max_probs; x++) {
       probs[offset + x] = std::nan("1");
     }
   }
@@ -419,7 +419,7 @@ float * Genotypes::probabilities() {
     return probs;
   }
   decompress();
-  uint idx = 0;
+  std::uint32_t idx = 0;
   parse_preamble(uncompressed, idx);
   
   if (layout == 1) {
@@ -443,16 +443,16 @@ float * Genotypes::probabilities() {
 /// @param dose float array of dosages for the reference (first) allele
 /// @return index for minor allele (0 or 1)
 int Genotypes::find_minor_allele(float * dose) {
-  uint batchsize = 100;
-  uint increment = std::max(n_samples / batchsize, (uint) 1);
+  std::uint32_t batchsize = 100;
+  std::uint32_t increment = std::max(n_samples / batchsize, (std::uint32_t) 1);
   double total = 0;
   double freq = 0;
   
   // To make sure we don't hit weird groupings of alleles in individuals, this
   // picks samples uniformly thoughout the population, by using an appropriate
   // step size.
-  for (uint idx2=0; idx2<increment; idx2++) {
-    for (uint n=idx2; n<n_samples; n += increment) {
+  for (std::uint32_t idx2=0; idx2<increment; idx2++) {
+    for (std::uint32_t n=idx2; n<n_samples; n += increment) {
       total += dose[n];
     }
     freq = total / (batchsize * (idx2 + 1) * 2);
@@ -481,7 +481,7 @@ int Genotypes::find_minor_allele(float * dose) {
 ///
 /// @param uncompressed char array containing genotype probabilities
 /// @param idx uint position where the genotype probabilties begin
-void Genotypes::ref_dosage_fast(char * uncompressed, uint & idx) {
+void Genotypes::ref_dosage_fast(char * uncompressed, std::uint32_t & idx) {
 #if defined(__x86_64__)
   __m256i mask_odd = _mm256_set_epi8(0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
     -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,  -1, 0, -1, 0, -1, 0, -1);
@@ -499,7 +499,7 @@ void Genotypes::ref_dosage_fast(char * uncompressed, uint & idx) {
   __m128i hi16;
   __m256i hi;
   __m256 hi_float;
-  for (uint n=0; n<(n_samples - (n_samples % 16)); n+=16) {
+  for (std::uint32_t n=0; n<(n_samples - (n_samples % 16)); n+=16) {
     initial = _mm256_loadu_si256((__m256i *) &uncompressed[idx]);
     
     // get heterozygous int dosage by masking out the even bytes, and right
@@ -535,14 +535,14 @@ void Genotypes::ref_dosage_fast(char * uncompressed, uint & idx) {
     idx += 32;
   }
   // finish off the final unvectorized samples
-  for (uint n=(n_samples - (n_samples % 16)); n<n_samples; n++) {
+  for (std::uint32_t n=(n_samples - (n_samples % 16)); n<n_samples; n++) {
     dose[n] = lut8[*reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) * 2 +
     *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 1])];
     idx += 2;
   }
 #else
   // the unvectorized slow path. This is ~50% slower
-  for (uint n=0; n<(n_samples - (n_samples % 2)); n+=2) {
+  for (std::uint32_t n=0; n<(n_samples - (n_samples % 2)); n+=2) {
     // speed up throughpot by calculating two samples at a time
     dose[n] = lut8[*reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) * 2 +
       *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 1])];
@@ -568,17 +568,17 @@ void Genotypes::alt_dosage() {
 #if defined(__x86_64__)
   __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
   __m256 batch;
-  for (uint n=0; n<(n_samples - (n_samples % 8)); n+=8) {
+  for (std::uint32_t n=0; n<(n_samples - (n_samples % 8)); n+=8) {
     batch = _mm256_loadu_ps(dose + n);
     _mm256_storeu_ps(dose + n, _mm256_sub_ps(k, batch));
   }
-  for (uint n=(n_samples - (n_samples % 8)); n<n_samples; n++) {
+  for (std::uint32_t n=(n_samples - (n_samples % 8)); n<n_samples; n++) {
     dose[n] = 2.0f - dose[n];
   }
 #else
   // TODO: add in vectorized version to speed up function on aarch64
   // alternative for when x86 vectorized oeprations are not available
-  for (uint n=0; n<(n_samples - (n_samples % 8)); n+=8) {
+  for (std::uint32_t n=0; n<(n_samples - (n_samples % 8)); n+=8) {
     dose[n] = 2.0f - dose[n];
     dose[n+1] = 2.0f - dose[n+1];
     dose[n+2] = 2.0f - dose[n+2];
@@ -588,7 +588,7 @@ void Genotypes::alt_dosage() {
     dose[n+6] = 2.0f - dose[n+6];
     dose[n+7] = 2.0f - dose[n+7];
   }
-  for (uint n=(n_samples - (n_samples % 8)); n<n_samples; n++) {
+  for (std::uint32_t n=(n_samples - (n_samples % 8)); n<n_samples; n++) {
     dose[n] = 2.0f - dose[n];
   }
 #endif
@@ -609,9 +609,9 @@ void Genotypes::alt_dosage() {
 ///
 /// @param uncompressed char array of genotype probabilities (encoding depends on layout)
 /// @param idx uint index position in uncompressed where genotype probabilities start
-void Genotypes::ref_dosage_slow(char * uncompressed, uint & idx) {
-  uint ploidy = max_ploidy;
-  uint half_ploidy = ploidy / 2;
+void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t & idx) {
+  std::uint32_t ploidy = max_ploidy;
+  std::uint32_t half_ploidy = ploidy / 2;
   
   std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
   float factor = (layout == 2) ? 1.0f / (float) maxval : 1.0f / 32768;
@@ -619,8 +619,8 @@ void Genotypes::ref_dosage_slow(char * uncompressed, uint & idx) {
   std::uint32_t hom;
   std::uint32_t hom_alt;
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
-  uint bit_idx = 0;  // index position in bits
-  for (uint n=0; n<n_samples; n++) {
+  std::uint32_t bit_idx = 0;  // index position in bits
+  for (std::uint32_t n=0; n<n_samples; n++) {
     if (!constant_ploidy) {
       ploidy = this->ploidy[n];
       half_ploidy = ploidy / 2;
@@ -649,7 +649,7 @@ float * Genotypes::minor_allele_dosage() {
     return dose;
   }
   decompress();
-  uint idx = 0;
+  std::uint32_t idx = 0;
   parse_preamble(uncompressed, idx);
   
   if (n_alleles != 2) {

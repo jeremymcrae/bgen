@@ -80,7 +80,7 @@ void Bgen::drop_variants(std::vector<int> indices) {
 /// get all the IDs for the variants in the bgen file
 std::vector<std::string> Bgen::varids() {
   std::vector<std::string> varid(variants.size());
-  for (uint x=0; x<variants.size(); x++) {
+  for (std::uint32_t x=0; x<variants.size(); x++) {
     varid[x] = variants[x].varid;
   }
   return varid;
@@ -89,7 +89,7 @@ std::vector<std::string> Bgen::varids() {
 /// get all the rsIDs for the variants in the bgen file
 std::vector<std::string> Bgen::rsids() {
   std::vector<std::string> rsid(variants.size());
-  for (uint x=0; x<variants.size(); x++) {
+  for (std::uint32_t x=0; x<variants.size(); x++) {
     rsid[x] = variants[x].rsid;
   }
   return rsid;
@@ -98,7 +98,7 @@ std::vector<std::string> Bgen::rsids() {
 /// get all the chroms for the variants in the bgen file
 std::vector<std::string> Bgen::chroms() {
   std::vector<std::string> chrom(variants.size());
-  for (uint x=0; x<variants.size(); x++) {
+  for (std::uint32_t x=0; x<variants.size(); x++) {
     chrom[x] = variants[x].chrom;
   }
   return chrom;
@@ -107,7 +107,7 @@ std::vector<std::string> Bgen::chroms() {
 /// get all the positions for the variants in the bgen file
 std::vector<std::uint32_t> Bgen::positions() {
   std::vector<std::uint32_t> position(variants.size());
-  for (uint x=0; x<variants.size(); x++) {
+  for (std::uint32_t x=0; x<variants.size(); x++) {
     position[x] = variants[x].pos;
   }
   return position;
