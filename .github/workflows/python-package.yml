@@ -3,7 +3,7 @@ name: bgen
 on: [push, pull_request]
 
 env:
-  CIBW_BEFORE_BUILD: "yum install -y zlib-devel"
+  # CIBW_BEFORE_BUILD: "yum install -y zlib-devel"
   CIBW_SKIP: "pp*"
   CIBW_TEST_COMMAND: "python -m unittest discover -s {project}"
   CIBW_MANYLINUX_X86_64_IMAGE: "manylinux2014"
