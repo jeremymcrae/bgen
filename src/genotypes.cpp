@@ -391,14 +391,18 @@ void Genotypes::decompress() {
       decompressed_len = n_samples * 6;
     } else if (layout == 2) {
       decompressed_field = true;
-      handle->read(reinterpret_cast<char*>(&decompressed_len), sizeof(std::uint32_t));
+      if (not handle->read(reinterpret_cast<char*>(&decompressed_len), sizeof(std::uint32_t))) {
+        throw std::invalid_argument("couldn't read the compressed length");
+      }
     }
   }
   
   std::uint32_t compressed_len = next_var_offset - offset - decompressed_field * 4;
   char compressed[compressed_len];
   uncompressed = new char[decompressed_len];
-  handle->read(&compressed[0], compressed_len); // about 20 microseconds
+  if (not handle->read(&compressed[0], compressed_len)) {
+    throw std::invalid_argument("couldn't read the compressed data");
+  }
   
   if (compression == 0) { //no compression
     uncompressed = compressed;
