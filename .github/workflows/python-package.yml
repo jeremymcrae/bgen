@@ -1,6 +1,10 @@
 name: bgen
 
-on: [push, pull_request]
+on: 
+  push:
+  pull_request:
+  schedule:
+    - cron: "33 3 3 * *"
 
 env:
   CIBW_SKIP: "pp*"
@@ -28,7 +32,7 @@ jobs:
       - name: Build wheels
         run: |
           python -m cibuildwheel --output-dir wheelhouse
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           path: ./wheelhouse/*.whl
 
