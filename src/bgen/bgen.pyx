@@ -220,7 +220,7 @@ cdef class BgenVar:
         # quickly convert to a numpy array
         # https://cython.readthedocs.io/en/latest/src/userguide/memoryviews.html#coercion-to-numpy
         cdef float * dosage = self.thisptr.minor_allele_dosage()
-        return np.asarray(<float [:self.expected_n]>dosage)
+        return np.asarray(<float [:self.expected_n]>dosage).copy()
     @property
     def probabilities(self):
         ''' get the allelic probabilities for a variant
@@ -256,7 +256,7 @@ cdef class BgenVar:
             
             data = ragged
         
-        return data
+        return data.copy()
 
 cdef class BgenFile:
     ''' class to open bgen files from disk, and access variant data within
