@@ -38,8 +38,8 @@ cdef extern from 'variant.h' namespace 'bgen':
         float * minor_allele_dosage() except +
         float * probs_1d() except +
         int probs_per_sample() except +
-        bool phased()
-        uint8_t * ploidy()
+        bool phased() except +
+        uint8_t * ploidy() except +
         
         # declare public attributes
         string varid, rsid, chrom, minor_allele
