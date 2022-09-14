@@ -188,12 +188,21 @@ cdef class BgenVar:
         return [x.decode('utf8') for x in self.thisptr.alleles]
     @property
     def is_phased(self):
-      return self.thisptr.phased()
+        try:
+            return self.thisptr.phased()
+        except ValueError:
+            _ = self.probabilities
+            return self.thisptr.phased()
     @property
     def ploidy(self):
         ''' get the ploidy for each sample
         '''
-        cdef uint8_t * ploid = self.thisptr.ploidy()
+        cdef uint8_t * ploid
+        try:
+            ploid = self.thisptr.ploidy()
+        except ValueError:
+            _ = self.probabilities
+            ploid = self.thisptr.ploidy()
         return np.copy(np.asarray(<uint8_t [:self.expected_n]>ploid))
     @property
     def minor_allele(self):
