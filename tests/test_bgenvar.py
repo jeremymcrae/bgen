@@ -36,6 +36,24 @@ class TestBgenVar(unittest.TestCase):
                   # check difference between the two estimates is sufficiently low
                   self.assertTrue(np.nanmax(delta) < 2e-7)
     
+    def test_alt_dosage(self):
+          ''' test we calculate alt_dosage correctly
+          '''
+          path = self.folder / 'example.16bits.zstd.bgen'
+          with BgenFile(path) as bfile:
+              for var in bfile:
+                  dose = var.alt_dosage
+                  probs = var.probabilities
+                  
+                  # calculate dosages for the alt allele
+                  a2 = (probs[:, 2] * 2 + probs[:, 1])
+                  
+                  # get delta between var.minor_allele_dosage and values calculated here
+                  delta = abs(dose - a2)
+                  
+                  # check difference between the two estimates is sufficiently low
+                  self.assertTrue(np.nanmax(delta) < 2.5e-7)
+    
     def test_minor_allele_dosage_fast(self):
         ''' test we calculate minor_allele_dosage correctly with the fast path
         '''

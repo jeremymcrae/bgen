@@ -36,6 +36,7 @@ cdef extern from 'variant.h' namespace 'bgen':
         Variant(ifstream & handle, uint64_t & offset, int layout, int compression, int expected_n) except +
         Variant() except +
         float * minor_allele_dosage() except +
+        float * alt_dosage() except +
         float * probs_1d() except +
         int probs_per_sample() except +
         bool phased() except +
@@ -211,15 +212,20 @@ cdef class BgenVar:
         return self.thisptr.minor_allele.decode('utf8')
     @property
     def minor_allele_dosage(self):
-        ''' get the dosage for the minor allele for a biallelic variant
-        
-        In order for this to be fast, we need to get the dosage data as a vector,
-        then get a memory view on that data, and finally return as a numpy array
+        ''' dosage for the minor allele for a biallelic variant
         '''
-        # get the vector data for the dosage. We use a cython memoryview to
-        # quickly convert to a numpy array
+        # get an minor allele dosage float array, and convert to a numpy array 
+        # with a memoryview before returning a copy to avoid invalid memory 
+        # accesses if the BgenVar is deleted before accessing the array
         # https://cython.readthedocs.io/en/latest/src/userguide/memoryviews.html#coercion-to-numpy
         cdef float * dosage = self.thisptr.minor_allele_dosage()
+        return np.asarray(<float [:self.expected_n]>dosage).copy()
+    @property
+    def alt_dosage(self):
+        ''' dosage for the alt allele for a biallelic variant
+        '''
+        # see minor_allele_dosage() for implementation details
+        cdef float * dosage = self.thisptr.alt_dosage()
         return np.asarray(<float [:self.expected_n]>dosage).copy()
     @property
     def probabilities(self):

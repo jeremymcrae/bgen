@@ -20,11 +20,13 @@ class Genotypes {
   std::uint32_t bit_depth;
   char * uncompressed;
   float * probs;
-  float * dose;
+  float * alt_dose;
+  float * minor_dose;
   bool is_decompressed = false;
   bool has_ploidy = false;
   bool probs_parsed = false;
-  bool dosage_parsed = false;
+  bool minor_dosage_parsed = false;
+  bool alt_dosage_parsed = false;
   std::vector<int> missing;
 public:
   Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, std::uint32_t n_samples) :
@@ -43,10 +45,10 @@ public:
   void decompress();
   float * probabilities();
   int find_minor_allele(float * dose);
-  float * minor_allele_dosage();
-  void ref_dosage_fast(char * uncompressed, std::uint32_t & idx);
-  void alt_dosage();
-  void ref_dosage_slow(char * uncompressed, std::uint32_t & idx);
+  float * get_allele_dosage(bool use_alt=true, bool use_minor=false);
+  void ref_dosage_fast(char * uncompressed, std::uint32_t & idx, float * dose);
+  void swap_allele_dosage(float * dose);
+  void ref_dosage_slow(char * uncompressed, std::uint32_t & idx, float * dose);
   void clear_probs();
   bool phased;
   std::uint32_t max_probs = 0;

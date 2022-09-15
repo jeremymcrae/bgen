@@ -98,9 +98,16 @@ float * Variant::probs_1d() {
   return geno.probabilities();
 }
 
+/// get dosage of the alt allele (only works for biallelic variants)
+float * Variant::alt_dosage() {
+  float * dose = geno.get_allele_dosage(true, false);
+  minor_allele = alleles[geno.minor_idx];
+  return dose;
+}
+
 /// get dosage of the minor allele (only works for biallelic variants)
 float * Variant::minor_allele_dosage() {
-  float * dose = geno.minor_allele_dosage();
+  float * dose = geno.get_allele_dosage(false, true);
   minor_allele = alleles[geno.minor_idx];
   return dose;
 }

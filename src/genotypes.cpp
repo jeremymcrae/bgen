@@ -485,7 +485,7 @@ int Genotypes::find_minor_allele(float * dose) {
 ///
 /// @param uncompressed char array containing genotype probabilities
 /// @param idx uint position where the genotype probabilties begin
-void Genotypes::ref_dosage_fast(char * uncompressed, std::uint32_t & idx) {
+void Genotypes::ref_dosage_fast(char * uncompressed, std::uint32_t & idx, float * dose) {
 #if defined(__x86_64__)
   __m256i mask_odd = _mm256_set_epi8(0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
     -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,  -1, 0, -1, 0, -1, 0, -1);
@@ -562,13 +562,13 @@ void Genotypes::ref_dosage_fast(char * uncompressed, std::uint32_t & idx) {
 #endif
 }
 
-/// calculate the dosage for the alternate (second) allele for all samples
+/// swap sample dosages to the opposing allele. Requires a biallelic variant.
 ///
-/// This replaces the values in the dose member with 2.0 - value.
+/// This replaces the values in the dose array with 2.0 - value.
 ///
 /// This uses AVX vectorization to speed up calculations on x86_64 hardware.
 /// This assumes AVX is available on x86_64 machines, which isn't always true.
-void Genotypes::alt_dosage() {
+void Genotypes::swap_allele_dosage(float * dose) {
 #if defined(__x86_64__)
   __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
   __m256 batch;
@@ -613,7 +613,7 @@ void Genotypes::alt_dosage() {
 ///
 /// @param uncompressed char array of genotype probabilities (encoding depends on layout)
 /// @param idx uint index position in uncompressed where genotype probabilities start
-void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t & idx) {
+void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t & idx, float * dose) {
   std::uint32_t ploidy = max_ploidy;
   std::uint32_t half_ploidy = ploidy / 2;
   
@@ -645,12 +645,20 @@ void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t & idx) {
   }
 }
 
-/// calculate minor allele dosage from the genotype probabilities
+/// calculate allele dosage from the genotype probabilities
+///
+/// This either computes the alternate allele dosage, or the minor allele dosage
+/// depending on the use_alt or use_minor arguments.
 ///
 /// @return float array of dosage values (each from 0.0-2.0)
-float * Genotypes::minor_allele_dosage() {
-  if ((max_probs > 0) & dosage_parsed) {
-    return dose;
+float * Genotypes::get_allele_dosage(bool use_alt, bool use_minor) {
+  if (use_alt == use_minor) {
+    throw std::invalid_argument("one of use_alt or use_minor must be true");
+  } 
+  if (use_minor & (max_probs > 0) & minor_dosage_parsed) {
+    return minor_dose;
+  } else if (use_alt & (max_probs > 0) & alt_dosage_parsed) {
+    return alt_dose;
   }
   decompress();
   std::uint32_t idx = 0;
@@ -661,27 +669,34 @@ float * Genotypes::minor_allele_dosage() {
   }
   
   // calculate the dosage for the first allele for all samples
-  dose = new float[n_samples];
+  float * dose = new float[n_samples];
   if (constant_ploidy & (max_probs == 3) & (bit_depth == 8)) {
     // A fast path when we know the ploidy is constant and the bit depth is 8,
     // this avoids the bit shifts/masks used in the variable bit_depth path.
-    ref_dosage_fast(uncompressed, idx);
+    ref_dosage_fast(uncompressed, idx, dose);
   } else {
-    ref_dosage_slow(uncompressed, idx);
+    ref_dosage_slow(uncompressed, idx, dose);
   }
   
   minor_idx = find_minor_allele(dose);
-  if (minor_idx != 0) {
-    alt_dosage();
+  if (use_alt | (use_minor & minor_idx != 0)) {
+    swap_allele_dosage(dose);
   }
   
   // for samples with missing data, just set values to NA
   for (auto n: missing) {
     dose[n] = std::nan("1");
   }
-  
-  dosage_parsed = true;
-  return dose;
+
+  if (use_alt) {
+    alt_dose = dose;
+    alt_dosage_parsed = true;
+    return alt_dose;
+  } else if (use_minor) {
+    minor_dose = dose;
+    minor_dosage_parsed = true;
+    return minor_dose;
+  }
 }
 
 void Genotypes::clear_probs() {
@@ -692,8 +707,11 @@ void Genotypes::clear_probs() {
   if (probs_parsed) {
     delete[] probs;
   }
-  if (dosage_parsed) {
-    delete[] dose;
+  if (minor_dosage_parsed) {
+    delete[] minor_dose;
+  }
+  if (alt_dosage_parsed) {
+    delete[] alt_dose;
   }
   max_probs = 0;
 }

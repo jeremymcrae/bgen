@@ -63,8 +63,8 @@ class BgenFile(path, sample_path='', delay_parsing=False)
     iteration: variants in a BgenFile can be looped over e.g. for x in bfile: print(x)
     fetch(chrom, start=None, stop=None): get all variants within a genomic region
     drop_variants(list[int]): drops variants by index from being used in analyses
-    with_rsid(pos): returns BgenVar with given position
-    at_position(rsid): returns BgenVar with given rsid
+    with_rsid(rsid): returns BgenVar with given position
+    at_position(pos): returns BgenVar with given rsid
     varids(): returns list of varids for variants in the bgen file.
     rsids(): returns list of rsids for variants in the bgen file.
     chroms(): returns list of chromosomes for variants in the bgen file.
@@ -82,6 +82,7 @@ class BgenVar(handle, offset, layout, compression, n_samples):
     ploidy: list of ploidy for each sample. Samples are ordered as per BgenFile.samples
     minor_allele: the least common allele (for biallelic variants)
     minor_allele_dosage: 1D numpy array of minor allele dosages for each sample
+    alt_dosage: 1D numpy array of alt allele dosages for each sample
     probabilitiies:  2D numpy array of genotype probabilities, one sample per row
   
   BgenVars can be pickled e.g. pickle.dumps(var)

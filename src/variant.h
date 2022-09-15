@@ -20,6 +20,7 @@ public:
   Variant() {};
   std::uint64_t next_variant_offset();
   int probs_per_sample();
+  float * alt_dosage();
   float * minor_allele_dosage();
   float * probs_1d();
   bool phased();
