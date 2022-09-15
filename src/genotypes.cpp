@@ -650,15 +650,19 @@ void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t & idx, float 
 /// This either computes the alternate allele dosage, or the minor allele dosage
 /// depending on the use_alt or use_minor arguments.
 ///
+/// @param use_alt whether to return the alt allele dosages
+/// @param use_minor whether to return the minor allele dosages
 /// @return float array of dosage values (each from 0.0-2.0)
 float * Genotypes::get_allele_dosage(bool use_alt, bool use_minor) {
   if (use_alt == use_minor) {
     throw std::invalid_argument("one of use_alt or use_minor must be true");
-  } 
-  if (use_minor & (max_probs > 0) & minor_dosage_parsed) {
-    return minor_dose;
-  } else if (use_alt & (max_probs > 0) & alt_dosage_parsed) {
-    return alt_dose;
+  }
+  if (max_probs > 0) {
+    if (use_minor & minor_dosage_parsed) {
+      return minor_dose;
+    } else if (use_alt & alt_dosage_parsed) {
+      return alt_dose;
+    }
   }
   decompress();
   std::uint32_t idx = 0;
