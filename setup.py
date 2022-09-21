@@ -12,11 +12,14 @@ from Cython.Build import cythonize
 EXTRA_COMPILE_ARGS = ['-std=c++11', '-I/usr/include']
 EXTRA_LINK_ARGS = []
 if sys.platform == "darwin":
-    EXTRA_COMPILE_ARGS += ["-stdlib=libc++",
-        "-mmacosx-version-min=10.9",
+    EXTRA_COMPILE_ARGS += [
+        "-stdlib=libc++",
+        "-I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1",
         "-I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
         ]
-    EXTRA_LINK_ARGS += ["-stdlib=libc++", "-mmacosx-version-min=10.9"]
+    EXTRA_LINK_ARGS += [
+        "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
+        ]
 
 if platform.machine() == 'x86_64':
     EXTRA_COMPILE_ARGS += ['-mavx', '-mavx2']
@@ -68,7 +71,6 @@ reader = cythonize([
         extra_objects=build_zstd(),
         include_dirs=['src/', 'src/zstd/lib'],
         libraries=['z'],
-        library_dirs=['bgen'],
         language='c++'),
     ])
 
