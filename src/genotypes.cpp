@@ -683,7 +683,7 @@ float * Genotypes::get_allele_dosage(bool use_alt, bool use_minor) {
   }
   
   minor_idx = find_minor_allele(dose);
-  if (use_alt | (use_minor & minor_idx != 0)) {
+  if (use_alt | (use_minor & (minor_idx != 0))) {
     swap_allele_dosage(dose);
   }
   
@@ -696,7 +696,7 @@ float * Genotypes::get_allele_dosage(bool use_alt, bool use_minor) {
     alt_dose = dose;
     alt_dosage_parsed = true;
     return alt_dose;
-  } else if (use_minor) {
+  } else {
     minor_dose = dose;
     minor_dosage_parsed = true;
     return minor_dose;
