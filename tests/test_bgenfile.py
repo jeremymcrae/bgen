@@ -132,6 +132,7 @@ class TestBgenFile(unittest.TestCase):
         sortkey = lambda x: (x.chrom, x.pos)
         gen_vars = [x for x in sorted(self.gen_data, key=sortkey) if start <= x.pos]
         for x, y in zip(sorted(bfile.fetch(chrom, start), key=sortkey), gen_vars):
+            print(x, y)
             self.assertEqual(x.rsid, y.rsid)
             self.assertEqual(x.chrom, y.chrom)
             self.assertEqual(x.pos, y.pos)
