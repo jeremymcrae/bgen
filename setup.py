@@ -21,6 +21,8 @@ if sys.platform == "darwin":
     EXTRA_LINK_ARGS += [
         "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
         ]
+elif sys.platform == "win32":
+    EXTRA_COMPILE_ARGS += ['/std:c++11']
 
 if platform.machine() == 'x86_64':
     EXTRA_COMPILE_ARGS += ['-mavx', '-mavx2']
