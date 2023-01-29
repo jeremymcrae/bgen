@@ -42,7 +42,7 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   std::uint16_t item_len;
   item_len = (std::uint16_t) temp.to_ulong();
   // handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
-  std::cout << "... varID length " << item_len << " (" << temp << ")";
+  std::cout << "... varID length " << item_len << " (" << temp << ")\n";
   if (item_len > 0) {
     std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(varid));
   }
