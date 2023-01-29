@@ -21,14 +21,14 @@ namespace bgen {
 ///  @param expected_n number of samples for variant
 Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) {
   offset = varoffset;
-  std::cout << "loading variant at " << varoffset << " ... ";
+  std::cout << "loading variant at " << varoffset;
   handle.seekg(offset);
-  std::cout << "seeked\n";
   if (layout == 1) {
     handle.read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
   } else {
     n_samples = expected_n;
   }
+  std::cout << "... n_samples " << n_samples;
   
   if ((int) n_samples != expected_n) {
     throw std::invalid_argument("number of samples doesn't match");
@@ -36,29 +36,36 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   
   // get the variant ID (first need to know how long the field is)
   std::uint16_t item_len;
+  std::cout << "... reading varID length ";
   handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
+  std::cout << "... varID length " << item_len;
   if (item_len > 0) {
     std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(varid));
   }
+  std::cout << "... varID ";
   
   // get the rsID (first need to know how long the field is)
   handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
   if (item_len > 0) {
     std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(rsid));
   }
+  std::cout << "... rsID ";
   
   // get the chromosome (first need to know how long the field is)
   handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
   if (item_len > 0) {
     std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(chrom));
   }
+  std::cout << "... chrom " << chrom;
   
   handle.read(reinterpret_cast<char*>(&pos), sizeof(std::uint32_t));
+  std::cout << "... pos " << pos;
   if (layout == 1) {
     n_alleles = 2;
   } else {
     handle.read(reinterpret_cast<char*>(&n_alleles), sizeof(std::uint16_t));
   }
+  std::cout << "... n alleles ";
   
   for (int x=0; x < n_alleles; x++) {
     std::uint32_t allele_len;
@@ -67,8 +74,10 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     std::copy_n(std::istream_iterator<char>(handle), allele_len, std::back_inserter(allele));
     alleles.push_back(allele);
   }
+  std::cout << "... alleles ";
   
   geno = Genotypes(&handle, layout, compression, n_alleles, n_samples);
+  std::cout << "... Genotypes\n ";
 }
 
 /// uses the genotypes object to find the offset of the next variant
