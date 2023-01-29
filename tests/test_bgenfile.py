@@ -127,10 +127,13 @@ class TestBgenFile(unittest.TestCase):
         ''' fetching variants with chrom and start gives all variants after pos
         '''
         chrom, start, stop = '01', 5000, 50000
+        print('testing fetch after position')
         bfile = BgenFile(self.folder / 'example.16bits.bgen')
         
+        print('opened gen')
         sortkey = lambda x: (x.chrom, x.pos)
         gen_vars = [x for x in sorted(self.gen_data, key=sortkey) if start <= x.pos]
+        print('have expected data')
         for x, y in zip(sorted(bfile.fetch(chrom, start), key=sortkey), gen_vars):
             print(x, y)
             self.assertEqual(x.rsid, y.rsid)
