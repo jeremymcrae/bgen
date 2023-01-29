@@ -2,6 +2,8 @@
 #include <stdexcept>
 #include <cmath>
 
+#include <iostream>
+
 #include "variant.h"
 
 namespace bgen {
@@ -19,6 +21,7 @@ namespace bgen {
 ///  @param expected_n number of samples for variant
 Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) {
   offset = varoffset;
+  std::cout << "loading variant at " << varoffset << "\n";
   handle.seekg(offset);
   if (layout == 1) {
     handle.read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
