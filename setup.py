@@ -1,4 +1,5 @@
 
+import glob
 import io
 from pathlib import Path
 from setuptools import setup
@@ -26,6 +27,20 @@ if platform.machine() == 'x86_64':
 
 def flatten(*lists):
     return [str(x) for sublist in lists for x in sublist]
+
+def build_zlib():
+    ''' compile zlib code to object files for linking with bgen on windows
+    
+    Returns:
+        list of paths to compiled object code
+    '''
+    include_dirs = ['src/zlib/']
+    sources = list(glob.glob('src/zlib/*.c'))
+    extra_compile_args = []
+    
+    cc = new_compiler()
+    return cc.compile(sources, include_dirs=include_dirs,
+        extra_preargs=extra_compile_args)
 
 def build_zstd():
     ''' compile zstd code to object files for linking with bgen c++ code
@@ -57,6 +72,11 @@ def build_zstd():
     return cc.compile(sources, include_dirs=include_dirs,
         extra_preargs=extra_compile_args)
 
+if sys.platform == 'win32':
+    zlib, libs = build_zlib(), []
+else:
+    zlib, libs = [], ['z']
+
 reader = cythonize([
     Extension('bgen.reader',
         extra_compile_args=EXTRA_COMPILE_ARGS,
@@ -68,9 +88,9 @@ reader = cythonize([
             'src/samples.cpp',
             'src/utils.cpp',
             'src/variant.cpp'],
-        extra_objects=build_zstd(),
-        include_dirs=['src/', 'src/zstd/lib'],
-        libraries=['z'],
+        extra_objects=build_zstd() + zlib,
+        include_dirs=['src/', 'src/zstd/lib', 'src/zlib'],
+        libraries=libs,
         language='c++'),
     ])
 
