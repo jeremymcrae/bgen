@@ -400,7 +400,6 @@ cdef class BgenFile:
         
         print(f'fetching for {chrom} {start}-{stop}')
         for offset in self.index.fetch(chrom, start, stop):
-            print(f'fetched at {offset}')
             yield BgenVar(self.handle, offset, self.thisptr.header.layout,
                 self.thisptr.header.compression, self.thisptr.header.nsamples)
     

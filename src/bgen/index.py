@@ -42,7 +42,6 @@ class Index:
                          WHERE chromosome=? AND position >= ? AND position <= ?'
                 params = (chrom, start, stop)
         
-        print('fetching offsets from the index')
         query = conn.execute(query, params)
         while True:
             res = query.fetchone()
