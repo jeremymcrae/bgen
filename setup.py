@@ -85,7 +85,7 @@ reader = cythonize([
         extra_link_args=EXTRA_LINK_ARGS,
         sources=['src/bgen/bgen.pyx',
             'src/bgen.cpp',
-            # 'src/genotypes.cpp',
+            'src/genotypes.cpp',
             'src/header.cpp',
             'src/samples.cpp',
             'src/utils.cpp',
