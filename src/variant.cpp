@@ -22,27 +22,32 @@ namespace bgen {
 ///  @param expected_n number of samples for variant
 Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) {
   offset = varoffset;
-  std::cout << "loading variant at " << varoffset;
+  // std::cout << "loading variant at " << varoffset;
   handle.seekg(offset);
+  if (handle.fail()) {
+    std::cout << "failed file seek, trying again\n";
+    handle.seekg(offset);
+    std::cout << "tried for: " << offset << ", got: " << handle.tellg() << "\n";
+  }
   if (layout == 1) {
     handle.read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
   } else {
     n_samples = expected_n;
   }
-  std::cout << "... n_samples " << n_samples;
+  // std::cout << "... n_samples " << n_samples;
 
   if ((int) n_samples != expected_n) {
     throw std::invalid_argument("number of samples doesn't match");
   }
   
   // get the variant ID (first need to know how long the field is)
-  std::cout << "... reading varID length at " << handle.tellg();
+  // std::cout << "... reading varID length at " << handle.tellg();
   std::bitset<16> temp;
   handle.read(reinterpret_cast<char *>(&temp), sizeof(std::uint16_t));
   std::uint16_t item_len;
   item_len = (std::uint16_t) temp.to_ulong();
   // handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
-  std::cout << "... varID length " << item_len << " (" << temp << ")" << std::endl;
+  // std::cout << "... varID length " << item_len << " (" << temp << ")" << std::endl;
   if (item_len > 0) {
     std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(varid));
   }
