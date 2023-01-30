@@ -398,7 +398,6 @@ cdef class BgenFile:
         if not self.index:
             raise ValueError("can't fetch variants without index")
         
-        print(f'fetching for {chrom} {start}-{stop}')
         for offset in self.index.fetch(chrom, start, stop):
             yield BgenVar(self.handle, offset, self.thisptr.header.layout,
                 self.thisptr.header.compression, self.thisptr.header.nsamples)
