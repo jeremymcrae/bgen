@@ -4,7 +4,7 @@
 namespace bgen {
 
 Bgen::Bgen(std::string path, std::string sample_path, bool delay_parsing) {
-  handle.open(path, std::ios::binary);
+  handle.open(path, std::ios::in | std::ios::binary);
   if (!handle) {
     throw std::invalid_argument("error reading from '" + path + "'");
   }
