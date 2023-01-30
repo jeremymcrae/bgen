@@ -385,6 +385,10 @@ void Genotypes::decompress() {
   }
   
   handle->seekg(offset);  // about 1 microsecond
+  if (handle->fail()) {
+    handle->clear();
+    handle->seekg(offset);
+  }
   
   bool decompressed_field = false;
   std::uint32_t decompressed_len = 0;
