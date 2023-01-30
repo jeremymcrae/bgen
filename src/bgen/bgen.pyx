@@ -16,18 +16,11 @@ from bgen.index import Index
 
 cdef extern from "<iostream>" namespace "std":
     cdef cppclass istream:
-        istream& read(char *, int) except +
-
-cdef extern from "<iostream>" namespace "std::ios_base":
-    cdef cppclass open_mode:
         pass
-    cdef open_mode binary
 
 cdef extern from "<fstream>" namespace "std":
     cdef cppclass ifstream(istream):
-        ifstream() except +
         ifstream(const string&) except +
-        ifstream(const string&, open_mode) except +
 
 cdef extern from 'variant.h' namespace 'bgen':
     cdef cppclass Variant:
