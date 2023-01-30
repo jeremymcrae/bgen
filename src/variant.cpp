@@ -25,9 +25,9 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   // std::cout << "loading variant at " << varoffset;
   handle.seekg(offset);
   if (handle.fail()) {
-    std::cout << "failed file seek, trying again\n";
+    std::cout << "failed file seek, trying again" << std::endl;
     handle.seekg(offset);
-    std::cout << "tried for: " << offset << ", got: " << handle.tellg() << "\n";
+    std::cout << "tried for: " << offset << ", got: " << handle.tellg() << std::endl;
   }
   if (layout == 1) {
     handle.read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
