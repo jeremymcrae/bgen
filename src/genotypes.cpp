@@ -7,6 +7,8 @@
 #include <cassert>
 #include <cstring>
 
+#include <iostream>
+
 #if defined(__x86_64__)
   #include <immintrin.h>
 #endif
@@ -398,8 +400,11 @@ void Genotypes::decompress() {
   }
   
   std::uint32_t compressed_len = next_var_offset - offset - decompressed_field * 4;
+  std::cout << "about to allocate: " << compressed_len << std::endl;
   char * compressed = new char[compressed_len];
+  std::cout << "about to allocate: " << decompressed_len << std::endl;
   uncompressed = new char[decompressed_len];
+  std::cout << "allocated" << std::endl;
   if (! handle->read(&compressed[0], compressed_len)) {
     throw std::invalid_argument("couldn't read the compressed data");
   }
