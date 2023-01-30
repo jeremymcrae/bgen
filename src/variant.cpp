@@ -26,11 +26,11 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   handle.seekg(offset);
   if (handle.fail()) {
     std::cout << "failed file seek, trying again" << std::endl;
+    handle.clear();
     handle.seekg(offset);
     std::cout << " - tried for: " << offset << ", got: " << handle.tellg() << std::endl;
-    
     handle.seekg(0, std::ios::end);
-    std::uint64_t fsize = (std::uint64_t) handle.tellg();
+    std::int64_t fsize = (std::int64_t) handle.tellg();
     std::cout << " - file size appears to be: " << fsize << std::endl;
     handle.seekg(offset);
     std::cout << " - tried for: " << offset << ", got: " << handle.tellg() << std::endl;
