@@ -2,9 +2,6 @@
 #include <stdexcept>
 #include <cmath>
 
-#include <bitset>
-#include <iostream>
-
 #include "variant.h"
 
 namespace bgen {
@@ -22,38 +19,26 @@ namespace bgen {
 ///  @param expected_n number of samples for variant
 Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) {
   offset = varoffset;
-  // std::cout << "loading variant at " << varoffset;
   handle.seekg(offset);
   if (handle.fail()) {
-    std::cout << "failed file seek, trying again" << std::endl;
+    // On windows, if one variant hits the end of file, subsequent variants can
+    // fail, due to the handle being in an error state. Clear this if required.
     handle.clear();
     handle.seekg(offset);
-    std::cout << " - tried for: " << offset << ", got: " << handle.tellg() << std::endl;
-    handle.seekg(0, std::ios::end);
-    std::int64_t fsize = (std::int64_t) handle.tellg();
-    std::cout << " - file size appears to be: " << fsize << std::endl;
-    handle.seekg(offset);
-    std::cout << " - tried for: " << offset << ", got: " << handle.tellg() << std::endl;
   }
   if (layout == 1) {
     handle.read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
   } else {
     n_samples = expected_n;
   }
-  // std::cout << "... n_samples " << n_samples;
 
   if ((int) n_samples != expected_n) {
     throw std::invalid_argument("number of samples doesn't match");
   }
   
   // get the variant ID (first need to know how long the field is)
-  // std::cout << "... reading varID length at " << handle.tellg();
-  std::bitset<16> temp;
-  handle.read(reinterpret_cast<char *>(&temp), sizeof(std::uint16_t));
   std::uint16_t item_len;
-  item_len = (std::uint16_t) temp.to_ulong();
-  // handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
-  // std::cout << "... varID length " << item_len << " (" << temp << ")" << std::endl;
+  handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
   if (item_len > 0) {
     std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(varid));
   }
