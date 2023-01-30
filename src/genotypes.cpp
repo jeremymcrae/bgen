@@ -404,7 +404,7 @@ void Genotypes::decompress() {
   char * compressed = new char[compressed_len];
   std::cout << "about to allocate: " << decompressed_len << std::endl;
   uncompressed = new char[decompressed_len];
-  std::cout << "allocated" << std::endl;
+  std::cout << "allocated, reading at " << handle->tellg() << std::endl;
   if (! handle->read(&compressed[0], compressed_len)) {
     throw std::invalid_argument("couldn't read the compressed data");
   }
