@@ -17,7 +17,6 @@ from bgen.index import Index
 cdef extern from "<iostream>" namespace "std":
     cdef cppclass istream:
         istream& read(char *, int) except +
-        istream& seekg(long) except +
 
 cdef extern from "<iostream>" namespace "std::ios_base":
     cdef cppclass open_mode:
@@ -96,9 +95,6 @@ cdef class IFStream:
     def __cinit__(self, string path):
         self.path = path
         self.ptr = new ifstream(path)
-    
-    def seekg(self, long offset):
-        self.ptr.seekg(offset)
     
     def __str__(self):
         return self.path.decode('utf8')
