@@ -48,7 +48,7 @@ jobs:
           pip install cython
           python setup.py sdist
           python setup.py install
-          python -m unittest discover
+          python -m unittest discover -v
 
       - uses: actions/upload-artifact@v3
         with:
