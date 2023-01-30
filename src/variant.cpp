@@ -28,6 +28,10 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     std::cout << "failed file seek, trying again" << std::endl;
     handle.seekg(offset);
     std::cout << "tried for: " << offset << ", got: " << handle.tellg() << std::endl;
+
+    handle.seekg(0, std::ios::end);
+    std::uint64_t fsize = (std::uint64_t) handle.tellg();
+    std::cout << "file size appears to be: " << fsize << std::endl;
   }
   if (layout == 1) {
     handle.read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
