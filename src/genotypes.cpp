@@ -145,11 +145,16 @@ std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
   return max_probs;
 }
 
-Genotypes::Genotypes(std::ifstream *handle, int lay, int compr, int n_alleles, std::uint32_t n_samples) {
-  std::cout << "initializing Genotypes for var at: " << offset << std::endl;
+Genotypes::Genotypes(std::ifstream *handle_, int lay, int compr, int n_alleles_, std::uint32_t n_samples_) {
+  handle = handle_;
+  layout = lay;
+  compression = compr;
+  n_alleles = n_alleles_;
+  n_samples = n_samples_;
+  
   std::uint32_t length;
   offset = handle->tellg();
-  std::cout << " - initial offset: " << offset << std::endl;
+  std::cout << "initializing Genotypes for var at: " << offset << std::endl;
   handle->read(reinterpret_cast<char *>(&length), sizeof(length));
   offset = handle->tellg();
   next_var_offset = offset + length;
