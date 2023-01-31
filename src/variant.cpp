@@ -29,6 +29,7 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     handle.clear();
     handle.seekg(offset);
   }
+  std::cout << " - before n_samples: " << handle.tellg() << std::endl;
   if (layout == 1) {
     handle.read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
   } else {
@@ -39,6 +40,7 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     throw std::invalid_argument("number of samples doesn't match");
   }
   
+  std::cout << " - before varid: " << handle.tellg() << std::endl;
   // get the variant ID (first need to know how long the field is)
   std::uint16_t item_len;
   handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
@@ -46,19 +48,23 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(varid));
   }
   
+  std::cout << " - before rsid: " << handle.tellg() << std::endl;
   // get the rsID (first need to know how long the field is)
   handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
   if (item_len > 0) {
     std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(rsid));
   }
   
+  std::cout << " - before chrom: " << handle.tellg() << std::endl;
   // get the chromosome (first need to know how long the field is)
   handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
   if (item_len > 0) {
     std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(chrom));
   }
   
+  std::cout << " - before pos: " << handle.tellg() << std::endl;
   handle.read(reinterpret_cast<char*>(&pos), sizeof(std::uint32_t));
+  std::cout << " - before n_alleles: " << handle.tellg() << std::endl;
   if (layout == 1) {
     n_alleles = 2;
   } else {
