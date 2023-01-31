@@ -18,9 +18,16 @@ cdef extern from "<iostream>" namespace "std":
     cdef cppclass istream:
         pass
 
+cdef extern from "<iostream>" namespace "std::ios_base":
+    cdef cppclass open_mode:
+        pass
+    cdef open_mode binary
+
 cdef extern from "<fstream>" namespace "std":
     cdef cppclass ifstream(istream):
+        ifstream() except +
         ifstream(const string&) except +
+        ifstream(const string&, open_mode) except +
 
 cdef extern from 'variant.h' namespace 'bgen':
     cdef cppclass Variant:
@@ -88,7 +95,7 @@ cdef class IFStream:
     cdef string path
     def __cinit__(self, string path):
         self.path = path
-        self.ptr = new ifstream(path)
+        self.ptr = new ifstream(path, binary)
     
     def __str__(self):
         return self.path.decode('utf8')
