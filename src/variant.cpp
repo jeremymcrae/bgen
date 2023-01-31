@@ -76,7 +76,7 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   std::uint32_t length;
   handle.read(reinterpret_cast<char *>(&length), sizeof(length));
   geno = Genotypes(&handle, layout, compression, n_alleles, n_samples, length);
-  next_variant_offset = handle.tellg() + length;
+  next_variant_offset = (std::uint64_t) handle.tellg() + length;
 }
 
 // /// uses the genotypes object to find the offset of the next variant
