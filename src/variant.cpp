@@ -19,8 +19,11 @@ namespace bgen {
 ///  @param layout bgen layout version (1 or 2)
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
-Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) {
-  std::cout << "starting Variant at: " << varoffset << std::endl;
+Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, std::uint64_t fsize) {
+  if (varoffset >= fsize) {
+    throw std::out_of_range("reached end of file");
+  }
+  std::cout << "starting Variant at: " << varoffset << ", fsize: " << fsize << std::endl;
   offset = varoffset;
   handle.seekg(offset);
   if (layout == 1) {

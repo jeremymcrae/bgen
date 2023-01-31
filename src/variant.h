@@ -16,7 +16,7 @@ namespace bgen {
 class Variant {
   Genotypes geno;
 public:
-  Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n);
+  Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, std::uint64_t fsize);
   Variant() {};
   // std::uint64_t next_variant_offset();
   int probs_per_sample();

@@ -13,7 +13,6 @@ namespace bgen {
 
 class Bgen {
   std::ifstream handle;
-  std::uint64_t fsize;
 public:
   Bgen(std::string path, std::string sample_path="", bool delay_parsing=false);
   void parse_all_variants();
@@ -29,6 +28,7 @@ public:
   Header header;
   Samples samples;
   std::uint64_t offset;
+  std::uint64_t fsize;
 };
 
 } // namespace bgen
