@@ -79,9 +79,10 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   }
   std::cout << std::endl;
   
+  std::cout << " - before length: " << handle.tellg() << std::endl;
   std::uint32_t length;
   handle.read(reinterpret_cast<char *>(&length), sizeof(length));
-  std::cout << " - before Genotypes()" << handle.tellg() << " with length: " << length << std::endl;
+  std::cout << " - before Genotypes(): " << handle.tellg() << " with length: " << length << std::endl;
   geno = Genotypes(&handle, layout, compression, n_alleles, n_samples, length);
   next_variant_offset = (std::uint64_t) handle.tellg() + length;
   std::cout << " - ready for next variant at: " << next_variant_offset << std::endl;
