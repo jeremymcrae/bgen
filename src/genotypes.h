@@ -14,12 +14,12 @@ namespace bgen {
 
 class Genotypes {
   std::uint64_t offset;
-  std::uint32_t length;
   std::ifstream* handle;
   int layout;
   int compression;
   int n_alleles;
   std::uint32_t n_samples;
+  std::uint32_t length;
   std::uint32_t bit_depth;
   char * uncompressed;
   float * probs;
