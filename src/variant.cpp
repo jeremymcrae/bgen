@@ -71,14 +71,10 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   
   std::uint32_t length;
   handle.read(reinterpret_cast<char *>(&length), sizeof(length));
-  geno = Genotypes(&handle, layout, compression, n_alleles, n_samples, length);
-  next_variant_offset = (std::uint64_t) handle.tellg() + length;
+  std::uint64_t geno_offset = (std::uint64_t) handle.tellg();
+  geno = Genotypes(&handle, layout, compression, n_alleles, n_samples, geno_offset, length);
+  next_variant_offset = geno_offset + length;
 }
-
-// /// uses the genotypes object to find the offset of the next variant
-// std::uint64_t Variant::next_variant_offset() {
-//   return geno.next_var_offset;
-// }
 
 int Variant::probs_per_sample() {
   return geno.max_probs;

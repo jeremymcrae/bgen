@@ -13,12 +13,12 @@
 namespace bgen {
 
 class Genotypes {
-  std::uint64_t offset;
   std::ifstream* handle;
   int layout;
   int compression;
   int n_alleles;
   std::uint32_t n_samples;
+  std::uint64_t offset;
   std::uint32_t length;
   std::uint32_t bit_depth;
   char * uncompressed;
@@ -32,10 +32,8 @@ class Genotypes {
   bool alt_dosage_parsed = false;
   std::vector<int> missing;
 public:
-  Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, std::uint32_t n_samples, std::uint32_t length) :
-     handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples), length(length) {
-        offset = handle->tellg();
-     };
+  Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, std::uint32_t n_samples, std::uint64_t offset, std::uint32_t length) :
+     handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples), offset(offset), length(length) {};
   Genotypes() {};
   ~Genotypes() { clear_probs(); };
   void parse_preamble(char * uncompressed, std::uint32_t & idx);
