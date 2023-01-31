@@ -39,7 +39,7 @@ public:
       handle->read(reinterpret_cast<char*>(&length), sizeof(length));
       offset = handle->tellg();
       next_var_offset = offset + length;
-      std::cout << "var offset: " << offset << "next var offset: " << next_var_offset << std::endl;
+      std::cout << "var offset: " << offset << ", next var offset: " << next_var_offset << std::endl;
   };
   Genotypes() {};
   ~Genotypes() { clear_probs(); };
