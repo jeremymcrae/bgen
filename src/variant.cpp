@@ -65,6 +65,7 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     handle.read(reinterpret_cast<char*>(&n_alleles), sizeof(std::uint16_t));
   }
   
+  std::cout << " - before alleles: " << handle.tellg() << std::endl;
   for (int x=0; x < n_alleles; x++) {
     std::uint32_t allele_len;
     std::string allele;
