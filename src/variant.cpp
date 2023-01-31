@@ -20,7 +20,7 @@ namespace bgen {
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
 Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) {
-  std::cout << "starting Variant" << std::endl;
+  std::cout << "starting Variant at: " << varoffset << std::endl;
   offset = varoffset;
   handle.seekg(offset);
   if (handle.fail()) {
@@ -77,6 +77,7 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   handle.read(reinterpret_cast<char *>(&length), sizeof(length));
   geno = Genotypes(&handle, layout, compression, n_alleles, n_samples, length);
   next_variant_offset = (std::uint64_t) handle.tellg() + length;
+  std::cout << "ready for next variant at: " << next_variant_offset << std::endl;
 }
 
 // /// uses the genotypes object to find the offset of the next variant

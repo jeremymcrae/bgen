@@ -149,7 +149,6 @@ cdef class BgenVar:
         self.expected_n = expected_n
         
         # construct new Variant from the handle, offset and other file info
-        print("starting BgenVar")
         self.thisptr = Variant(deref(self.handle.ptr), offset, layout, compression, expected_n)
     
     def __repr__(self):
