@@ -23,7 +23,6 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   if (varoffset >= fsize) {
     throw std::out_of_range("reached end of file");
   }
-  // std::cout << "starting Variant at: " << varoffset << ", fsize: " << fsize << std::endl;
   offset = varoffset;
   handle.seekg(offset);
   if (layout == 1) {
