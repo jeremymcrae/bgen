@@ -33,7 +33,7 @@ Variant Bgen::next_var() {
     throw std::out_of_range("reached end of file");
   }
   Variant var(handle, offset, header.layout, header.compression, header.nsamples);
-  offset = var.next_variant_offset();
+  offset = var.next_variant_offset;
   return var;
 }
 

@@ -145,20 +145,19 @@ std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
   return max_probs;
 }
 
-Genotypes::Genotypes(std::ifstream *handle_, int lay, int compr, int n_alleles_, std::uint32_t n_samples_) {
+Genotypes::Genotypes(std::ifstream *handle_, int lay, int compr, int n_alleles_, std::uint32_t n_samples_, std::uint32_t length_) {
   handle = handle_;
   layout = lay;
   compression = compr;
   n_alleles = n_alleles_;
   n_samples = n_samples_;
-  
-  std::uint32_t length;
   offset = handle->tellg();
-  std::cout << "initializing Genotypes for var at: " << offset << std::endl;
-  handle->read(reinterpret_cast<char *>(&length), sizeof(length));
-  offset = handle->tellg();
-  next_var_offset = offset + length;
-  std::cout << " - var offset: " << offset << ", next var offset: " << next_var_offset << std::endl;
+  length = length_;
+  // std::cout << "initializing Genotypes for var at: " << offset << std::endl;
+  // handle->read(reinterpret_cast<char *>(&length), sizeof(length));
+  // offset = handle->tellg();
+  // next_var_offset = offset + length;
+  // std::cout << " - var offset: " << offset << ", next var offset: " << next_var_offset << std::endl;
 }
 
 /// get ploidy state for all samples (and missingness for layout2).
@@ -419,7 +418,7 @@ void Genotypes::decompress() {
     }
   }
   
-  std::uint32_t compressed_len = next_var_offset - offset - decompressed_field * 4;
+  std::uint32_t compressed_len = length - decompressed_field * 4;
   std::cout << "about to allocate: " << compressed_len << std::endl;
   char * compressed = new char[compressed_len];
   std::cout << "about to allocate: " << decompressed_len << std::endl;

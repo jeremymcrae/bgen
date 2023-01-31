@@ -2,6 +2,8 @@
 #include <stdexcept>
 #include <cmath>
 
+#include <iostream>
+
 #include "variant.h"
 
 namespace bgen {
@@ -18,6 +20,7 @@ namespace bgen {
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
 Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) {
+  std::cout << "starting Variant" << std::endl;
   offset = varoffset;
   handle.seekg(offset);
   if (handle.fail()) {
@@ -70,13 +73,16 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     alleles.push_back(allele);
   }
   
-  geno = Genotypes(&handle, layout, compression, n_alleles, n_samples);
+  std::uint32_t length;
+  handle.read(reinterpret_cast<char *>(&length), sizeof(length));
+  geno = Genotypes(&handle, layout, compression, n_alleles, n_samples, length);
+  next_variant_offset = handle.tellg() + length;
 }
 
-/// uses the genotypes object to find the offset of the next variant
-std::uint64_t Variant::next_variant_offset() {
-  return geno.next_var_offset;
-}
+// /// uses the genotypes object to find the offset of the next variant
+// std::uint64_t Variant::next_variant_offset() {
+//   return geno.next_var_offset;
+// }
 
 int Variant::probs_per_sample() {
   return geno.max_probs;

@@ -18,7 +18,7 @@ class Variant {
 public:
   Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n);
   Variant() {};
-  std::uint64_t next_variant_offset();
+  // std::uint64_t next_variant_offset();
   int probs_per_sample();
   float * alt_dosage();
   float * minor_allele_dosage();
@@ -35,6 +35,7 @@ public:
   std::uint32_t pos;
   std::uint16_t n_alleles;
   std::vector<std::string> alleles;
+  std::uint64_t next_variant_offset;
 };
 
 } // namespace bgen

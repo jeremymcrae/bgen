@@ -38,6 +38,7 @@ cdef extern from 'variant.h' namespace 'bgen':
         string varid, rsid, chrom, minor_allele
         int pos
         long offset
+        uint64_t next_variant_offset
         vector[string] alleles
 
 cdef extern from 'samples.h' namespace 'bgen':
@@ -66,7 +67,6 @@ cdef extern from 'bgen.h' namespace 'bgen':
         # declare class constructor and methods
         Bgen(string path, string sample_path, bool delay_parsing) except +
         void parse_all_variants()
-        Variant & next_var() except +
         Variant & operator[](int idx)
         Variant & get(int idx)
         void drop_variants(vector[int] indices)
@@ -79,6 +79,7 @@ cdef extern from 'bgen.h' namespace 'bgen':
         vector[Variant] variants
         Samples samples
         Header header
+        uint64_t offset
 
 cdef class IFStream:
     ''' basic cython implementation of std::ifstream, for easy pickling
@@ -148,6 +149,7 @@ cdef class BgenVar:
         self.expected_n = expected_n
         
         # construct new Variant from the handle, offset and other file info
+        print("starting BgenVar")
         self.thisptr = Variant(deref(self.handle.ptr), offset, layout, compression, expected_n)
     
     def __repr__(self):
@@ -173,6 +175,9 @@ cdef class BgenVar:
     @property
     def pos(self):
         return self.thisptr.pos
+    @property
+    def next_variant_offset(self):
+        return self.thisptr.next_variant_offset
     @property
     def alleles(self):
         return [x.decode('utf8') for x in self.thisptr.alleles]
@@ -262,6 +267,7 @@ cdef class BgenFile:
     cdef IFStream handle
     cdef object index
     cdef bool is_open
+    cdef uint64_t offset
     def __cinit__(self, path, sample_path='', bool delay_parsing=False):
         if isinstance(path, Path):
             path = str(path)
@@ -279,6 +285,7 @@ cdef class BgenFile:
         self.thisptr = new Bgen(self.path, self.sample_path, self.delay_parsing)
         self.handle = IFStream(self.path)
         self.is_open = True
+        self.offset = self.thisptr.offset
     
     def __dealloc__(self):
         if self.is_open:
@@ -299,9 +306,11 @@ cdef class BgenFile:
         '''
         # while True:
         try:
-            offset = self.thisptr.next_var().offset
-            return BgenVar(self.handle, offset, self.thisptr.header.layout,
+            # offset = self.thisptr.next_var().offset
+            var = BgenVar(self.handle, self.offset, self.thisptr.header.layout,
                 self.thisptr.header.compression, self.thisptr.header.nsamples)
+            self.offset = var.next_variant_offset
+            return var
         except IndexError:
             raise StopIteration
     
