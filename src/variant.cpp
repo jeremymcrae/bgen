@@ -73,6 +73,12 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     alleles.push_back(allele);
   }
   
+  std::cout << "chrom: " << chrom << ", pos: " << pos << ", n_samples: " << n_samples << ", n_alleles: " << n_alleles << ", alleles:";
+  for (auto allele : alleles) {
+    std::cout << " " << allele;
+  }
+  std::cout << std::endl;
+  
   std::uint32_t length;
   handle.read(reinterpret_cast<char *>(&length), sizeof(length));
   geno = Genotypes(&handle, layout, compression, n_alleles, n_samples, length);
