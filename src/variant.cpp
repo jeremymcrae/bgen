@@ -22,10 +22,6 @@ namespace bgen {
 Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) {
   offset = varoffset;
   handle.seekg(offset);
-  if (handle.fail()) {
-    handle.clear();
-    handle.seekg(offset);
-  }
   if (layout == 1) {
     handle.read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
   } else {
