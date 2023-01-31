@@ -2,8 +2,6 @@
 #include <stdexcept>
 #include <cmath>
 
-#include <iostream>
-
 #include "variant.h"
 
 namespace bgen {
@@ -30,7 +28,7 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   } else {
     n_samples = expected_n;
   }
-
+  
   if ((int) n_samples != expected_n) {
     throw std::invalid_argument("number of samples doesn't match");
   }

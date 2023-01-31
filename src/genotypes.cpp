@@ -7,8 +7,6 @@
 #include <cassert>
 #include <cstring>
 
-#include <iostream>
-
 #if defined(__x86_64__)
   #include <immintrin.h>
 #endif
@@ -385,6 +383,7 @@ void Genotypes::decompress() {
   }
   
   handle->seekg(offset);  // about 1 microsecond
+  
   bool decompressed_field = false;
   std::uint32_t decompressed_len = 0;
   if (compression != 0) {

@@ -8,8 +8,6 @@
 #include <string>
 #include <sstream>
 
-#include <iostream>
-
 namespace bgen {
 
 class Genotypes {

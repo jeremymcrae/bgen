@@ -130,12 +130,9 @@ class TestBgenFile(unittest.TestCase):
         print('testing fetch after position')
         bfile = BgenFile(self.folder / 'example.16bits.bgen')
         
-        print('opened gen')
         sortkey = lambda x: (x.chrom, x.pos)
         gen_vars = [x for x in sorted(self.gen_data, key=sortkey) if start <= x.pos]
-        print('have expected data')
         for x, y in zip(sorted(bfile.fetch(chrom, start), key=sortkey), gen_vars):
-            print(x, y)
             self.assertEqual(x.rsid, y.rsid)
             self.assertEqual(x.chrom, y.chrom)
             self.assertEqual(x.pos, y.pos)

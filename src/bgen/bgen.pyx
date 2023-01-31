@@ -314,7 +314,6 @@ cdef class BgenFile:
         '''
         # while True:
         try:
-            # offset = self.thisptr.next_var().offset
             var = BgenVar(self.handle, self.offset, self.thisptr.header.layout,
                 self.thisptr.header.compression, self.thisptr.header.nsamples,
                 self.thisptr.fsize)
