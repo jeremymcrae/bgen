@@ -145,21 +145,6 @@ std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
   return max_probs;
 }
 
-Genotypes::Genotypes(std::ifstream *handle_, int lay, int compr, int n_alleles_, std::uint32_t n_samples_, std::uint32_t length_) {
-  handle = handle_;
-  layout = lay;
-  compression = compr;
-  n_alleles = n_alleles_;
-  n_samples = n_samples_;
-  offset = handle->tellg();
-  length = length_;
-  // std::cout << "initializing Genotypes for var at: " << offset << std::endl;
-  // handle->read(reinterpret_cast<char *>(&length), sizeof(length));
-  // offset = handle->tellg();
-  // next_var_offset = offset + length;
-  // std::cout << " - var offset: " << offset << ", next var offset: " << next_var_offset << std::endl;
-}
-
 /// get ploidy state for all samples (and missingness for layout2).
 ///
 /// ploidy state is stored in ploidy member. Missingness is stored as indices of
@@ -400,11 +385,6 @@ void Genotypes::decompress() {
   }
   
   handle->seekg(offset);  // about 1 microsecond
-  if (handle->fail()) {
-    handle->clear();
-    handle->seekg(offset);
-  }
-  
   bool decompressed_field = false;
   std::uint32_t decompressed_len = 0;
   if (compression != 0) {

@@ -32,7 +32,8 @@ class Genotypes {
   bool alt_dosage_parsed = false;
   std::vector<int> missing;
 public:
-  Genotypes(std::ifstream* handle_, int lay, int compr, int n_alleles_, std::uint32_t n_samples_, std::uint32_t length_);
+  Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, std::uint32_t n_samples, std::uint32_t length) :
+     handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples), length(length) {};
   Genotypes() {};
   ~Genotypes() { clear_probs(); };
   void parse_preamble(char * uncompressed, std::uint32_t & idx);
@@ -55,7 +56,6 @@ public:
   int max_ploidy;
   int minor_idx;
   std::uint8_t * ploidy;
-  std::uint64_t next_var_offset;
 };
 
 } // namespace bgen
