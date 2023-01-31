@@ -23,13 +23,6 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   std::cout << "starting Variant at: " << varoffset << std::endl;
   offset = varoffset;
   handle.seekg(offset);
-  if (handle.fail()) {
-    // On windows, if one variant hits the end of file, subsequent variants can
-    // fail, due to the handle being in an error state. Clear this if required.
-    handle.clear();
-    handle.seekg(offset);
-  }
-  std::cout << " - before n_samples: " << handle.tellg() << std::endl;
   if (layout == 1) {
     handle.read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
   } else {
@@ -40,7 +33,6 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     throw std::invalid_argument("number of samples doesn't match");
   }
   
-  std::cout << " - before varid: " << handle.tellg() << std::endl;
   // get the variant ID (first need to know how long the field is)
   std::uint16_t item_len;
   handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
@@ -48,30 +40,25 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(varid));
   }
   
-  std::cout << " - before rsid: " << handle.tellg() << std::endl;
   // get the rsID (first need to know how long the field is)
   handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
   if (item_len > 0) {
     std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(rsid));
   }
   
-  std::cout << " - before chrom: " << handle.tellg() << std::endl;
   // get the chromosome (first need to know how long the field is)
   handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
   if (item_len > 0) {
     std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(chrom));
   }
   
-  std::cout << " - before pos: " << handle.tellg() << std::endl;
   handle.read(reinterpret_cast<char*>(&pos), sizeof(std::uint32_t));
-  std::cout << " - before n_alleles: " << handle.tellg() << std::endl;
   if (layout == 1) {
     n_alleles = 2;
   } else {
     handle.read(reinterpret_cast<char*>(&n_alleles), sizeof(std::uint16_t));
   }
   
-  std::cout << " - before alleles: " << handle.tellg() << std::endl;
   for (int x=0; x < n_alleles; x++) {
     std::uint32_t allele_len;
     std::string allele;
@@ -80,19 +67,10 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     alleles.push_back(allele);
   }
   
-  std::cout << " - chrom: " << chrom << ", pos: " << pos << ", n_samples: " << n_samples << ", n_alleles: " << n_alleles << ", alleles:";
-  for (auto allele : alleles) {
-    std::cout << " " << allele;
-  }
-  std::cout << std::endl;
-  
-  std::cout << " - before length: " << handle.tellg() << std::endl;
   std::uint32_t length;
   handle.read(reinterpret_cast<char *>(&length), sizeof(length));
-  std::cout << " - before Genotypes(): " << handle.tellg() << " with length: " << length << std::endl;
   geno = Genotypes(&handle, layout, compression, n_alleles, n_samples, length);
   next_variant_offset = (std::uint64_t) handle.tellg() + length;
-  std::cout << " - ready for next variant at: " << next_variant_offset << std::endl;
 }
 
 // /// uses the genotypes object to find the offset of the next variant
