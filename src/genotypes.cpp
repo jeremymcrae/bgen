@@ -419,11 +419,11 @@ void Genotypes::decompress() {
   }
   
   std::uint32_t compressed_len = length - decompressed_field * 4;
-  std::cout << "about to allocate: " << compressed_len << std::endl;
+  std::cout << " - about to allocate: " << compressed_len << std::endl;
   char * compressed = new char[compressed_len];
-  std::cout << "about to allocate: " << decompressed_len << std::endl;
+  std::cout << " - about to allocate: " << decompressed_len << std::endl;
   uncompressed = new char[decompressed_len];
-  std::cout << "allocated, reading at " << handle->tellg() << std::endl;
+  std::cout << " - allocated, reading at " << handle->tellg() << std::endl;
   if (! handle->read(&compressed[0], compressed_len)) {
     throw std::invalid_argument("couldn't read the compressed data");
   }

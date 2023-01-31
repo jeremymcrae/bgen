@@ -73,7 +73,7 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     alleles.push_back(allele);
   }
   
-  std::cout << "chrom: " << chrom << ", pos: " << pos << ", n_samples: " << n_samples << ", n_alleles: " << n_alleles << ", alleles:";
+  std::cout << " - chrom: " << chrom << ", pos: " << pos << ", n_samples: " << n_samples << ", n_alleles: " << n_alleles << ", alleles:";
   for (auto allele : alleles) {
     std::cout << " " << allele;
   }
@@ -81,9 +81,10 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   
   std::uint32_t length;
   handle.read(reinterpret_cast<char *>(&length), sizeof(length));
+  std::cout << " - before Genotypes()" << handle.tellg() << " with length: " << length << std::endl;
   geno = Genotypes(&handle, layout, compression, n_alleles, n_samples, length);
   next_variant_offset = (std::uint64_t) handle.tellg() + length;
-  std::cout << "ready for next variant at: " << next_variant_offset << std::endl;
+  std::cout << " - ready for next variant at: " << next_variant_offset << std::endl;
 }
 
 // /// uses the genotypes object to find the offset of the next variant
