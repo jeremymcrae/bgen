@@ -16,8 +16,7 @@ from bgen.index import Index
 
 cdef extern from "<iostream>" namespace "std":
     cdef cppclass istream:
-        istream& read(char *, int) except +
-        istream& seekg(long) except +
+        pass
 
 cdef extern from "<iostream>" namespace "std::ios_base":
     cdef cppclass open_mode:
@@ -33,7 +32,7 @@ cdef extern from "<fstream>" namespace "std":
 cdef extern from 'variant.h' namespace 'bgen':
     cdef cppclass Variant:
         # declare class constructor and methods
-        Variant(ifstream & handle, uint64_t & offset, int layout, int compression, int expected_n) except +
+        Variant(ifstream & handle, uint64_t & offset, int layout, int compression, int expected_n, uint64_t fsize) except +
         Variant() except +
         float * minor_allele_dosage() except +
         float * alt_dosage() except +
@@ -46,6 +45,7 @@ cdef extern from 'variant.h' namespace 'bgen':
         string varid, rsid, chrom, minor_allele
         int pos
         long offset
+        uint64_t next_variant_offset
         vector[string] alleles
 
 cdef extern from 'samples.h' namespace 'bgen':
@@ -74,7 +74,6 @@ cdef extern from 'bgen.h' namespace 'bgen':
         # declare class constructor and methods
         Bgen(string path, string sample_path, bool delay_parsing) except +
         void parse_all_variants()
-        Variant & next_var() except +
         Variant & operator[](int idx)
         Variant & get(int idx)
         void drop_variants(vector[int] indices)
@@ -87,6 +86,8 @@ cdef extern from 'bgen.h' namespace 'bgen':
         vector[Variant] variants
         Samples samples
         Header header
+        uint64_t offset
+        uint64_t fsize
 
 cdef class IFStream:
     ''' basic cython implementation of std::ifstream, for easy pickling
@@ -95,10 +96,7 @@ cdef class IFStream:
     cdef string path
     def __cinit__(self, string path):
         self.path = path
-        self.ptr = new ifstream(path)
-    
-    def seekg(self, long offset):
-        self.ptr.seekg(offset)
+        self.ptr = new ifstream(path, binary)
     
     def __str__(self):
         return self.path.decode('utf8')
@@ -149,20 +147,21 @@ cdef class BgenVar:
     '''
     cdef Variant thisptr
     cdef IFStream handle
-    cdef uint64_t offset
+    cdef uint64_t offset, fsize
     cdef int layout, compression, expected_n
-    def __cinit__(self, IFStream handle, uint64_t offset, int layout, int compression, int expected_n):
+    def __cinit__(self, IFStream handle, uint64_t offset, int layout, int compression, int expected_n, uint64_t fsize):
         self.handle = handle
         self.offset = offset
         self.layout = layout
         self.compression = compression
         self.expected_n = expected_n
+        self.fsize = fsize
         
         # construct new Variant from the handle, offset and other file info
-        self.thisptr = Variant(deref(self.handle.ptr), offset, layout, compression, expected_n)
+        self.thisptr = Variant(deref(self.handle.ptr), offset, layout, compression, expected_n, fsize)
     
     def __repr__(self):
-       return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", {self.pos}, {self.alleles})'
+       return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", {self.pos}, {self.alleles}, {self.fsize})'
     
     def __str__(self):
        return f'{self.rsid} - {self.chrom}:{self.pos} {self.alleles}'
@@ -170,7 +169,7 @@ cdef class BgenVar:
     def __reduce__(self):
         ''' enable pickling of a BgenVar object
         '''
-        return (self.__class__, (self.handle, self.thisptr.offset, self.layout, self.compression, self.expected_n))
+        return (self.__class__, (self.handle, self.thisptr.offset, self.layout, self.compression, self.expected_n, self.fsize))
     
     @property
     def varid(self):
@@ -184,6 +183,9 @@ cdef class BgenVar:
     @property
     def pos(self):
         return self.thisptr.pos
+    @property
+    def next_variant_offset(self):
+        return self.thisptr.next_variant_offset
     @property
     def alleles(self):
         return [x.decode('utf8') for x in self.thisptr.alleles]
@@ -273,6 +275,7 @@ cdef class BgenFile:
     cdef IFStream handle
     cdef object index
     cdef bool is_open
+    cdef uint64_t offset
     def __cinit__(self, path, sample_path='', bool delay_parsing=False):
         if isinstance(path, Path):
             path = str(path)
@@ -290,6 +293,7 @@ cdef class BgenFile:
         self.thisptr = new Bgen(self.path, self.sample_path, self.delay_parsing)
         self.handle = IFStream(self.path)
         self.is_open = True
+        self.offset = self.thisptr.offset
     
     def __dealloc__(self):
         if self.is_open:
@@ -310,9 +314,11 @@ cdef class BgenFile:
         '''
         # while True:
         try:
-            offset = self.thisptr.next_var().offset
-            return BgenVar(self.handle, offset, self.thisptr.header.layout,
-                self.thisptr.header.compression, self.thisptr.header.nsamples)
+            var = BgenVar(self.handle, self.offset, self.thisptr.header.layout,
+                self.thisptr.header.compression, self.thisptr.header.nsamples,
+                self.thisptr.fsize)
+            self.offset = var.next_variant_offset
+            return var
         except IndexError:
             raise StopIteration
     
@@ -339,7 +345,8 @@ cdef class BgenFile:
         cdef long offset
         offset = self.index.offset_by_index(idx) if self.index else self.thisptr.variants[idx].offset
         return BgenVar(self.handle, offset, self.thisptr.header.layout,
-          self.thisptr.header.compression, self.thisptr.header.nsamples)
+          self.thisptr.header.compression, self.thisptr.header.nsamples, 
+          self.thisptr.fsize)
     
     def _check_for_index(self, bgen_path):
         ''' creates self.index if a bgenix index file is available
@@ -400,7 +407,8 @@ cdef class BgenFile:
         
         for offset in self.index.fetch(chrom, start, stop):
             yield BgenVar(self.handle, offset, self.thisptr.header.layout,
-                self.thisptr.header.compression, self.thisptr.header.nsamples)
+                self.thisptr.header.compression, self.thisptr.header.nsamples,
+                self.thisptr.fsize)
     
     def with_rsid(self, rsid):
       ''' get BgenVar from file given an rsID
@@ -411,7 +419,8 @@ cdef class BgenFile:
       if self.index:
           offset = self.index.offset_by_rsid(rsid)
           return BgenVar(self.handle, offset, self.thisptr.header.layout,
-              self.thisptr.header.compression, self.thisptr.header.nsamples)
+              self.thisptr.header.compression, self.thisptr.header.nsamples,
+              self.thisptr.fsize)
       
       if not self.delay_parsing:
           idx = [i for i, x in enumerate(self.rsids) if x == rsid]
@@ -432,7 +441,8 @@ cdef class BgenFile:
       if self.index:
           offset = self.index.offset_by_pos(pos)
           return BgenVar(self.handle, offset, self.thisptr.header.layout,
-              self.thisptr.header.compression, self.thisptr.header.nsamples)
+              self.thisptr.header.compression, self.thisptr.header.nsamples,
+              self.thisptr.fsize)
       
       if not self.delay_parsing:
           idx = [i for i, x in enumerate(self.positions) if x == pos]

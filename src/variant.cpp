@@ -17,7 +17,10 @@ namespace bgen {
 ///  @param layout bgen layout version (1 or 2)
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
-Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) {
+Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, std::uint64_t fsize) {
+  if (varoffset >= fsize) {
+    throw std::out_of_range("reached end of file");
+  }
   offset = varoffset;
   handle.seekg(offset);
   if (layout == 1) {
@@ -64,12 +67,11 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
     alleles.push_back(allele);
   }
   
-  geno = Genotypes(&handle, layout, compression, n_alleles, n_samples);
-}
-
-/// uses the genotypes object to find the offset of the next variant
-std::uint64_t Variant::next_variant_offset() {
-  return geno.next_var_offset;
+  std::uint32_t length;
+  handle.read(reinterpret_cast<char *>(&length), sizeof(length));
+  std::uint64_t geno_offset = (std::uint64_t) handle.tellg();
+  geno = Genotypes(&handle, layout, compression, n_alleles, n_samples, geno_offset, length);
+  next_variant_offset = geno_offset + length;
 }
 
 int Variant::probs_per_sample() {

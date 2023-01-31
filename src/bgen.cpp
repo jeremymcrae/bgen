@@ -4,7 +4,7 @@
 namespace bgen {
 
 Bgen::Bgen(std::string path, std::string sample_path, bool delay_parsing) {
-  handle.open(path, std::ios::binary);
+  handle.open(path, std::ios::in | std::ios::binary);
   if (!handle) {
     throw std::invalid_argument("error reading from '" + path + "'");
   }
@@ -32,8 +32,8 @@ Variant Bgen::next_var() {
   if (handle.eof() | (offset >= fsize)) {
     throw std::out_of_range("reached end of file");
   }
-  Variant var(handle, offset, header.layout, header.compression, header.nsamples);
-  offset = var.next_variant_offset();
+  Variant var(handle, offset, header.layout, header.compression, header.nsamples, fsize);
+  offset = var.next_variant_offset;
   return var;
 }
 

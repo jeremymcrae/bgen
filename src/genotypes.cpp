@@ -391,16 +391,16 @@ void Genotypes::decompress() {
       decompressed_len = n_samples * 6;
     } else if (layout == 2) {
       decompressed_field = true;
-      if (not handle->read(reinterpret_cast<char*>(&decompressed_len), sizeof(std::uint32_t))) {
+      if (! handle->read(reinterpret_cast<char*>(&decompressed_len), sizeof(std::uint32_t))) {
         throw std::invalid_argument("couldn't read the compressed length");
       }
     }
   }
   
-  std::uint32_t compressed_len = next_var_offset - offset - decompressed_field * 4;
-  char compressed[compressed_len];
+  std::uint32_t compressed_len = length - decompressed_field * 4;
+  char * compressed = new char[compressed_len];
   uncompressed = new char[decompressed_len];
-  if (not handle->read(&compressed[0], compressed_len)) {
+  if (! handle->read(&compressed[0], compressed_len)) {
     throw std::invalid_argument("couldn't read the compressed data");
   }
   
@@ -412,6 +412,7 @@ void Genotypes::decompress() {
     zstd_uncompress(compressed, (int) compressed_len, uncompressed, (int) decompressed_len);
   }
   is_decompressed = true;
+  delete[] compressed;
 }
 
 /// parse genotype data for a single variant

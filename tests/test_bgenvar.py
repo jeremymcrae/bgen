@@ -40,7 +40,7 @@ class TestBgenVar(unittest.TestCase):
           ''' test we calculate alt_dosage correctly
           '''
           path = self.folder / 'example.16bits.zstd.bgen'
-          with BgenFile(path) as bfile:
+          with BgenFile(path, delay_parsing=True) as bfile:
               for var in bfile:
                   dose = var.alt_dosage
                   probs = var.probabilities
