@@ -127,7 +127,6 @@ class TestBgenFile(unittest.TestCase):
         ''' fetching variants with chrom and start gives all variants after pos
         '''
         chrom, start, stop = '01', 5000, 50000
-        print('testing fetch after position')
         bfile = BgenFile(self.folder / 'example.16bits.bgen')
         
         sortkey = lambda x: (x.chrom, x.pos)
