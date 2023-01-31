@@ -145,6 +145,17 @@ std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
   return max_probs;
 }
 
+Genotypes::Genotypes(std::ifstream *handle, int lay, int compr, int n_alleles, std::uint32_t n_samples) {
+  std::cout << "initializing Genotypes for var at: " << offset << std::endl;
+  std::uint32_t length;
+  offset = handle->tellg();
+  std::cout << " - initial offset: " << offset << std::endl;
+  handle->read(reinterpret_cast<char *>(&length), sizeof(length));
+  offset = handle->tellg();
+  next_var_offset = offset + length;
+  std::cout << " - var offset: " << offset << ", next var offset: " << next_var_offset << std::endl;
+}
+
 /// get ploidy state for all samples (and missingness for layout2).
 ///
 /// ploidy state is stored in ploidy member. Missingness is stored as indices of
