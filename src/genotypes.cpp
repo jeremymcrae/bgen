@@ -11,6 +11,10 @@
   #include <immintrin.h>
 #endif
 
+#if defined(__aarch64__)
+  #include <arm_neon.h>
+#endif
+
 #include "zstd/lib/zstd.h"
 #include <zlib.h>
 
@@ -499,7 +503,8 @@ void Genotypes::ref_dosage_fast_fallback(char *uncompressed, std::uint32_t &idx,
 /// probability. See fast_dosage_minor_second() for getting dosage when the minor
 /// allele is the second allele.
 ///
-/// This uses AVX2 vectorization to speed up calculations on x86_64 hardware.
+/// This uses AVX2 and NEON vectorization to speed up calculations on relevant 
+/// x86_64 and aarch64 hardware.
 ///
 /// @param uncompressed char array containing genotype probabilities
 /// @param idx uint position where the genotype probabilties begin
@@ -567,6 +572,60 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t &idx, float *d
     // this handles if AVX2 is not available
     ref_dosage_fast_fallback(uncompressed, idx, dose);
   }
+#elif defined(__aarch64__)
+  // using this optimised method roughly doubles the speed of computing the ref
+  // dosage, but it has a limited impact, since 80-90% of the time is spent
+  // decompressing the genotypes array (with zlib compressed data).
+  std::uint8_t * buff = reinterpret_cast<std::uint8_t *>(uncompressed);
+  const float c = 1.0f / 255.0f;
+  float32x4_t k = vdupq_n_f32(c);
+  uint8x16x2_t initial;
+  uint16x8_t het, hom, total;
+  float32x4_t _dose;
+  for (std::uint32_t n = 0; n < (n_samples - (n_samples % 8)); n += 8) {
+    // load data from the array into SIMD registers. This deinterleaves the
+    // het and hom counts into separate vector registers
+    initial = vld2q_u8(buff + idx);
+
+    // we need to convert the 8-bit uints to 32 bit floats, but we can't do that
+    // in one operation, since we've already packed the vector register. We start
+    // with the low half of each register, and first expand to 16-bit uints,
+    // since homozyous counts can go over by one bit
+    hom = vmovl_u8(vget_low_u8(initial.val[0]));
+    het = vmovl_u8(vget_low_u8(initial.val[1]));
+    hom = vshlq_n_u16(hom, 1);  // multiply hom alt counts by 2 since ploidy=2
+
+    // sum the heterozygous and homozygous dosages
+    total = vaddq_u16(het, hom);
+
+    // still in low half, now expand 16-bit uints to 32-bit, convert to float, store
+    _dose = vcvtq_f32_u32(vmovl_u16(vget_low_u16(total)));
+    vst1q_f32(dose + n, vmulq_f32(_dose, k));
+    _dose = vcvtq_f32_u32(vmovl_u16(vget_high_u16(total)));
+    vst1q_f32(dose + n + 4, vmulq_f32(_dose, k));
+
+    // repeat for the high half of the vectors
+    hom = vmovl_u8(vget_high_u8(initial.val[0]));
+    het = vmovl_u8(vget_high_u8(initial.val[1]));
+    hom = vshlq_n_u16(hom, 1);
+
+    // sum the heterozygous and homozygous dosages
+    total = vaddq_u16(het, hom);
+
+    // expand each half to 32-bit, convert to float, store
+    _dose = vcvtq_f32_u32(vmovl_u16(vget_low_u16(total)));
+    vst1q_f32(dose + n + 8, vmulq_f32(_dose, k));
+    _dose = vcvtq_f32_u32(vmovl_u16(vget_high_u16(total)));
+    vst1q_f32(dose + n + 12, vmulq_f32(_dose, k));
+
+    idx += 16;
+  }
+  // finish off the final unvectorized samples
+  for (std::uint32_t n = (n_samples - (n_samples % 8)); n < n_samples; n++) {
+    dose[n] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]) * 2 +
+                   *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1])];
+    idx += 2;
+  }
 #else
   // this handles if we cannot compile the code above (32 bit, or not x86)
   ref_dosage_fast_fallback(uncompressed, idx, dose);
@@ -577,8 +636,8 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t &idx, float *d
 ///
 /// This replaces the values in the dose array with 2.0 - value.
 ///
-/// This uses AVX vectorization to speed up calculations on x86_64 hardware.
-/// This assumes AVX is available on x86_64 machines, which isn't always true.
+/// This uses AVX and NEON vectorization to speed up calculations on relevant
+/// x86_64 and aarch64 hardware
 void Genotypes::swap_allele_dosage(float * dose) {
 #if defined(__x86_64__)
   __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
@@ -590,9 +649,17 @@ void Genotypes::swap_allele_dosage(float * dose) {
   for (std::uint32_t n=(n_samples - (n_samples % 8)); n<n_samples; n++) {
     dose[n] = 2.0f - dose[n];
   }
+#elif defined(__aarch64__)
+  float32x4_t k = vdupq_n_f32(2.0f);
+  float32x4_t batch;
+  for (std::uint32_t n = 0; n < (n_samples - (n_samples % 4)); n += 4) {
+    batch = vld1q_f32(dose + n);
+    vst1q_f32(dose + n, vsubq_f32(k, batch));
+  }
+  for (std::uint32_t n = (n_samples - (n_samples % 4)); n < n_samples; n++) {
+    dose[n] = 2.0f - dose[n];
+  }
 #else
-  // TODO: add in vectorized version to speed up function on aarch64
-  // alternative for when x86 vectorized oeprations are not available
   for (std::uint32_t n=0; n<(n_samples - (n_samples % 8)); n+=8) {
     dose[n] = 2.0f - dose[n];
     dose[n+1] = 2.0f - dose[n+1];
@@ -697,7 +764,7 @@ float * Genotypes::get_allele_dosage(bool use_alt, bool use_minor) {
   if (use_alt | (use_minor & (minor_idx != 0))) {
     swap_allele_dosage(dose);
   }
-  
+
   // for samples with missing data, just set values to NA
   for (auto n: missing) {
     dose[n] = std::nan("1");
