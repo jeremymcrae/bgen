@@ -11,10 +11,10 @@
 
 namespace bgen {
 
-class Bgen {
+class BgenReader {
   std::ifstream handle;
 public:
-  Bgen(std::string path, std::string sample_path="", bool delay_parsing=false);
+  BgenReader(std::string path, std::string sample_path="", bool delay_parsing=false);
   void parse_all_variants();
   Variant next_var();
   void drop_variants(std::vector<int> indices);

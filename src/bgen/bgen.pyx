@@ -70,9 +70,9 @@ cdef extern from 'header.h' namespace 'bgen':
         bool has_sample_ids
 
 cdef extern from 'bgen.h' namespace 'bgen':
-    cdef cppclass Bgen:
+    cdef cppclass BgenReader:
         # declare class constructor and methods
-        Bgen(string path, string sample_path, bool delay_parsing) except +
+        BgenReader(string path, string sample_path, bool delay_parsing) except +
         void parse_all_variants()
         Variant & operator[](int idx)
         Variant & get(int idx)
@@ -269,7 +269,7 @@ cdef class BgenVar:
 cdef class BgenFile:
     ''' class to open bgen files from disk, and access variant data within
     '''
-    cdef Bgen * thisptr
+    cdef BgenReader * thisptr
     cdef string path, sample_path
     cdef bool delay_parsing
     cdef IFStream handle
@@ -290,7 +290,7 @@ cdef class BgenFile:
         
         samp = '' if sample_path == '' else f', (samples={self.sample_path.decode("utf")})'
         logging.debug(f'opening BgenFile from {self.path.decode("utf")}{samp}')
-        self.thisptr = new Bgen(self.path, self.sample_path, self.delay_parsing)
+        self.thisptr = new BgenReader(self.path, self.sample_path, self.delay_parsing)
         self.handle = IFStream(self.path)
         self.is_open = True
         self.offset = self.thisptr.offset
