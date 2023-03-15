@@ -69,7 +69,7 @@ cdef extern from 'header.h' namespace 'bgen':
         int layout
         bool has_sample_ids
 
-cdef extern from 'bgen.h' namespace 'bgen':
+cdef extern from 'reader.h' namespace 'bgen':
     cdef cppclass BgenReader:
         # declare class constructor and methods
         BgenReader(string path, string sample_path, bool delay_parsing) except +

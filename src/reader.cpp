@@ -1,5 +1,5 @@
 
-#include "bgen.h"
+#include "reader.h"
 
 namespace bgen {
 
