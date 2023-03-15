@@ -1,5 +1,5 @@
-#ifndef BGEN_BGEN_H_
-#define BGEN_BGEN_H_
+#ifndef BGEN_READER_H_
+#define BGEN_READER_H_
 
 #include <fstream>
 #include <stdexcept>
@@ -33,4 +33,4 @@ public:
 
 } // namespace bgen
 
-#endif  // BGEN_BGEN_H_
+#endif  // BGEN_READER_H_
