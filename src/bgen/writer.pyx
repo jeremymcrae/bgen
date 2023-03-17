@@ -59,10 +59,8 @@ cdef class BgenWrite:
         if compression not in [None, 'zstd', 'zlib']:
             raise ValueError(f'compression type {compression} not one of zlib or zstd')
         
-        cdef uint32_t compress_flag
-        if compression is None:
-            compress_flag = 0
-        elif compression == 'zlib':
+        cdef uint32_t compress_flag=0
+        if compression == 'zlib':
             compress_flag = 1
         elif compression == 'zstd':
             compress_flag = 2
