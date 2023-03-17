@@ -409,7 +409,7 @@ void Genotypes::decompress() {
   }
 
   if (compression == 0) { //no compression
-    std:memcpy(&uncompressed[0], &compressed[0], compressed_len);
+    std::memcpy(&uncompressed[0], &compressed[0], compressed_len);
   } else if (compression == 1) { // zlib
     zlib_uncompress(compressed, (int) compressed_len, uncompressed, (int) decompressed_len);  // about 2 milliseconds
   } else if (compression == 2) { // zstd
