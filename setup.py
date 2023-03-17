@@ -78,8 +78,9 @@ if sys.platform == 'win32':
     zlib, libs = build_zlib(), []
 else:
     zlib, libs = [], ['z']
+zstd = build_zstd()
 
-reader = cythonize([
+ext = cythonize([
     Extension('bgen.reader',
         extra_compile_args=EXTRA_COMPILE_ARGS,
         extra_link_args=EXTRA_LINK_ARGS,
@@ -90,7 +91,19 @@ reader = cythonize([
             'src/samples.cpp',
             'src/utils.cpp',
             'src/variant.cpp'],
-        extra_objects=build_zstd() + zlib,
+        extra_objects=zstd + zlib,
+        include_dirs=['src', 'src/zstd/lib', 'src/zlib'],
+        libraries=libs,
+        language='c++'),
+    Extension('bgen.writer',
+        extra_compile_args=EXTRA_COMPILE_ARGS,
+        extra_link_args=EXTRA_LINK_ARGS,
+        sources=['src/bgen/writer.pyx',
+            'src/writer.cpp',
+            'src/genotypes.cpp',
+            'src/utils.cpp',
+            ],
+        extra_objects=zstd + zlib,
         include_dirs=['src', 'src/zstd/lib', 'src/zlib'],
         libraries=libs,
         language='c++'),
@@ -114,6 +127,6 @@ setup(name='bgen',
         'Development Status :: 4 - Beta',
         'Topic :: Scientific/Engineering :: Bio-Informatics',
     ],
-    ext_modules=reader,
+    ext_modules=ext,
     test_loader='unittest:TestLoader',
     )

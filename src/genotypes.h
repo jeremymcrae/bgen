@@ -56,6 +56,8 @@ public:
   std::uint8_t * ploidy;
 };
 
+std::uint32_t get_max_probs(int &max_ploidy, int &n_alleles, bool &phased);
+
 } // namespace bgen
 
 #endif  // BGEN_GENOTYPES_H_
