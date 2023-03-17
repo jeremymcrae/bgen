@@ -95,7 +95,7 @@ void BgenWriter::add_samples(std::vector<std::string> &samples) {
     handle.write(reinterpret_cast<char *>(&id_size), 2);
     handle << x;
   }
-  variant_data_offset = handle.tellp() - 4;
+  variant_data_offset = (std::uint32_t)handle.tellp() - 4;
   write_variants_offset(handle, variant_data_offset);
 }
 
