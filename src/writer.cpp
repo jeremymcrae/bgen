@@ -282,7 +282,6 @@ std::vector<std::uint8_t> encode_layout2(
   double factor = std::pow(2, bit_depth) - 1;
   bool missing;
   const std::uint32_t genotype_offset=i;
-  std::uint32_t sample_idx=0;
   std::uint32_t bit_idx=0;
   std::uint32_t byte_idx;
   std::uint32_t bit_remainder;
