@@ -407,9 +407,9 @@ void Genotypes::decompress() {
   if (! handle->read(&compressed[0], compressed_len)) {
     throw std::invalid_argument("couldn't read the compressed data");
   }
-  
+
   if (compression == 0) { //no compression
-    uncompressed = compressed;
+    std:memcpy(&uncompressed[0], &compressed[0], compressed_len);
   } else if (compression == 1) { // zlib
     zlib_uncompress(compressed, (int) compressed_len, uncompressed, (int) decompressed_len);  // about 2 milliseconds
   } else if (compression == 2) { // zstd

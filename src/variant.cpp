@@ -68,7 +68,11 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   }
   
   std::uint32_t length;
-  handle.read(reinterpret_cast<char *>(&length), sizeof(length));
+  if ((layout == 1) && (compression == 0)) {
+    length = n_samples * 6;
+  } else {
+    handle.read(reinterpret_cast<char *>(&length), sizeof(length));
+  }
   std::uint64_t geno_offset = (std::uint64_t) handle.tellg();
   geno = Genotypes(&handle, layout, compression, n_alleles, n_samples, geno_offset, length);
   next_variant_offset = geno_offset + length;
