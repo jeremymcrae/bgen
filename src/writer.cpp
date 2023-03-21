@@ -241,6 +241,10 @@ std::vector<std::uint8_t> encode_layout2(
   int _max_ploid = (int)max_ploidy;
   int _n_alleles = (int)n_alleles;
   std::uint32_t max_probs = get_max_probs(_max_ploid, _n_alleles, phased);
+  if (phased) {
+    max_probs *= n_alleles;
+  }
+  std::cout << "max_probs: " << max_probs << std::endl;
   if ((geno_len / max_probs) != n_samples) {
     throw std::invalid_argument("genotypes and ploidy lengths don't match");
   }
@@ -263,8 +267,9 @@ std::vector<std::uint8_t> encode_layout2(
 
   // set the individuals ploidy values. We'll fill samples with missing data 
   // when we run through the genotypes
+  bool constant_ploidy = min_ploidy == max_ploidy;
   const std::uint32_t ploidy_offset = i;
-  if (min_ploidy == max_ploidy) {
+  if (constant_ploidy) {
     std::memset(&encoded[i], max_ploidy, n_samples);
     i += n_samples;
   } else {
@@ -279,48 +284,58 @@ std::vector<std::uint8_t> encode_layout2(
   encoded[i] = bit_depth;
   i += 1;
 
-  double factor = std::pow(2, bit_depth) - 1;
-  bool missing;
-  const std::uint32_t genotype_offset=i;
-  std::uint32_t bit_idx=0;
-  std::uint32_t byte_idx;
-  std::uint32_t bit_remainder;
-  std::uint64_t converted;
-  std::uint64_t window;
-  double sample_max;
-  double g;
-  for (std::uint32_t i=0; i<(n_samples*max_probs); i+= max_probs) {
-    missing = missing_genotypes(&genotypes[i], max_probs);
-    if (missing) {
-      encoded[ploidy_offset + (i / 3)] |= 0x80;
-    }
-    sample_max = 0;
-    for (std::uint32_t j = 0; j < (max_probs - 1); j++) {
-      g = genotypes[i + j];
-      if (missing) {
-        g = 0;
-      }
-      sample_max = std::max(sample_max, g);
-    }
-    for (std::uint32_t j = 0; j < (max_probs - 1); j++) {
-      g = genotypes[i + j];
-      if (missing) {
-        g = 0;
-      }
-      byte_idx = genotype_offset + (bit_idx / 8);
-      bit_remainder = bit_idx % 8;
-      window = *reinterpret_cast<const std::uint32_t* >(&encoded[byte_idx]);
-      if (g == sample_max) {
-        converted = std::ceil(g * factor);
-      } else {
-        converted = std::floor(g * factor);
-      }
-      window |= (converted << bit_remainder);
-
-      std::memcpy(&encoded[byte_idx], &window, 8);
-      bit_idx += bit_depth;
-    }
+  if (constant_ploidy && !phased) {
+    encode_constant_ploidy_unphased(encoded, i, ploidy_offset, n_samples,
+                                    n_alleles, max_ploidy, genotypes, geno_len, 
+                                    bit_depth);
   }
+
+  // double factor = std::pow(2, bit_depth) - 1;
+  // bool missing;
+  // const std::uint32_t genotype_offset=i;
+  // std::uint32_t bit_idx=0;
+  // std::uint32_t byte_idx;
+  // std::uint32_t bit_remainder;
+  // std::uint64_t converted;
+  // std::uint64_t window;
+  // double sample_max;
+  // double g;
+  // if (constant_ploidy) {
+
+  // }
+  // for (std::uint32_t i=0; i<(n_samples*max_probs); i+= max_probs) {
+  //   // TODO: handle different ploidies, and phased data
+  //   missing = missing_genotypes(&genotypes[i], max_probs);
+  //   if (missing) {
+  //     encoded[ploidy_offset + (i / 3)] |= 0x80;
+  //   }
+  //   sample_max = 0;
+  //   for (std::uint32_t j = 0; j < (max_probs - 1); j++) {
+  //     g = genotypes[i + j];
+  //     if (missing) {
+  //       g = 0;
+  //     }
+  //     sample_max = std::max(sample_max, g);
+  //   }
+  //   for (std::uint32_t j = 0; j < (max_probs - 1); j++) {
+  //     g = genotypes[i + j];
+  //     if (missing) {
+  //       g = 0;
+  //     }
+  //     byte_idx = genotype_offset + (bit_idx / 8);
+  //     bit_remainder = bit_idx % 8;
+  //     window = *reinterpret_cast<const std::uint32_t* >(&encoded[byte_idx]);
+  //     if (g == sample_max) {
+  //       converted = std::ceil(g * factor);
+  //     } else {
+  //       converted = std::floor(g * factor);
+  //     }
+  //     window |= (converted << bit_remainder);
+
+  //     std::memcpy(&encoded[byte_idx], &window, 8);
+  //     bit_idx += bit_depth;
+  //   }
+  // }
   encoded.resize(encoded_size);
   return encoded;
 }
