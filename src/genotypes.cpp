@@ -364,10 +364,11 @@ float * Genotypes::parse_layout2(char * uncompressed, std::uint32_t & idx) {
   }
   
   std::uint32_t offset;
+  std::uint32_t k = (phased) ? max_ploidy : 1;  // phased data needs scaled offset
   // for samples with missing data, just set values to NA
   for (auto n: missing) {
-    offset = max_probs * n;
-    for (std::uint32_t x=0; x<max_probs; x++) {
+    offset = max_probs * n * k;
+    for (std::uint32_t x=0; x<(max_probs*k); x++) {
       probs[offset + x] = std::nan("1");
     }
   }
