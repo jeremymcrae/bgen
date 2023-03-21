@@ -36,14 +36,14 @@ cdef extern from 'writer.h' namespace 'bgen':
         BgenWriter(string &path, uint32_t n_samples, string &free_data, 
                    uint32_t compression, uint32_t layout, vector[string] &samples) except +
         void write_variant_header(string &varid, string &rsid, string &chrom, 
-                        uint32_t &pos, vector[string] &alleles, uint32_t _n_samples)
+                        uint32_t &pos, vector[string] &alleles, uint32_t _n_samples) except +
         void add_genotype_data(uint16_t n_alleles,
                          double *genotypes, uint32_t geno_len, uint8_t ploidy,
-                         bool phased, uint8_t bit_depth)
+                         bool phased, uint8_t bit_depth) except +
         void add_genotype_data(uint16_t n_alleles,
                          double *genotypes, uint32_t geno_len, vector[uint8_t] &ploidy,
                          uint32_t min_ploidy, uint32_t max_ploidy,
-                         bool phased, uint8_t bit_depth)
+                         bool phased, uint8_t bit_depth) except +
 
 cdef class BgenWrite:
     ''' class to open bgen files from disk, and access variant data within
