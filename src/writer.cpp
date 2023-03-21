@@ -277,21 +277,22 @@ std::uint64_t emplace_probability(double &geno_prob,
   return window;
 }
 
-void encode_constant_ploidy_unphased(std::vector<std::uint8_t> &encoded,
-                                     std::uint32_t genotype_offset,
-                                     std::uint32_t ploidy_offset,
-                                     std::uint32_t n_samples,
-                                     std::uint16_t n_alleles,
-                                     std::uint32_t ploidy,
-                                     double *genotypes,
-                                     std::uint32_t geno_len,
-                                     std::uint8_t &bit_depth)
+std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
+                     std::uint32_t genotype_offset,
+                     std::uint32_t ploidy_offset,
+                     std::uint32_t n_samples,
+                     std::uint16_t n_alleles,
+                     bool constant_ploidy,
+                     std::uint32_t max_ploidy,
+                     double *genotypes,
+                     std::uint32_t geno_len,
+                     std::uint8_t &bit_depth)
 {
-
-  int _ploid = (int)ploidy;
+  int _ploid = (int)max_ploidy;
   int _n_alleles = (int)n_alleles;
   bool phased = false;
   std::uint32_t max_probs = get_max_probs(_ploid, _n_alleles, phased);
+  std::uint32_t n_probs = max_probs;  // for storing probs per person
 
   double factor = std::pow(2, bit_depth) - 1;
   bool missing;
@@ -306,8 +307,14 @@ void encode_constant_ploidy_unphased(std::vector<std::uint8_t> &encoded,
     if (missing) {
       encoded[ploidy_offset + (i / 3)] |= 0x80;
     }
-    sample_max= get_sample_max(genotypes, i, max_probs, missing);
-    for (std::uint32_t j = 0; j < (max_probs - 1); j++) {
+    if (!constant_ploidy) {
+      _ploid = (int)(encoded[ploidy_offset + (i / 3)] |= 63);
+      n_probs = get_max_probs(_ploid, _n_alleles, phased);
+    } else {
+      n_probs = max_probs;
+    }
+    sample_max = get_sample_max(genotypes, i, n_probs, missing);
+    for (std::uint32_t j = 0; j < (n_probs - 1); j++) {
       g = genotypes[i + j];
       if (missing) {
         g = 0;
@@ -319,6 +326,72 @@ void encode_constant_ploidy_unphased(std::vector<std::uint8_t> &encoded,
       bit_idx += bit_depth;
     }
   }
+  return genotype_offset + (bit_idx / 8);
+}
+
+std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
+                            std::uint32_t genotype_offset,
+                            std::uint32_t ploidy_offset,
+                            std::uint32_t n_samples,
+                            std::uint16_t n_alleles,
+                            bool constant_ploidy,
+                            std::uint32_t max_ploidy,
+                            double *genotypes,
+                            std::uint32_t geno_len,
+                            std::uint8_t &bit_depth)
+{
+  int _ploid = (int)max_ploidy;
+  int _n_alleles = (int)n_alleles;
+  bool phased = true;
+  std::uint32_t max_probs = get_max_probs(_ploid, _n_alleles, phased);
+  std::uint32_t n_probs = max_probs; // for storing probs per person
+
+  double factor = std::pow(2, bit_depth) - 1;
+  bool missing;
+  std::uint32_t bit_idx = 0;
+  std::uint32_t byte_idx;
+  std::uint32_t bit_remainder;
+  std::uint64_t window;
+  double sample_max;
+  double g;
+  std::uint32_t i=0;
+  while (i < n_samples * max_probs) {
+  // for (std::uint32_t i = 0; i < (n_samples * max_probs); i += max_probs) {
+    missing = missing_genotypes(&genotypes[i], max_probs);
+    if (missing) {
+      encoded[ploidy_offset + (i / 3)] |= 0x80;
+    }
+    if (!constant_ploidy) {
+      _ploid = (int)(encoded[ploidy_offset + (i / 3)] |= 63);
+      n_probs = get_max_probs(_ploid, _n_alleles, phased);
+    } else {
+      _ploid = max_ploidy;
+      n_probs = max_probs;
+    }
+    // phased data is received in n_alleles * n_ploidy values, but is stored in
+    // n_alleles * (n_ploidy - 1) values, where n_ploidy can differ per person.
+    for (std::uint32_t k = 0; k < _ploid; k++) {
+      // repeat for each haplotype
+      sample_max = get_sample_max(genotypes, i, n_probs, missing);
+      for (std::uint32_t j = 0; j < (n_probs - 1); j++) {
+        // repeat for each allele
+        // g = genotypes[i + j + k * n_probs];
+        g = genotypes[i];
+        if (missing) {
+          g = 0;
+        }
+        byte_idx = genotype_offset + (bit_idx / 8);
+        bit_remainder = bit_idx % 8;
+        window = emplace_probability(g, &encoded[byte_idx], bit_remainder, factor, sample_max);
+        std::memcpy(&encoded[byte_idx], &window, 8);
+        bit_idx += bit_depth;
+        i += 1;
+      }
+      i += 1;
+    }
+    i += max_probs - n_probs;
+  }
+  return genotype_offset + (bit_idx / 8);
 }
 
 std::vector<std::uint8_t> encode_layout2(
@@ -379,58 +452,14 @@ std::vector<std::uint8_t> encode_layout2(
   encoded[i] = bit_depth;
   i += 1;
 
-  if (constant_ploidy && !phased) {
-    encode_constant_ploidy_unphased(encoded, i, ploidy_offset, n_samples,
-                                    n_alleles, max_ploidy, genotypes, geno_len, 
-                                    bit_depth);
+  if (!phased) {
+    encoded_size = encode_unphased(encoded, i, ploidy_offset, n_samples, n_alleles,
+                                constant_ploidy, max_ploidy, genotypes, geno_len, bit_depth);
+  } else {
+    encoded_size = encode_phased(encoded, i, ploidy_offset, n_samples, n_alleles,
+                                   constant_ploidy, max_ploidy, genotypes, geno_len, bit_depth);
   }
 
-  // double factor = std::pow(2, bit_depth) - 1;
-  // bool missing;
-  // const std::uint32_t genotype_offset=i;
-  // std::uint32_t bit_idx=0;
-  // std::uint32_t byte_idx;
-  // std::uint32_t bit_remainder;
-  // std::uint64_t converted;
-  // std::uint64_t window;
-  // double sample_max;
-  // double g;
-  // if (constant_ploidy) {
-
-  // }
-  // for (std::uint32_t i=0; i<(n_samples*max_probs); i+= max_probs) {
-  //   // TODO: handle different ploidies, and phased data
-  //   missing = missing_genotypes(&genotypes[i], max_probs);
-  //   if (missing) {
-  //     encoded[ploidy_offset + (i / 3)] |= 0x80;
-  //   }
-  //   sample_max = 0;
-  //   for (std::uint32_t j = 0; j < (max_probs - 1); j++) {
-  //     g = genotypes[i + j];
-  //     if (missing) {
-  //       g = 0;
-  //     }
-  //     sample_max = std::max(sample_max, g);
-  //   }
-  //   for (std::uint32_t j = 0; j < (max_probs - 1); j++) {
-  //     g = genotypes[i + j];
-  //     if (missing) {
-  //       g = 0;
-  //     }
-  //     byte_idx = genotype_offset + (bit_idx / 8);
-  //     bit_remainder = bit_idx % 8;
-  //     window = *reinterpret_cast<const std::uint32_t* >(&encoded[byte_idx]);
-  //     if (g == sample_max) {
-  //       converted = std::ceil(g * factor);
-  //     } else {
-  //       converted = std::floor(g * factor);
-  //     }
-  //     window |= (converted << bit_remainder);
-
-  //     std::memcpy(&encoded[byte_idx], &window, 8);
-  //     bit_idx += bit_depth;
-  //   }
-  // }
   encoded.resize(encoded_size);
   return encoded;
 }
