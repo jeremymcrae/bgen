@@ -353,17 +353,16 @@ std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
   std::uint64_t window;
   double g, sample_max;
   while (i < n_samples * max_probs) {
-  // for (std::uint32_t i = 0; i < (n_samples * max_probs); i += max_probs) {
-    missing = missing_genotypes(&genotypes[i], max_probs);
-    if (missing) {
-      encoded[ploidy_offset + (i / 3)] |= 0x80;
-    }
     if (!constant_ploidy) {
       _ploid = (int)(encoded[ploidy_offset + (i / 3)] |= 63);
       n_probs = get_max_probs(_ploid, _n_alleles, phased);
     } else {
       _ploid = max_ploidy;
       n_probs = max_probs;
+    }
+    missing = missing_genotypes(&genotypes[i], n_probs);
+    if (missing) {
+      encoded[ploidy_offset + (i / 3)] |= 0x80;
     }
     // phased data is received in n_alleles * n_ploidy values, but is stored in
     // n_alleles * (n_ploidy - 1) values, where n_ploidy can differ per person.
