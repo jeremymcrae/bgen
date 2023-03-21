@@ -163,11 +163,11 @@ void zlib_compress(char * input, int input_len, std::vector<char> &output) {
 }
 
 // uncompress a char array with zstd
-void zstd_compress(char * input, int input_len, std::vector<char> &output) {
+void zstd_compress(char *input, int input_len, std::vector<char> &output) {
   std::size_t total_out = ZSTD_compress(&output[0], output.size(), input, input_len, 3);
   output.resize(total_out);
 }
- 
+
 /// Read genotype data for a variant from disk and decompress.
 ///
 /// The decompressed data is stored in the 'uncompressed' member. Decompression
@@ -183,15 +183,15 @@ std::vector<char> compress(std::vector<std::uint8_t> &uncompressed, std::uint32_
   return compressed;
 }
 
-bool missing_genotypes(double * genotypes, std::uint16_t len) {
+bool missing_genotypes(double *genotypes, std::uint32_t size) {
   std::uint16_t nan_count = 0;
-    for (std::uint32_t i=0; i<len; i++) {
+    for (std::uint32_t i=0; i<size; i++) {
       nan_count += std::isnan(genotypes[i]);
     }
-    if ((nan_count > 0) && (nan_count < len)) {
+    if ((nan_count > 0) && (nan_count < size)) {
       throw std::invalid_argument("samples with any missing genotype must encode all as missing (i.e. float(nan))");
     }
-    return nan_count == len;
+    return nan_count == size;
 }
 
 std::vector<std::uint8_t> encode_layout1(
@@ -349,12 +349,9 @@ std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
   double factor = std::pow(2, bit_depth) - 1;
   bool missing;
   std::uint32_t bit_idx = 0;
-  std::uint32_t byte_idx;
-  std::uint32_t bit_remainder;
+  std::uint32_t byte_idx, bit_remainder, i;
   std::uint64_t window;
-  double sample_max;
-  double g;
-  std::uint32_t i=0;
+  double g, sample_max;
   while (i < n_samples * max_probs) {
   // for (std::uint32_t i = 0; i < (n_samples * max_probs); i += max_probs) {
     missing = missing_genotypes(&genotypes[i], max_probs);
