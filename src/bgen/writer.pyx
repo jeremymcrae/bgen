@@ -95,7 +95,7 @@ cdef class BgenWrite:
         if ploidy.size() == 0:
             ploidy_n = 2
             if phased:
-                ploidy_n = len(genotypes[0, ])
+                ploidy_n = len(genotypes[0, ]) // alleles.size()
             self.thisptr.add_genotype_data(alleles.size(), &genotypes[0, 0], 
                                            geno_len, ploidy_n, phased, bit_depth)
         else:
