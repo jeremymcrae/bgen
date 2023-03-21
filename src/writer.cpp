@@ -226,6 +226,101 @@ std::vector<std::uint8_t> encode_layout1(
   return encoded;
 }
 
+/// @brief find the maximum genotype probability for a sample
+/// @param genotypes array of double of genotypes for the full cohort
+/// @param offset offset where the samples genotypes begin
+/// @param max_probs number of proabilities stored for the sample
+/// @param missing whether the sample lacks genotype data
+double get_sample_max(double *genotypes, std::uint32_t &offset, std::uint32_t &max_probs, bool &missing) {
+  double sample_max = 0;
+  double g;
+  for (std::uint32_t j = 0; j < (max_probs - 1); j++)
+  {
+    g = genotypes[offset + j];
+    if (missing) {
+      g = 0;
+    }
+    sample_max = std::max(sample_max, g);
+  }
+  return sample_max;
+}
+
+/// @brief figure out the 64-bit pattern to insert a encoded genotype probability
+/// @param geno_prob probability for genotype state
+/// @param encoded vector of proabilties, set up as 8-bit. We pull a 64-bit slice
+///        of this at the pointer position, in order to swap in the bits for the
+///        encoded genotype at the correct offset
+/// @param bit_remainder bit offset to place the encoded genotype at
+/// @param factor scaling factor for the genotype, to convert genotype to integer
+//         in the appropriate range
+/// @param sample_max maximum probability mobserved in the sample
+/// @return
+std::uint64_t emplace_probability(double &geno_prob,
+                                  std::uint8_t *encoded,
+                                  std::uint32_t &bit_remainder,
+                                  double &factor,
+                                  double &sample_max)
+{
+  std::uint64_t converted;
+  std::uint64_t window;
+
+  window = *reinterpret_cast<const std::uint32_t* >(encoded);
+  converted = geno_prob * factor;
+  if (geno_prob == sample_max) {
+    // if the value is the max for the sample, round up, otherwise low-bit depth
+    // encoded values can be too low
+    converted = std::ceil(converted);
+  } else {
+    converted = std::floor(converted);
+  }
+  window |= (converted << bit_remainder);
+  return window;
+}
+
+void encode_constant_ploidy_unphased(std::vector<std::uint8_t> &encoded,
+                                     std::uint32_t genotype_offset,
+                                     std::uint32_t ploidy_offset,
+                                     std::uint32_t n_samples,
+                                     std::uint16_t n_alleles,
+                                     std::uint32_t ploidy,
+                                     double *genotypes,
+                                     std::uint32_t geno_len,
+                                     std::uint8_t &bit_depth)
+{
+
+  int _ploid = (int)ploidy;
+  int _n_alleles = (int)n_alleles;
+  bool phased = false;
+  std::uint32_t max_probs = get_max_probs(_ploid, _n_alleles, phased);
+
+  double factor = std::pow(2, bit_depth) - 1;
+  bool missing;
+  std::uint32_t bit_idx=0;
+  std::uint32_t byte_idx;
+  std::uint32_t bit_remainder;
+  std::uint64_t window;
+  double sample_max;
+  double g;
+  for (std::uint32_t i=0; i<(n_samples*max_probs); i+= max_probs) {
+    missing = missing_genotypes(&genotypes[i], max_probs);
+    if (missing) {
+      encoded[ploidy_offset + (i / 3)] |= 0x80;
+    }
+    sample_max= get_sample_max(genotypes, i, max_probs, missing);
+    for (std::uint32_t j = 0; j < (max_probs - 1); j++) {
+      g = genotypes[i + j];
+      if (missing) {
+        g = 0;
+      }
+      byte_idx = genotype_offset + (bit_idx / 8);
+      bit_remainder = bit_idx % 8;
+      window = emplace_probability(g, &encoded[byte_idx], bit_remainder, factor, sample_max);
+      std::memcpy(&encoded[byte_idx], &window, 8);
+      bit_idx += bit_depth;
+    }
+  }
+}
+
 std::vector<std::uint8_t> encode_layout2(
                     std::uint32_t n_samples,
                     std::uint16_t n_alleles,
