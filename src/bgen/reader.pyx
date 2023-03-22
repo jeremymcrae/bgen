@@ -184,6 +184,9 @@ cdef class BgenVar:
     def pos(self):
         return self.thisptr.pos
     @property
+    def fileoffset(self):
+        return self.offset
+    @property
     def next_variant_offset(self):
         return self.thisptr.next_variant_offset
     @property
