@@ -31,9 +31,9 @@ cdef extern from 'genotypes.h' namespace 'bgen':
     uint32_t get_max_probs(int &max_ploidy, int &n_alleles, bool &phased)
 
 cdef extern from 'writer.h' namespace 'bgen':
-    cdef cppclass BgenWriter:
+    cdef cppclass CppBgenWriter:
         # declare class constructor and methods
-        BgenWriter(string &path, uint32_t n_samples, string &free_data, 
+        CppBgenWriter(string &path, uint32_t n_samples, string &free_data, 
                    uint32_t compression, uint32_t layout, vector[string] &samples) except +
         void write_variant_header(string &varid, string &rsid, string &chrom, 
                         uint32_t &pos, vector[string] &alleles, uint32_t _n_samples) except +
@@ -45,10 +45,10 @@ cdef extern from 'writer.h' namespace 'bgen':
                          uint32_t min_ploidy, uint32_t max_ploidy,
                          bool phased, uint8_t bit_depth) except +
 
-cdef class BgenWrite:
+cdef class BgenWriter:
     ''' class to open bgen files from disk, and access variant data within
     '''
-    cdef BgenWriter * thisptr
+    cdef CppBgenWriter * thisptr
     cdef string path
     cdef bool is_open
     def __cinit__(self, path, uint32_t n_samples, string free_data, 
@@ -67,8 +67,8 @@ cdef class BgenWrite:
 
         self.path = path.encode('utf8')
         
-        logging.debug(f'opening BgenFile from {self.path.decode("utf")}')
-        self.thisptr = new BgenWriter(self.path, n_samples, free_data, compress_flag, layout, samples)
+        logging.debug(f'opening CppBgenWriter from {self.path.decode("utf")}')
+        self.thisptr = new CppBgenWriter(self.path, n_samples, free_data, compress_flag, layout, samples)
         self.is_open = True
     
     def __dealloc__(self):

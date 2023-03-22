@@ -7,7 +7,7 @@
 
 namespace bgen {
 
-class BgenWriter {
+class CppBgenWriter {
   std::ofstream handle;
   std::uint32_t n_samples;
   std::uint32_t compression;
@@ -16,7 +16,7 @@ class BgenWriter {
   std::uint32_t nvars_offset=8;
   std::uint32_t variant_data_offset=0;
 public:
-  BgenWriter(std::string &path,
+  CppBgenWriter(std::string &path,
              std::uint32_t n_samples,
              std::string &free_data,
              uint32_t compression,
@@ -29,8 +29,8 @@ public:
     write_header(free_data, samples);
     add_samples(samples);
   };
-  BgenWriter() {};
-  ~BgenWriter();
+  CppBgenWriter() {};
+  ~CppBgenWriter();
   void write_header(std::string &free_data,
                     std::vector<std::string> &samples);
   void add_samples(std::vector<std::string> &samples);

@@ -19,9 +19,9 @@ zstd compression have also been tested using example bgen files).
 
 #### Usage
 ```python
-from bgen.reader import BgenFile
+from bgen import BgenReader
 
-bfile = BgenFile(BGEN_PATH)
+bfile = BgenReader(BGEN_PATH)
 rsids = bfile.rsids()
 
 # select a variant by indexing
@@ -43,7 +43,7 @@ variants = bfile.fetch('21', 10000, 5000000)
 #### API documentation
 
 ``` py
-class BgenFile(path, sample_path='', delay_parsing=False)
+class BgenReader(path, sample_path='', delay_parsing=False)
     # opens a bgen file. If a bgenix index exists for the file, the index file
     # will be opened automatically for quicker access of specific variants.
     Arguments:

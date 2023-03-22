@@ -34,13 +34,13 @@ void write_nvariants(std::ofstream &handle, std::uint32_t &offset, std::uint32_t
 
 // when the object is removed, finally write the number of variants, and where 
 // the variant data starts
-BgenWriter::~BgenWriter() {
+CppBgenWriter::~CppBgenWriter() {
   write_variants_offset(handle, variant_data_offset);
   write_nvariants(handle, nvars_offset, n_variants);
   handle.close();
 }
 
-void BgenWriter::write_header(std::string &free_data,
+void CppBgenWriter::write_header(std::string &free_data,
                               std::vector<std::string> &samples) {
   std::uint32_t header_len = 20 + free_data.size();
   variant_data_offset = header_len;
@@ -71,7 +71,7 @@ void BgenWriter::write_header(std::string &free_data,
   handle.write(reinterpret_cast<char *>(&flags), 4);
   }
 
-void BgenWriter::add_samples(std::vector<std::string> &samples) {
+void CppBgenWriter::add_samples(std::vector<std::string> &samples) {
   if (samples.size() == 0) { return; }
 
   if (samples.size() != n_samples) {
@@ -99,7 +99,7 @@ void BgenWriter::add_samples(std::vector<std::string> &samples) {
   write_variants_offset(handle, variant_data_offset);
 }
 
-void BgenWriter::write_variant_header(std::string &varid,
+void CppBgenWriter::write_variant_header(std::string &varid,
                              std::string &rsid,
                              std::string &chrom,
                              std::uint32_t &pos,
@@ -462,7 +462,7 @@ std::vector<std::uint8_t> encode_layout2(
   return encoded;
 }
 
-void BgenWriter::add_genotype_data(std::uint16_t n_alleles,
+void CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
                                    double *genotypes,
                                    std::uint32_t geno_len,
                                    std::uint8_t ploidy,
@@ -473,7 +473,7 @@ void BgenWriter::add_genotype_data(std::uint16_t n_alleles,
   add_genotype_data(n_alleles, genotypes, geno_len, ploidy_vector, ploidy, ploidy, phased, bit_depth);
 }
 
-void BgenWriter::add_genotype_data(std::uint16_t n_alleles,
+void CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
                                    double *genotypes,
                                    std::uint32_t geno_len,
                                    std::vector<uint8_t> &ploidy,
