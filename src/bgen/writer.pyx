@@ -51,8 +51,8 @@ cdef class BgenWriter:
     cdef CppBgenWriter * thisptr
     cdef string path
     cdef bool is_open
-    def __cinit__(self, path, uint32_t n_samples, string free_data, 
-                  compression='zstd', layout=2, vector[string] samples=[]):
+    def __cinit__(self, path, uint32_t n_samples, samples=[], compression='zstd',
+                  layout=2, metadata=None):
         if isinstance(path, Path):
             path = str(path)
         
@@ -64,30 +64,38 @@ cdef class BgenWriter:
             compress_flag = 1
         elif compression == 'zstd':
             compress_flag = 2
+        
+        # re-define variables into cpp objects
+        cdef string _metadata = metadata.encode('utf8') if metadata is not None else b''
+        cdef vector[string] _samples = [x.encode('utf8') for x in samples]
 
         self.path = path.encode('utf8')
         
         logging.debug(f'opening CppBgenWriter from {self.path.decode("utf")}')
-        self.thisptr = new CppBgenWriter(self.path, n_samples, free_data, compress_flag, layout, samples)
+        self.thisptr = new CppBgenWriter(self.path, n_samples, _metadata, compress_flag, layout, _samples)
         self.is_open = True
     
     def __dealloc__(self):
-        if self.is_open:
-          del self.thisptr
-        self.is_open = False
+        self.close()
     
     def __repr__(self):
         return f'BgenFile("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
     
-    def add_variant(self, string varid, string rsid, string chrom, uint32_t pos, 
-                    vector[string] alleles, uint32_t n_samples, 
-                    double[:,:] genotypes, vector[uint8_t] ploidy=[], 
-                    bool phased=False, uint8_t bit_depth=8):
+    def add_variant(self, varid, rsid, chrom, uint32_t pos, alleles, 
+                    uint32_t n_samples, double[:,:] genotypes, 
+                    vector[uint8_t] ploidy=[], bool phased=False, uint8_t bit_depth=8):
         ''' get list of samples in the bgen file
         '''
+
+        # re-define variables into cpp objects
+        cdef string _varid = varid.encode('utf8')
+        cdef string _rsid = rsid.encode('utf8')
+        cdef string _chrom = chrom.encode('utf8')
+        cdef vector[string] _alleles = [x.encode('utf8') for x in alleles]
+
         if not self.is_open:
             raise ValueError("bgen file is closed")
-        self.thisptr.write_variant_header(varid, rsid, chrom, pos, alleles, n_samples)
+        self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles, n_samples)
 
         cdef uint32_t ploidy_n
         cdef uint32_t ploidy_min, ploidy_max
@@ -95,11 +103,11 @@ cdef class BgenWriter:
         if ploidy.size() == 0:
             ploidy_n = 2
             if phased:
-                ploidy_n = len(genotypes[0, ]) // alleles.size()
-            self.thisptr.add_genotype_data(alleles.size(), &genotypes[0, 0], 
+                ploidy_n = len(genotypes[0, ]) // _alleles.size()
+            self.thisptr.add_genotype_data(_alleles.size(), &genotypes[0, 0], 
                                            geno_len, ploidy_n, phased, bit_depth)
         else:
-            self.thisptr.add_genotype_data(alleles.size(), &genotypes[0, 0], 
+            self.thisptr.add_genotype_data(_alleles.size(), &genotypes[0, 0], 
                                            geno_len, ploidy,  min(ploidy), 
                                            max(ploidy), phased, bit_depth)
 
@@ -111,4 +119,6 @@ cdef class BgenWriter:
         return False
     
     def close(self):
-        self.__dealloc__()
+        if self.is_open:
+          del self.thisptr
+        self.is_open = False
