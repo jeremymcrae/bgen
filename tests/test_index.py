@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from bgen.reader import BgenFile
+from bgen import BgenReader
 from bgen.index import Index
 
 from tests.utils import load_gen_data
@@ -24,10 +24,10 @@ class TestBgenIndex(unittest.TestCase):
     def test_index_opens(self):
         ''' loads index when available
         '''
-        bfile = BgenFile(self.folder / 'example.15bits.bgen')
+        bfile = BgenReader(self.folder / 'example.15bits.bgen')
         self.assertFalse(bfile._check_for_index(str(self.folder / 'example.15bits.bgen')))
         
-        bfile = BgenFile(self.folder / 'example.16bits.bgen')
+        bfile = BgenReader(self.folder / 'example.16bits.bgen')
         self.assertTrue(bfile._check_for_index(str(self.folder / 'example.16bits.bgen')))
     
     def test_index_fetch(self):

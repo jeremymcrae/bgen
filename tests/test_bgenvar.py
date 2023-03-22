@@ -5,7 +5,7 @@ import pickle
 
 import numpy as np
 
-from bgen.reader import BgenFile
+from bgen import BgenReader
 
 class TestBgenVar(unittest.TestCase):
     ''' class to make sure BgenVar works correctly
@@ -20,7 +20,7 @@ class TestBgenVar(unittest.TestCase):
           ''' test we calculate minor_allele_dosage correctly
           '''
           path = self.folder / 'example.16bits.zstd.bgen'
-          with BgenFile(path) as bfile:
+          with BgenReader(path) as bfile:
               for var in bfile:
                   dose = var.minor_allele_dosage
                   probs = var.probabilities
@@ -40,7 +40,7 @@ class TestBgenVar(unittest.TestCase):
           ''' test we calculate alt_dosage correctly
           '''
           path = self.folder / 'example.16bits.zstd.bgen'
-          with BgenFile(path, delay_parsing=True) as bfile:
+          with BgenReader(path, delay_parsing=True) as bfile:
               for var in bfile:
                   dose = var.alt_dosage
                   probs = var.probabilities
@@ -58,7 +58,7 @@ class TestBgenVar(unittest.TestCase):
         ''' test we calculate minor_allele_dosage correctly with the fast path
         '''
         path = self.folder / 'example.8bits.bgen'
-        with BgenFile(path) as bfile:
+        with BgenReader(path) as bfile:
             for var in bfile:
                 dose = var.minor_allele_dosage
                 probs = var.probabilities
@@ -78,7 +78,7 @@ class TestBgenVar(unittest.TestCase):
         ''' test we calculate minor_allele_dosage correctly with version 1 bgens
         '''
         path = self.folder / 'example.v11.bgen'
-        with BgenFile(path) as bfile:
+        with BgenReader(path) as bfile:
             for var in bfile:
                 dose = var.minor_allele_dosage
                 probs = var.probabilities
@@ -98,7 +98,7 @@ class TestBgenVar(unittest.TestCase):
         ''' BgenVar should pickle and unpickle
         '''
         path = self.folder / 'example.16bits.zstd.bgen'
-        with BgenFile(path) as bfile:
+        with BgenReader(path) as bfile:
             for var in bfile:
                 # this checks that we can pickle and unpickle a BgenVar
                 pickled = pickle.dumps(var)
