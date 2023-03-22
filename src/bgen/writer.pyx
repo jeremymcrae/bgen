@@ -84,7 +84,7 @@ cdef class BgenWriter:
     def add_variant(self, varid, rsid, chrom, uint32_t pos, alleles, 
                     uint32_t n_samples, double[:,:] genotypes, 
                     vector[uint8_t] ploidy=[], bool phased=False, uint8_t bit_depth=8):
-        ''' get list of samples in the bgen file
+        ''' add a variant to the bgen file on disk
         '''
 
         # re-define variables into cpp objects
