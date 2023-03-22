@@ -5,9 +5,6 @@
 #include <stdexcept>
 #include <vector>
 
-#include <bitset>
-#include <iostream>
-
 #include "zstd/lib/zstd.h"
 #include <zlib.h>
 
@@ -410,7 +407,6 @@ std::vector<std::uint8_t> encode_layout2(
   if (phased) {
     max_probs *= n_alleles;
   }
-  std::cout << "max_probs: " << max_probs << std::endl;
   if ((geno_len / max_probs) != n_samples) {
     throw std::invalid_argument("genotypes and ploidy lengths don't match");
   }
