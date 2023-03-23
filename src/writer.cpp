@@ -396,7 +396,7 @@ std::vector<std::uint8_t> encode_layout2(
                     std::uint16_t n_alleles,
                     double *genotypes,
                     std::uint32_t geno_len,
-                    std::vector<uint8_t> &ploidy,
+                    uint8_t *ploidy,
                     std::uint8_t min_ploidy,
                     std::uint8_t max_ploidy,
                     bool phased,
@@ -437,8 +437,8 @@ std::vector<std::uint8_t> encode_layout2(
     std::memset(&encoded[i], max_ploidy, n_samples);
     i += n_samples;
   } else {
-    for (auto &x : ploidy) {
-      encoded[i] = x;
+    for (size_t j=0; j<n_samples; j++) {
+      encoded[i] = ploidy[j];
       i += 1;
     }
   }

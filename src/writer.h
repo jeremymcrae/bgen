@@ -34,26 +34,26 @@ public:
   void write_header(std::string &free_data,
                     std::vector<std::string> &samples);
   void add_samples(std::vector<std::string> &samples);
-  void write_variant_header(std::string &varid,
-                            std::string &rsid,
-                            std::string &chrom,
-                            std::uint32_t &pos,
-                            std::vector<std::string> &alleles,
-                            std::uint32_t _n_samples);
-  void add_genotype_data(std::uint16_t n_alleles,
-                         double *genotypes,
-                         std::uint32_t geno_len,
-                         std::uint8_t ploidy = 2,
-                         bool phased = 0,
-                         std::uint8_t bit_depth = 8);
-  void add_genotype_data(std::uint16_t n_alleles,
-                         double *genotypes,
-                         std::uint32_t geno_len,
-                         std::vector<uint8_t> &ploidy,
-                         std::uint8_t min_ploidy = 2,
-                         std::uint8_t max_ploidy = 2,
-                         bool phased = 0,
-                         std::uint8_t bit_depth = 8);
+  std::uint64_t write_variant_header(std::string &varid,
+                                     std::string &rsid,
+                                     std::string &chrom,
+                                     std::uint32_t &pos,
+                                     std::vector<std::string> &alleles,
+                                     std::uint32_t _n_samples);
+  std::uint64_t add_genotype_data(std::uint16_t n_alleles,
+                                  double *genotypes,
+                                  std::uint32_t geno_len,
+                                  std::uint8_t ploidy = 2,
+                                  bool phased = 0,
+                                  std::uint8_t bit_depth = 8);
+  std::uint64_t add_genotype_data(std::uint16_t n_alleles,
+                                  double *genotypes,
+                                  std::uint32_t geno_len,
+                                  uint8_t *ploidy,
+                                  std::uint8_t min_ploidy = 2,
+                                  std::uint8_t max_ploidy = 2,
+                                  bool phased = 0,
+                                  std::uint8_t bit_depth = 8);
 };
 
 } // namespace bgen

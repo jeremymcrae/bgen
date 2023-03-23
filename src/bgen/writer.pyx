@@ -130,8 +130,23 @@ cdef class BgenWriter:
     
     def add_variant(self, varid, rsid, chrom, uint32_t pos, alleles, 
                     uint32_t n_samples, double[:,:] genotypes, 
-                    vector[uint8_t] ploidy=[], bool phased=False, uint8_t bit_depth=8):
+                    ploidy=2, bool phased=False, uint8_t bit_depth=8):
         ''' add a variant to the bgen file on disk
+
+        Args:
+            varid: variant ID
+            rsid: reference SNP ID
+            chrom: chromosome the variant is on
+            pos: nucleotide position of the variant
+            alleles: list of allele strings
+            n_samples: number of samples 
+            genotypes: numpy array of genotype proabilities, ordered as per the
+                bgen samples.
+            ploidy: integer for constant ploidy, or numpy array of ploidy values per 
+                sample, in same order as genotypes
+            phased: whether the genotypes are for phased data or not
+            bit_depth: interger from 1-32 (inclusive) for how many bits to store
+                each genotype in.
         '''
 
         # re-define variables into cpp objects
@@ -144,8 +159,16 @@ cdef class BgenWriter:
             raise ValueError("bgen file is closed")
         var_offset = self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles, n_samples)
 
-        cdef uint32_t ploidy_n
-        cdef uint32_t ploidy_min, ploidy_max
+        # determine ploidy levels
+        cdef uint32_t ploidy_n=0
+        cdef uint8_t[:] ploidy_arr = np.array([], dtype=np.uint8)
+        if isinstance(ploidy, int):
+            ploidy_n = ploidy
+        elif isinstance(ploidy, np.ndarray):
+            ploidy_arr = ploidy
+        else:
+            raise ValueError('ploidy must be either integer, or numpy array of integers')
+        
         cdef geno_len = genotypes.shape[0] * genotypes.shape[1]
         if len(ploidy_arr) == 0:
             end_offset = self.thisptr.add_genotype_data(_alleles.size(), &genotypes[0, 0], 
