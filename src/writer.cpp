@@ -75,7 +75,7 @@ void CppBgenWriter::add_samples(std::vector<std::string> &samples) {
     throw std::invalid_argument("samples vector length doesn't match the sample count in file");
   }
 
-  // count the number of chanaracters across all sample IDs
+  // count the number of characters across all sample IDs
   std::uint32_t nchars = 0;
   for (auto &x : samples) { nchars += x.size(); }
 
