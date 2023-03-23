@@ -368,7 +368,7 @@ cdef class BgenReader:
       
       hdr = self.thisptr.header
       return BgenHeader(hdr.offset, hdr.nvariants, hdr.nsamples,
-          hdr.compression, hdr.compression, hdr.has_sample_ids)
+          hdr.compression, hdr.layout, hdr.has_sample_ids, hdr.extra)
     
     @property
     def samples(self):
