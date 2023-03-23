@@ -365,7 +365,7 @@ std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
     }
     // phased data is received in n_alleles * n_ploidy values, but is stored in
     // n_alleles * (n_ploidy - 1) values, where n_ploidy can differ per person.
-    for (std::uint32_t k = 0; k < _ploid; k++) {
+    for (std::uint32_t k = 0; k < (std::uint32_t)_ploid; k++) {
       // repeat for each haplotype
       sample_max = get_sample_max(genotypes, i, n_probs, missing);
       for (std::uint32_t j = 0; j < (n_probs - 1); j++) {
