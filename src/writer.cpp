@@ -184,13 +184,13 @@ std::vector<char> compress(std::vector<std::uint8_t> &uncompressed, std::uint32_
 
 bool missing_genotypes(double *genotypes, std::uint32_t size) {
   std::uint16_t nan_count = 0;
-    for (std::uint32_t i=0; i<size; i++) {
-      nan_count += std::isnan(genotypes[i]);
-    }
-    if ((nan_count > 0) && (nan_count < size)) {
-      throw std::invalid_argument("samples with any missing genotype must encode all as missing (i.e. float(nan))");
-    }
-    return nan_count == size;
+  for (std::uint32_t i=0; i<size; i++) {
+    nan_count += std::isnan(genotypes[i]);
+  }
+  if ((nan_count > 0) && (nan_count < size)) {
+    throw std::invalid_argument("samples with any missing genotype must encode all as missing (i.e. float(nan))");
+  }
+  return nan_count == size;
 }
 
 std::vector<std::uint8_t> encode_layout1(
