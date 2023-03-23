@@ -303,7 +303,7 @@ std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
   double g;
   for (std::uint32_t i=0; i<(n_samples*max_probs); i+= max_probs) {
     if (!constant_ploidy) {
-      _ploid = (int)(encoded[ploidy_offset + (i / max_probs)] |= 63);
+      _ploid = (int)(encoded[ploidy_offset + (i / max_probs)] &= 63);
       n_probs = get_max_probs(_ploid, _n_alleles, phased);
     } else {
       n_probs = max_probs;
@@ -355,7 +355,7 @@ std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
   std::uint32_t sample_idx=0;
   while (i < (n_samples * max_probs * max_ploidy)) {
     if (!constant_ploidy) {
-      _ploid = (int)(encoded[ploidy_offset + sample_idx] |= 63);
+      _ploid = (int)(encoded[ploidy_offset + sample_idx] &= 63);
       n_probs = get_max_probs(_ploid, _n_alleles, phased);
     } else {
       _ploid = max_ploidy;
@@ -385,7 +385,7 @@ std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
       }
       i += 1;
     }
-    i += max_probs - n_probs;
+    i += (max_probs * max_ploidy) - (n_probs * _ploid);
     sample_idx += 1;
   }
   return genotype_offset + (bit_idx / 8);
@@ -407,7 +407,7 @@ std::vector<std::uint8_t> encode_layout2(
   int _n_alleles = (int)n_alleles;
   std::uint32_t max_probs = get_max_probs(_max_ploid, _n_alleles, phased);
   if (phased) {
-    max_probs *= n_alleles;
+    max_probs *= max_ploidy;
   }
   if ((geno_len / max_probs) != n_samples) {
     throw std::invalid_argument("genotypes and ploidy lengths don't match");
