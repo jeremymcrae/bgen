@@ -207,7 +207,7 @@ class TestBgenWriter(unittest.TestCase):
                 probs = x.probabilities
                 self.assertTrue(probs_close(geno[:2, :-1], probs[:2, :-1], bit_depth))
 
-    def  test_phased_data(self):
+    def test_phased_data(self):
         '''checking writing phased data'''
         bfile = BgenWriter(self.path, 3, samples=['a', 'b', 'c'])
         geno = np.array([[0.1, 0.9, 0.5, 0.5], 
