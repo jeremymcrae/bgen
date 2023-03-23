@@ -96,12 +96,13 @@ void CppBgenWriter::add_samples(std::vector<std::string> &samples) {
   write_variants_offset(handle, variant_data_offset);
 }
 
-void CppBgenWriter::write_variant_header(std::string &varid,
-                             std::string &rsid,
-                             std::string &chrom,
-                             std::uint32_t &pos,
-                             std::vector<std::string> &alleles,
-                             std::uint32_t _n_samples) {
+std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
+                                                  std::string &rsid,
+                                                  std::string &chrom,
+                                                  std::uint32_t &pos,
+                                                  std::vector<std::string> &alleles,
+                                                  std::uint32_t _n_samples) {
+  std::uint64_t var_offset = handle.tellp();
   n_variants += 1;
   if (_n_samples != n_samples) {
     throw std::invalid_argument("number of samples doesn't match sample count in file");
@@ -138,6 +139,7 @@ void CppBgenWriter::write_variant_header(std::string &varid,
     handle << x;
   }
   handle.flush();
+  return var_offset;
 }
 
 // uncompress a char array with zlib
@@ -458,25 +460,25 @@ std::vector<std::uint8_t> encode_layout2(
   return encoded;
 }
 
-void CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
-                                   double *genotypes,
-                                   std::uint32_t geno_len,
-                                   std::uint8_t ploidy,
-                                   bool phased,
-                                   std::uint8_t bit_depth)
+std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
+                                               double *genotypes,
+                                               std::uint32_t geno_len,
+                                               std::uint8_t ploidy,
+                                               bool phased,
+                                               std::uint8_t bit_depth)
 {
-  std::vector<std::uint8_t> ploidy_vector;
-  add_genotype_data(n_alleles, genotypes, geno_len, ploidy_vector, ploidy, ploidy, phased, bit_depth);
+  std::uint8_t *ploidy_vector;
+  return add_genotype_data(n_alleles, genotypes, geno_len, ploidy_vector, ploidy, ploidy, phased, bit_depth);
 }
 
-void CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
-                                   double *genotypes,
-                                   std::uint32_t geno_len,
-                                   std::vector<uint8_t> &ploidy,
-                                   std::uint8_t min_ploidy,
-                                   std::uint8_t max_ploidy,
-                                   bool phased,
-                                   std::uint8_t bit_depth)
+std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
+                                               double *genotypes,
+                                               std::uint32_t geno_len,
+                                               uint8_t *ploidy,
+                                               std::uint8_t min_ploidy,
+                                               std::uint8_t max_ploidy,
+                                               bool phased,
+                                               std::uint8_t bit_depth)
 {
   if ((layout == 1) && (compression == 2)) {
     throw std::invalid_argument("you cannot use zstd compression with layout 1");
@@ -528,6 +530,7 @@ void CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
   } else {
     throw std::invalid_argument("layout must be 1 or 2");
   }
+  return handle.tellp();
 }
 
 }  // namespace bgen

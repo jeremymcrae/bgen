@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+import sqlite3
 
 from libcpp cimport bool
 from libcpp.string cimport string
@@ -35,15 +36,59 @@ cdef extern from 'writer.h' namespace 'bgen':
         # declare class constructor and methods
         CppBgenWriter(string &path, uint32_t n_samples, string &free_data, 
                    uint32_t compression, uint32_t layout, vector[string] &samples) except +
-        void write_variant_header(string &varid, string &rsid, string &chrom, 
+        uint64_t write_variant_header(string &varid, string &rsid, string &chrom, 
                         uint32_t &pos, vector[string] &alleles, uint32_t _n_samples) except +
-        void add_genotype_data(uint16_t n_alleles,
+        uint64_t add_genotype_data(uint16_t n_alleles,
                          double *genotypes, uint32_t geno_len, uint8_t ploidy,
                          bool phased, uint8_t bit_depth) except +
-        void add_genotype_data(uint16_t n_alleles,
-                         double *genotypes, uint32_t geno_len, vector[uint8_t] &ploidy,
+        uint64_t add_genotype_data(uint16_t n_alleles,
+                         double *genotypes, uint32_t geno_len, uint8_t *ploidy,
                          uint32_t min_ploidy, uint32_t max_ploidy,
                          bool phased, uint8_t bit_depth) except +
+
+class Indexer:
+    ''' class to automatically index bgen files as they are being constructed
+    '''
+    def __init__(self, bgen_path):
+        index_path = Path(str(bgen_path + '.bgi'))
+        if index_path.exists():
+            index_path.unlink()
+        self.conn = sqlite3.connect(index_path)
+        self.create_tables()
+    
+    def create_tables(self):
+        query = '''CREATE TABLE Metadata (
+                    filename TEXT NOT NULL, 
+                    file_size INT NOT NULL, 
+                    last_write_time INT NOT NULL, 
+                    first_1000_bytes BLOB NOT NULL, 
+                    index_creation_time INT NOT NULL)'''
+        self.conn.execute(query)
+        query = '''CREATE TABLE Variant (
+                    chromosome TEXT NOT NULL,
+                    position INT NOT NULL,
+                    rsid TEXT NOT NULL,
+                    number_of_alleles INT NOT NULL,
+                    allele1 TEXT NOT NULL,
+                    allele2 TEXT NULL,
+                    file_start_position INT NOT NULL,
+                    size_in_bytes INT NOT NULL,
+                PRIMARY KEY (chromosome, position, rsid, allele1, allele2, file_start_position))
+                WITHOUT ROWID'''
+        self.conn.execute(query)
+        
+        # index the Variant table
+        self.conn.execute('CREATE INDEX chrom_index on Variant(chromosome)')
+        self.conn.execute('CREATE INDEX pos_index on Variant(position)')
+        self.conn.execute('CREATE INDEX rsid_index on Variant(rsid)')
+    
+    def add_variant(self, chrom, pos, rsid, alleles, offset, size):
+        query = '''INSERT INTO Variant VALUES (?, ?, ?, ?, ?, ?, ?, ?)'''
+        params = (chrom, pos, rsid, len(alleles), alleles[0], alleles[1], offset, size)
+        self.conn.execute(query, params)
+    
+    def close(self):
+        self.conn.commit()
 
 cdef class BgenWriter:
     ''' class to open bgen files from disk, and access variant data within
@@ -51,6 +96,7 @@ cdef class BgenWriter:
     cdef CppBgenWriter * thisptr
     cdef string path
     cdef bool is_open
+    cdef object indexer
     def __cinit__(self, path, uint32_t n_samples, samples=[], compression='zstd',
                   layout=2, metadata=None):
         if isinstance(path, Path):
@@ -74,6 +120,7 @@ cdef class BgenWriter:
         logging.debug(f'opening CppBgenWriter from {self.path.decode("utf")}')
         self.thisptr = new CppBgenWriter(self.path, n_samples, _metadata, compress_flag, layout, _samples)
         self.is_open = True
+        self.indexer = Indexer(path)
     
     def __dealloc__(self):
         self.close()
@@ -95,21 +142,21 @@ cdef class BgenWriter:
 
         if not self.is_open:
             raise ValueError("bgen file is closed")
-        self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles, n_samples)
+        var_offset = self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles, n_samples)
 
         cdef uint32_t ploidy_n
         cdef uint32_t ploidy_min, ploidy_max
         cdef geno_len = genotypes.shape[0] * genotypes.shape[1]
-        if ploidy.size() == 0:
-            ploidy_n = 2
-            if phased:
-                ploidy_n = len(genotypes[0, ]) // _alleles.size()
-            self.thisptr.add_genotype_data(_alleles.size(), &genotypes[0, 0], 
+        if len(ploidy_arr) == 0:
+            end_offset = self.thisptr.add_genotype_data(_alleles.size(), &genotypes[0, 0], 
                                            geno_len, ploidy_n, phased, bit_depth)
         else:
-            self.thisptr.add_genotype_data(_alleles.size(), &genotypes[0, 0], 
-                                           geno_len, ploidy,  min(ploidy), 
+            end_offset = self.thisptr.add_genotype_data(_alleles.size(), &genotypes[0, 0], 
+                                           geno_len, &ploidy_arr[0], min(ploidy), 
                                            max(ploidy), phased, bit_depth)
+        
+        self.indexer.add_variant(chrom, int(pos), rsid, alleles, var_offset, 
+                                 end_offset - var_offset)
 
     def __enter__(self):
         return self
@@ -121,4 +168,5 @@ cdef class BgenWriter:
     def close(self):
         if self.is_open:
           del self.thisptr
+        self.indexer.close()
         self.is_open = False
