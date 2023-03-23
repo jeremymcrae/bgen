@@ -16,6 +16,11 @@ def probs_close(orig, updat, bit_depth):
     We lose some precision when storing genotype proabilites, dependent on the
     bit depth we select. This accounts for the variable bit depth.
     '''
+    # fix the nans from differing ploidies
+    orig = orig.copy()
+    orig[np.isnan(orig)] = 1
+    updat[np.isnan(updat)] = 1
+
     # check abolute error (accounting for bit depth)
     max_error = 1 / ((2 ** bit_depth) - 1)
     matched = (abs(orig - updat) < max_error)
@@ -221,3 +226,39 @@ class TestBgenWriter(unittest.TestCase):
         for x in bfile:
             probs = x.probabilities
             self.assertTrue(probs_close(geno[:2, :-1], probs[:2, :-1], bit_depth=8))
+    
+    def test_ploidy_unphased(self):
+        ''' check we can write unphased variants with variable ploidy per sample
+        '''
+        bfile = BgenWriter(self.path, 3, samples=['a', 'b', 'c'])
+        ploidy = np.array([1, 2, 3], dtype=np.uint8)
+        geno = np.array([[0.1, 0.9, float('nan'), float('nan')], 
+                        [0.2, 0.4, 0.4, float('nan')],
+                        [float('nan'), float('nan'), float('nan'), float('nan')]])
+        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno, 
+                            ploidy=ploidy)
+        bfile.close()
+
+        bfile = BgenReader(self.path, delay_parsing=True)
+        for x in bfile:
+            probs = x.probabilities
+            self.assertTrue(probs_close(geno, probs, bit_depth=8))
+        
+    def test_ploidy_phased(self):
+        ''' check we can write phased variants with variable ploidy per sample
+        '''
+        bfile = BgenWriter(self.path, 4, samples=['a', 'b', 'c', 'd'])
+        ploidy = np.array([1, 2, 3, 3], dtype=np.uint8)
+        geno = np.array([[0.1, 0.9, float('nan'), float('nan'), float('nan'), float('nan')], 
+                         [0.2, 0.8, 0.5, 0.5, float('nan'), float('nan')],
+                         [float('nan'), float('nan'), float('nan'), float('nan'), float('nan'), float('nan')],
+                         [0.3, 0.7, 0.2, 0.8, 1, 0],
+                         ])
+        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 4, geno, 
+                            ploidy=ploidy, phased=1)
+        bfile.close()
+
+        bfile = BgenReader(self.path, delay_parsing=True)
+        for x in bfile:
+            probs = x.probabilities
+            self.assertTrue(probs_close(geno, probs, bit_depth=8))
