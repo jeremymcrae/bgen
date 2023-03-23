@@ -67,6 +67,7 @@ cdef extern from 'header.h' namespace 'bgen':
         uint32_t nsamples
         int compression
         int layout
+        string extra
         bool has_sample_ids
 
 cdef extern from 'reader.h' namespace 'bgen':
@@ -111,25 +112,46 @@ cdef class IFStream:
 cdef class BgenHeader:
     ''' holds information about the Bgen file, obtained from the intial header.
     '''
-    cdef uint32_t offset
-    cdef uint32_t nvariants
-    cdef uint32_t nsamples
-    cdef int compression
-    cdef int layout
-    cdef bool has_sample_ids
+    cdef uint32_t _offset
+    cdef uint32_t _nvariants
+    cdef uint32_t _nsamples
+    cdef int _compression
+    cdef int _layout
+    cdef bool _has_sample_ids
+    cdef string _metadata
+    cdef object compress_formats
     def __cinit__(self, uint32_t offset, uint32_t nvariants, uint32_t nsamples,
-            int compression, int layout, bool has_sample_ids):
-        self.offset = offset
-        self.nvariants = nvariants
-        self.nsamples = nsamples
-        self.compression = compression
-        self.layout = layout
-        self.has_sample_ids = has_sample_ids
+            int compression, int layout, bool has_sample_ids, string metadata):
+        self._offset = offset
+        self._nvariants = nvariants
+        self._nsamples = nsamples
+        self._compression = compression
+        self._layout = layout
+        self._has_sample_ids = has_sample_ids
+        self._metadata = metadata
+        self.compress_formats = {0: None, 1: 'zlib', 2: 'zstd'}
     
     def __repr__(self):
         return f'BgenHeader(offset={self.offset}, nvariants={self.nvariants}, ' \
             f'nsamples={self.nsamples}, compression={self.compression}, ' \
             f'layout={self.layout}, has_sample_ids={self.has_sample_ids})'
+    
+    @property
+    def offset(self): return self._offset
+    @property
+    def nsamples(self): return self._nsamples
+    @property
+    def nvariants(self): return self._nvariants
+    @property
+    def compression(self): return [None, 'zlib', 'zstd'][self._compression]
+    @property
+    def compression(self): return self.compress_formats[self._compression]
+    @property
+    def layout(self): return self._layout
+    @property
+    def has_sample_ids(self): return self._has_sample_ids
+    @property
+    def metadata(self): return self._metadata.decode('utf8')
 
 cdef class BgenVar:
     ''' holds data for a Variant from a bgen file
