@@ -55,6 +55,7 @@ class TestBgenWriter(unittest.TestCase):
         ''' test basic BgenWriter file without variants
         '''
         bfile = BgenWriter(self.path, n_samples=3, samples=['a', 'b', 'c'])
+        bfile.close()
         bfile = BgenReader(self.path, delay_parsing=True)
 
         # check all the header attributes look ok
@@ -115,6 +116,7 @@ class TestBgenWriter(unittest.TestCase):
         geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25], [0.1, 0.2, 0.7]])
         bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno,)
         bfile.add_variant('var2', 'rs2', 'chr1', 11, ['C', 'T'], 3, geno / 2)
+        bfile.close()
         
         bfile = BgenReader(self.path, delay_parsing=True)
         self.assertEqual(bfile.samples, sample_ids)
@@ -148,6 +150,7 @@ class TestBgenWriter(unittest.TestCase):
         bit_depth = 16
         bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno, bit_depth=bit_depth)
         bfile.add_variant('var2', 'rs2', 'chr1', 11, ['C', 'T'], 3, geno / 2, bit_depth=bit_depth)
+        bfile.close()
         
         bfile = BgenReader(self.path, delay_parsing=True)
         self.assertEqual(bfile.samples, ['a', 'b', 'c'])
