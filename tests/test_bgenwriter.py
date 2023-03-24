@@ -155,14 +155,14 @@ class TestBgenWriter(unittest.TestCase):
         # check the genotype probabilities are correct, but last sample is all nan
         var = next(bfile)
         self.assertTrue(np.isnan(var.probabilities[2, :]).all())
-        self.assertTrue(probs_close(geno[:2, :-1], var.probabilities[:2, :-1], bit_depth))
+        self.assertTrue(probs_close(geno[:, :-1], var.probabilities[:, :-1], bit_depth))
         
         # and check the second variant works
         var = next(bfile)
         # adjust the genotype probabilities for the second variant
         geno = geno / 2
         geno[:, -1] = 1 - geno[:, :-1].sum(axis=1)
-        self.assertTrue(probs_close(geno[:2, :-1], var.probabilities[:2, :-1], bit_depth))
+        self.assertTrue(probs_close(geno[:, :-1], var.probabilities[:, :-1], bit_depth))
 
         # we hit the end after two variants
         with self.assertRaises(StopIteration):
@@ -192,7 +192,7 @@ class TestBgenWriter(unittest.TestCase):
                 self.assertEqual(bfile.header.layout, layout)
                 for x in bfile:
                     probs = x.probabilities
-                    self.assertTrue(probs_close(geno[:2, :-1], probs[:2, :-1], 8))
+                    self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], 8))
 
     def test_bit_depths(self):
         ''' check writing to different bit depths works
@@ -210,7 +210,34 @@ class TestBgenWriter(unittest.TestCase):
             bfile = BgenReader(self.path, delay_parsing=True)
             for x in bfile:
                 probs = x.probabilities
-                self.assertTrue(probs_close(geno[:2, :-1], probs[:2, :-1], bit_depth))
+                self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth))
+    
+    def test_more_alleles(self):
+        ''' check writing to different bit depths works
+        '''
+        geno1 = np.array([[0.1, 0.8, 0.1],
+                        [0.5, 0.25, 0.25],
+                        [float('nan'), float('nan'), float('nan')],
+                        ])
+        geno2 = np.array([[0.1, 0.6, 0, 0, 0.1, 0.2],
+                        [0.1, 0.2, 0.1, 0.2, 0.1, 0.3],
+                        [float('nan'), float('nan'), float('nan'), float('nan'), float('nan'), float('nan')],
+                        ])
+        bit_depth = 8
+        bfile = BgenWriter(self.path, 3, samples=['a', 'b', 'c'])
+        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno1,
+                        bit_depth=bit_depth)
+        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C', 'T'], 3, geno2,
+                        bit_depth=bit_depth)
+        bfile.close()
+
+        bfile = BgenReader(self.path, delay_parsing=True)
+        x = next(bfile)
+        self.assertTrue(probs_close(geno1[:, :-1], x.probabilities[:, :-1], bit_depth))
+
+        x = next(bfile)
+        self.assertEqual(len(x.alleles), 3)
+        self.assertTrue(probs_close(geno2[:, :-1], x.probabilities[:, :-1], bit_depth))
 
     def test_phased_data(self):
         '''checking writing phased data'''
@@ -225,7 +252,7 @@ class TestBgenWriter(unittest.TestCase):
         bfile = BgenReader(self.path, delay_parsing=True)
         for x in bfile:
             probs = x.probabilities
-            self.assertTrue(probs_close(geno[:2, :-1], probs[:2, :-1], bit_depth=8))
+            self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth=8))
     
     def test_ploidy_unphased(self):
         ''' check we can write unphased variants with variable ploidy per sample
