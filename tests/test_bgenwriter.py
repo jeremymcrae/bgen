@@ -66,6 +66,7 @@ class TestBgenWriter(unittest.TestCase):
         self.assertEqual(bfile.header.layout, 2)
         self.assertTrue(bfile.header.has_sample_ids)
         self.assertEqual(bfile.header.metadata, '')
+        bfile._close()
 
         # check if we change the attributes, then we get the right data
         # bfile = BgenWriter(self.path, n_samples=4, samples=['a', 'b', 'c', 'd'], 
@@ -193,6 +194,7 @@ class TestBgenWriter(unittest.TestCase):
                 for x in bfile:
                     probs = x.probabilities
                     self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], 8))
+                bfile._close()
 
     def test_bit_depths(self):
         ''' check writing to different bit depths works
@@ -211,6 +213,7 @@ class TestBgenWriter(unittest.TestCase):
             for x in bfile:
                 probs = x.probabilities
                 self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth))
+            bfile._close()
     
     def test_more_alleles(self):
         ''' check writing to different bit depths works
