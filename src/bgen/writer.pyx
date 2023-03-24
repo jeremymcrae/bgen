@@ -3,6 +3,8 @@
 import logging
 from pathlib import Path
 import sqlite3
+import sys
+import time
 
 from libcpp cimport bool
 from libcpp.string cimport string
@@ -54,6 +56,7 @@ class Indexer:
         if index_path.exists():
             index_path.unlink()
         self.conn = sqlite3.connect(index_path)
+        self.cur = self.conn.cursor()
         self.create_tables()
     
     def create_tables(self):
@@ -63,7 +66,7 @@ class Indexer:
                     last_write_time INT NOT NULL, 
                     first_1000_bytes BLOB NOT NULL, 
                     index_creation_time INT NOT NULL)'''
-        self.conn.execute(query)
+        self.cur.execute(query)
         query = '''CREATE TABLE Variant (
                     chromosome TEXT NOT NULL,
                     position INT NOT NULL,
@@ -75,21 +78,22 @@ class Indexer:
                     size_in_bytes INT NOT NULL,
                 PRIMARY KEY (chromosome, position, rsid, allele1, allele2, file_start_position))
                 WITHOUT ROWID'''
-        self.conn.execute(query)
+        self.cur.execute(query)
         
         # index the Variant table
-        self.conn.execute('CREATE INDEX chrom_index on Variant(chromosome)')
-        self.conn.execute('CREATE INDEX pos_index on Variant(position)')
-        self.conn.execute('CREATE INDEX rsid_index on Variant(rsid)')
+        self.cur.execute('CREATE INDEX chrom_index on Variant(chromosome)')
+        self.cur.execute('CREATE INDEX pos_index on Variant(position)')
+        self.cur.execute('CREATE INDEX rsid_index on Variant(rsid)')
     
     def add_variant(self, chrom, pos, rsid, alleles, offset, size):
         query = '''INSERT INTO Variant VALUES (?, ?, ?, ?, ?, ?, ?, ?)'''
         params = (chrom, pos, rsid, len(alleles), alleles[0], alleles[1], offset, size)
-        self.conn.execute(query, params)
+        self.cur.execute(query, params)
     
     def close(self):
         self.conn.commit()
-        self.conn.close()
+        if sys.platform == 'win32':
+            time.sleep(0.01)
 
 cdef class BgenWriter:
     ''' class to open bgen files from disk, and access variant data within
@@ -194,3 +198,5 @@ cdef class BgenWriter:
           del self.thisptr
         self.indexer.close()
         self.is_open = False
+        if sys.platform == 'win32':
+            time.sleep(0.01)
