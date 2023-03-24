@@ -89,6 +89,7 @@ class Indexer:
     
     def close(self):
         self.conn.commit()
+        self.conn.close()
 
 cdef class BgenWriter:
     ''' class to open bgen files from disk, and access variant data within
