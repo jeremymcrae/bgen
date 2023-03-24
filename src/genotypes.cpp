@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cassert>
 #include <cstring>
+#include <chrono>
+#include <thread>
 
 #if defined(__x86_64__)
   #include <immintrin.h>
@@ -369,6 +371,11 @@ float * Genotypes::parse_layout2(char * uncompressed, std::uint32_t & idx) {
   for (auto n: missing) {
     offset = max_probs * n;
     if (phased) {
+      // The following sleep is a crude hack. Without it, it segfaults on macos
+      // on x86-64 when assigning nans for the relevant missing probs. I don't
+      // understand why, since it only reads the ploidy values, which were set
+      // well upstream before this.
+      std::this_thread::sleep_for(std::chrono::nanoseconds(10));
       if (constant_ploidy) {
           offset *= k;
       } else {
