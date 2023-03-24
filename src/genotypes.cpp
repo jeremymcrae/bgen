@@ -370,7 +370,7 @@ float * Genotypes::parse_layout2(char * uncompressed, std::uint32_t & idx) {
     offset = max_probs * n;
     if (phased) {
       if (constant_ploidy) {
-          offset = max_probs * n * k;
+          offset *= k;
       } else {
         // if we don't have a constant ploidy, we need to get the prob offset by
         // checking all the ploidy values up to this sample.
