@@ -46,11 +46,14 @@ class TestBgenWriter(unittest.TestCase):
     '''
 
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.tmp = tempfile.TemporaryDirectory()
         self.tmpdir = Path(self.tmp.name)
     
     def tearDown(self):
-        self.tmp.cleanup()
+        try:
+            self.tmp.cleanup()
+        except:
+            pass
     
     def test_writing(self):
         ''' test basic BgenWriter file without variants
