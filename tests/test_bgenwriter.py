@@ -100,10 +100,10 @@ class TestBgenWriter(unittest.TestCase):
         sample_ids = ['a', 'b', 'c']
         with BgenWriter(path, n_samples=3, samples=sample_ids) as bfile:
             geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25], [0.1, 0.2, 0.7]])
-            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno,)
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,)
 
         with self.assertRaises(ValueError):
-            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno,)
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,)
     
     def test_wrong_sample_number(self):
         ''' check we can't write variants with the wrong number of samples
@@ -114,7 +114,7 @@ class TestBgenWriter(unittest.TestCase):
             geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
 
             with self.assertRaises(ValueError):
-                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno,)
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,)
 
     def test_writing_variant_attributes(self):
         ''' check we write variant attributes correctly (Aside from genotype)
@@ -123,8 +123,8 @@ class TestBgenWriter(unittest.TestCase):
         sample_ids = ['a', 'b', 'c']
         with BgenWriter(path, n_samples=3, samples=sample_ids) as bfile:
             geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25], [0.1, 0.2, 0.7]])
-            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno,)
-            bfile.add_variant('var2', 'rs2', 'chr1', 11, ['C', 'T'], 3, geno / 2)
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,)
+            bfile.add_variant('var2', 'rs2', 'chr1', 11, ['C', 'T'], geno / 2)
         
         with BgenReader(path, delay_parsing=True) as bfile:
             self.assertEqual(bfile.samples, sample_ids)
@@ -156,8 +156,8 @@ class TestBgenWriter(unittest.TestCase):
                             [float('nan'), float('nan'), float('nan')],
                             ])
             bit_depth = 16
-            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno, bit_depth=bit_depth)
-            bfile.add_variant('var2', 'rs2', 'chr1', 11, ['C', 'T'], 3, geno / 2, bit_depth=bit_depth)
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno, bit_depth=bit_depth)
+            bfile.add_variant('var2', 'rs2', 'chr1', 11, ['C', 'T'], geno / 2, bit_depth=bit_depth)
         
         with BgenReader(path, delay_parsing=True) as bfile:
             self.assertEqual(bfile.samples, ['a', 'b', 'c'])
@@ -196,7 +196,7 @@ class TestBgenWriter(unittest.TestCase):
                 idx += 1
                 with BgenWriter(path, 3, samples=['a', 'b', 'c'],
                                 compression=compression, layout=layout) as bfile:
-                    bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno)
+                    bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
 
                 with BgenReader(path, delay_parsing=True) as bfile:
                     self.assertEqual(bfile.header.compression, compression)
@@ -218,7 +218,7 @@ class TestBgenWriter(unittest.TestCase):
             path = path = self.tmpdir / f'temp_{idx}.bgen'
             idx += 1
             with BgenWriter(path, 3, samples=['a', 'b', 'c']) as bfile:
-                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno,
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
                                 bit_depth=bit_depth)
 
             with BgenReader(path, delay_parsing=True) as bfile:
@@ -240,9 +240,9 @@ class TestBgenWriter(unittest.TestCase):
                         ])
         bit_depth = 8
         bfile = BgenWriter(path, 3, samples=['a', 'b', 'c'])
-        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno1,
+        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno1,
                         bit_depth=bit_depth)
-        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C', 'T'], 3, geno2,
+        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C', 'T'], geno2,
                         bit_depth=bit_depth)
         bfile.close()
 
@@ -261,7 +261,7 @@ class TestBgenWriter(unittest.TestCase):
         geno = np.array([[0.1, 0.9, 0.5, 0.5], 
                         [0.2, 0.8, 0.4, 0.6],
                         [float('nan'), float('nan'), float('nan'), float('nan')]])
-        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno, 
+        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
                             phased=1, bit_depth=8)
         bfile.close()
 
@@ -279,7 +279,7 @@ class TestBgenWriter(unittest.TestCase):
         geno = np.array([[0.1, 0.9, float('nan'), float('nan')], 
                         [0.2, 0.4, 0.4, float('nan')],
                         [float('nan'), float('nan'), float('nan'), float('nan')]])
-        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 3, geno, 
+        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
                             ploidy=ploidy)
         bfile.close()
 
@@ -299,7 +299,7 @@ class TestBgenWriter(unittest.TestCase):
                          [float('nan'), float('nan'), float('nan'), float('nan'), float('nan'), float('nan')],
                          [0.3, 0.7, 0.2, 0.8, 1, 0],
                          ])
-        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], 4, geno, 
+        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
                             ploidy=ploidy, phased=1)
         bfile.close()
 

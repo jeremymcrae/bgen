@@ -134,8 +134,8 @@ cdef class BgenWriter:
         return f'BgenFile("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
     
     def add_variant(self, varid, rsid, chrom, uint32_t pos, alleles, 
-                    uint32_t n_samples, double[:,:] genotypes, 
-                    ploidy=2, bool phased=False, uint8_t bit_depth=8):
+                    double[:,:] genotypes, ploidy=2, bool phased=False,
+                    uint8_t bit_depth=8):
         ''' add a variant to the bgen file on disk
 
         Args:
@@ -144,7 +144,6 @@ cdef class BgenWriter:
             chrom: chromosome the variant is on
             pos: nucleotide position of the variant
             alleles: list of allele strings
-            n_samples: number of samples 
             genotypes: numpy array of genotype proabilities, ordered as per the
                 bgen samples.
             ploidy: integer for constant ploidy, or numpy array of ploidy values per 
@@ -159,6 +158,7 @@ cdef class BgenWriter:
         cdef string _rsid = rsid.encode('utf8')
         cdef string _chrom = chrom.encode('utf8')
         cdef vector[string] _alleles = [x.encode('utf8') for x in alleles]
+        cdef uint32_t n_samples = len(genotypes)
 
         if not self.is_open:
             raise ValueError("bgen file is closed")
