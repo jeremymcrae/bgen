@@ -131,7 +131,7 @@ cdef class BgenWriter:
         self.close()
     
     def __repr__(self):
-        return f'BgenWriter("{self.path.decode("utf8")}")}")'
+        return f'BgenFile("{self.path.decode("utf8")}")'
     
     def add_variant(self, varid, rsid, chrom, uint32_t pos, alleles, 
                     double[:,:] genotypes, ploidy=2, bool phased=False,
