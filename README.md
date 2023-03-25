@@ -32,12 +32,21 @@ probs = var.probabilities  # returns 2D numpy array
 dosage = var.minor_allele_dosage  # returns 1D numpy array for biallelic variant
 
 # iterate through every variant in the file
-with BgenFile(BGEN_PATH, delay_parsing=True) as bfile:
+with BgenReader(BGEN_PATH, delay_parsing=True) as bfile:
   for var in bfile:
       dosage = var.minor_allele_dosage
 
 # get all variants in a genomic region
 variants = bfile.fetch('21', 10000, 5000000)
+
+# or for writing bgen files
+import numpy as np
+from bgen import BgenWriter
+
+geno = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).astype(np.float64)
+with BgenWriter(BGEN_PATH, n_samples=3) as bfile:
+  bfile.add_variant(varid='var1', rsid='rs1', chrom='chr1', pos=1,
+                    alleles=['A', 'G'], genotypes=geno)
 ```
 
 #### API documentation
