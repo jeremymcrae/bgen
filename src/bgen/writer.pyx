@@ -195,8 +195,10 @@ cdef class BgenWriter:
     
     def close(self):
         if self.is_open:
-          del self.thisptr
-        self.indexer.close()
+            del self.thisptr
+        if self.indexer is not None:
+            self.indexer.close()
         self.is_open = False
+        self.indexer = None
         if sys.platform == 'win32':
             time.sleep(0.01)

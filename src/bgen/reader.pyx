@@ -530,13 +530,15 @@ cdef class BgenReader:
         return self
     
     def __exit__(self, exc_type, exc_value, traceback):
-        self._close()
+        self.close()
         return False
     
-    def _close(self):
+    def close(self):
         if self.is_open:
             del self.thisptr
             self.handle = None
+        if self.index:
+            self.index.close()
             self.index = None
         
         self.is_open = False
