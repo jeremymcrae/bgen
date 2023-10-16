@@ -271,23 +271,28 @@ cdef class BgenVar:
         cdef int current = 0
         cdef int phase_width = data.shape[1]
         if self.is_phased:
-            # phased data initially comes as one row per haploytpe. This is
-            # reshaped to concatenate haplotype data into single row. Fill in a
-            # new array from the old data row by row
-            
-            # create an empty array filled with nans
-            ragged = np.empty((len(ploidy), ploidy.max() * cols))
-            ragged.fill(np.nan)
-            
-            # fill in the empty array
-            for i, x in enumerate(ploidy):
-                for y in range(x):
-                    start = y * phase_width
-                    end = start + phase_width
-                    ragged[i, start:end] = data[current]
-                    current += 1
-            
-            data = ragged
+            if ploidy.min() == ploidy.max():
+                # quickly reshape probs if ploidy is constant
+                width = ploidy.max() * cols
+                data = np.reshape(arr, (-1, width))
+            else:
+                # phased data initially comes as one row per haploytpe. This is
+                # reshaped to concatenate haplotype data into single row. Fill
+                # in a new array from the old data row by row
+                
+                # create an empty array filled with nans
+                ragged = np.empty((len(ploidy), ploidy.max() * cols))
+                ragged.fill(np.nan)
+                
+                # fill in the empty array
+                for i, x in enumerate(ploidy):
+                    for y in range(x):
+                        start = y * phase_width
+                        end = start + phase_width
+                        ragged[i, start:end] = data[current]
+                        current += 1
+                
+                data = ragged
         
         return data.copy()
 
