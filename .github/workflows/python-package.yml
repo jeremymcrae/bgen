@@ -23,7 +23,7 @@ jobs:
         uses: pypa/cibuildwheel@v2.9.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-*
-          CIBW_BEFORE_BUILD_LINUX: "apt install libblas-dev liblapack-dev"
+          CIBW_BEFORE_BUILD_LINUX: "apt-get install libblas-dev liblapack-dev"
           CIBW_TEST_COMMAND: "python -m unittest discover -s {project}"
 
       - uses: actions/upload-artifact@v3
