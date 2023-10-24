@@ -284,6 +284,18 @@ void Genotypes::parse_preamble(char * uncompressed, std::uint32_t & idx) {
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
 }
 
+/// fast path for phased data with ploidy=2, and 8 bits per probability
+void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t & idx, std::uint32_t & nrows) {
+  std::uint64_t idx2 = 0;
+  std::uint8_t first;
+  for (std::uint32_t offset=0; offset < nrows * 2; offset += 2) {
+    first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + idx2]);
+    probs[offset] = lut8[first];
+    probs[offset + 1] = lut8[255 - first];
+    idx2 += 1;
+  }
+}
+
 /// parse probabilities for layout2
 ///
 /// This is a fairly complex function, due to how the probabilties are encoded.
@@ -338,6 +350,9 @@ float * Genotypes::parse_layout2(char * uncompressed, std::uint32_t & idx) {
       probs[offset + 2] = lut8[255 - first - second];
       idx2 += 2;
     }
+  } else if (constant_ploidy & (max_probs == 2) & (bit_depth == 8)) {
+    // fast path for phased data with ploidy=2, and 8 bits per probability
+    fast_haplotype_probs(uncompressed, probs, idx, nrows);
   } else {
     for (std::uint32_t offset=0; offset < (nrows * max_probs); offset += max_probs) {
       // calculate the number of probabilities per sample (depends on whether the

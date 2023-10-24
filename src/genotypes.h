@@ -40,6 +40,7 @@ public:
   float * parse_layout2(char *, std::uint32_t & idx);
   void decompress();
   float * probabilities();
+  void fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t & idx, std::uint32_t & nrows);
   int find_minor_allele(float * dose);
   float * get_allele_dosage(bool use_alt=true, bool use_minor=false);
   void ref_dosage_fast(char * uncompressed, std::uint32_t & idx, float * dose);
