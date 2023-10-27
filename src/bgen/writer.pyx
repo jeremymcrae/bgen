@@ -134,7 +134,7 @@ cdef class BgenWriter:
         return f'BgenFile("{self.path.decode("utf8")}")'
     
     def add_variant(self, varid, rsid, chrom, uint32_t pos, alleles, 
-                    double[:,:] genotypes, ploidy=2, bool phased=False,
+                    genotypes, ploidy=2, bool phased=False,
                     uint8_t bit_depth=8):
         ''' add a variant to the bgen file on disk
 
@@ -174,12 +174,21 @@ cdef class BgenWriter:
         else:
             raise ValueError('ploidy must be either integer, or numpy array of integers')
         
+        # convert numpy array to C contiguous for storing values on disk. numpy
+        # arrays default to C contiguous, so most won't need conversion, but
+        # some can be fortran order, e.g. if transposed
+        cdef double[:, :] geno_c
+        if genotypes.flags['C_CONTIGUOUS']:
+            geno_c = genotypes
+        else:
+            geno_c = np.ascontiguousarray(genotypes)
+        
         cdef geno_len = genotypes.shape[0] * genotypes.shape[1]
         if len(ploidy_arr) == 0:
-            end_offset = self.thisptr.add_genotype_data(_alleles.size(), &genotypes[0, 0], 
+            end_offset = self.thisptr.add_genotype_data(_alleles.size(), &geno_c[0, 0],
                                            geno_len, ploidy_n, phased, bit_depth)
         else:
-            end_offset = self.thisptr.add_genotype_data(_alleles.size(), &genotypes[0, 0], 
+            end_offset = self.thisptr.add_genotype_data(_alleles.size(), &geno_c[0, 0],
                                            geno_len, &ploidy_arr[0], min(ploidy), 
                                            max(ploidy), phased, bit_depth)
         
