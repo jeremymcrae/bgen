@@ -291,17 +291,23 @@ class TestBgenWriter(unittest.TestCase):
         This also hits a fast path for parsing phased data'''
         path = self.tmpdir / 'temp.bgen'
         n_samples = 1000
+        print('opening file to write')
         bfile = BgenWriter(path, n_samples)
         # construct a genotype array where the values
         a = np.linspace(0, 0.3, n_samples)
         b = np.linspace(0.7, 1, n_samples)
         geno = np.vstack([a, 1-a, b, 1-b]).T
+        print('writing variant file')
         bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
                             phased=1, bit_depth=8)
         bfile.close()
+        print('file written')
 
+        print('opening file to read')
         bfile = BgenReader(path, delay_parsing=True)
+        print('reading variants')
         for x in bfile:
+            print('reading probs')
             probs = x.probabilities
             self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth=8))
     
