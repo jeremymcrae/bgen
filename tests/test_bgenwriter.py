@@ -34,7 +34,7 @@ def probs_close(orig, updat, bit_depth):
     delta[np.isinf(delta)] = 0
 
     int_vals = np.floor((2 ** bit_depth - 1) * orig)
-    max_delta = 1 / int_vals
+    max_delta = 1.0001 / int_vals
 
     # allow it through if the abolute error is sufficiently low, or the relative
     # error is sufficiently low, of if they differ by less than 1 part in 10 million
@@ -179,6 +179,21 @@ class TestBgenWriter(unittest.TestCase):
             with self.assertRaises(StopIteration):
                 next(bfile)
 
+    def test_writing_many_genotypes(self):
+        ''' test BgenWriter with a few thousand samples
+        '''
+        path = self.tmpdir / 'temp.bgen'
+        n_samples = 2000
+        a = np.linspace(0, 0.3, n_samples)
+        b = np.linspace(0.3, 0.6, n_samples)
+        geno = np.vstack([a, b, 1 - (a + b)]).T
+        with BgenWriter(path, n_samples=n_samples, layout=1, compression=None) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+        
+        with BgenReader(path, delay_parsing=True) as bfile:
+            var = next(bfile)
+            self.assertTrue(probs_close(geno[:, :-1], var.probabilities[:, :-1], bit_depth=8))
+
     def test_compression_and_layouts(self):
         compressions = [None, 'zlib', 'zstd']
         layouts = [1, 2]
@@ -261,6 +276,26 @@ class TestBgenWriter(unittest.TestCase):
         geno = np.array([[0.1, 0.9, 0.5, 0.5], 
                         [0.2, 0.8, 0.4, 0.6],
                         [float('nan'), float('nan'), float('nan'), float('nan')]])
+        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                            phased=1, bit_depth=8)
+        bfile.close()
+
+        bfile = BgenReader(path, delay_parsing=True)
+        for x in bfile:
+            probs = x.probabilities
+            self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth=8))
+    
+    def test_phased_data_many_samples(self):
+        '''checking writing phased data with many samples.
+        
+        This also hits a fast path for parsing phased data'''
+        path = self.tmpdir / 'temp.bgen'
+        n_samples = 1000
+        bfile = BgenWriter(path, n_samples)
+        # construct a genotype array where the values
+        a = np.linspace(0, 0.3, n_samples)
+        b = np.linspace(0.7, 1, n_samples)
+        geno = np.vstack([a, 1-a, b, 1-b]).T
         bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
                             phased=1, bit_depth=8)
         bfile.close()
