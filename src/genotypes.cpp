@@ -300,7 +300,8 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
     // run through most of the samples, but make sure we stay well away from the
     // end of the float array, so the mm_loadu doesn't attempt to load beyond
     // the end of the array
-    for (std::uint32_t n=0; n<((nrows * 2) - (((nrows * 2) - 32) % 16)); n+=32) {
+    // end = (((nrows * 2) - 32) - ((nrows * 2) % 16))
+    for (std::uint32_t n=0; n<((nrows * 2) - ((nrows * 2) % 32)); n+=32) {
       // load 16 values into a m128 register
       initial = _mm_loadu_si128((const __m128i*) &uncompressed[idx]);
       
@@ -349,7 +350,7 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
     
     // finish off the final unvectorized samples
     std::uint8_t first;
-    for (std::uint32_t n=((nrows * 2) - (((nrows * 2) - 32) % 16)); n < nrows * 2; n += 2) {
+    for (std::uint32_t n=((nrows * 2) - ((nrows * 2) % 32)); n < nrows * 2; n += 2) {
       first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
       probs[n] = lut8[first];
       probs[n + 1] = lut8[255 - first];
