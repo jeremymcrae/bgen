@@ -4,6 +4,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <vector>
+#include <iostream>
 
 namespace bgen {
 
@@ -25,8 +26,11 @@ public:
                                                   compression(compression),
                                                   layout(layout)
   {
+    std::cout << "opening file" << std::endl;
     handle.open(path, std::ios::out | std::ios::binary);
+    std::cout << "writing header" << std::endl;
     write_header(free_data, samples);
+    std::cout << "adding samples" << std::endl;
     add_samples(samples);
   };
   CppBgenWriter() {};

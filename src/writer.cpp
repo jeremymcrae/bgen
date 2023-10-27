@@ -4,6 +4,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <vector>
+#include <iostream>
 
 #include "zstd/lib/zstd.h"
 #include <zlib.h>
@@ -480,6 +481,7 @@ std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
                                                bool phased,
                                                std::uint8_t bit_depth)
 {
+  std::cout << "adding genotype data" << std::endl;
   if ((layout == 1) && (compression == 2)) {
     throw std::invalid_argument("you cannot use zstd compression with layout 1");
   }
@@ -491,6 +493,7 @@ std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
     encoded = encode_layout2(n_samples, n_alleles, genotypes, geno_len, ploidy, 
                    min_ploidy, max_ploidy, phased, bit_depth);
   }
+  std::cout << "genotype data encoded" << std::endl;
 
   std::vector<char> compressed;
   if (compression != 0) {
