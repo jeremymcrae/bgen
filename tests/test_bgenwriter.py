@@ -291,19 +291,20 @@ class TestBgenWriter(unittest.TestCase):
         This also hits a fast path for parsing phased data'''
         path = self.tmpdir / 'temp.bgen'
         n_samples = 1000
-        bfile = BgenWriter(path, n_samples)
-        # construct a genotype array where the values
-        a = np.linspace(0, 0.3, n_samples)
-        b = np.linspace(0.7, 1, n_samples)
-        geno = np.vstack([a, 1-a, b, 1-b]).T
-        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
-                            phased=1, bit_depth=8)
-        bfile.close()
+        with BgenWriter(path, n_samples) as bfile:
+            # construct a genotype array where the values
+            a = np.linspace(0, 0.3, n_samples)
+            b = np.linspace(0.7, 1, n_samples)
+            geno = np.vstack([a, 1-a, b, 1-b]).T
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                                phased=1, bit_depth=8)
 
-        bfile = BgenReader(path, delay_parsing=True)
-        for x in bfile:
-            probs = x.probabilities
-            self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth=8))
+        time.sleep(1)
+
+        with BgenReader(path, delay_parsing=True) as bfile:
+            for x in bfile:
+                probs = x.probabilities
+                self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth=8))
     
     def test_phased_data_different_sizes(self):
         '''checking writing phased data with a range of sample sizes'''
