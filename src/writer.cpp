@@ -494,6 +494,7 @@ std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
                    min_ploidy, max_ploidy, phased, bit_depth);
   }
   std::cout << "genotype data encoded" << std::endl;
+  std::cout << "genotype data encoded" << std::endl;
 
   std::vector<char> compressed;
   if (compression != 0) {
@@ -533,6 +534,7 @@ std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
   } else {
     throw std::invalid_argument("layout must be 1 or 2");
   }
+  std::cout << "genotype data written" << std::endl;
   return handle.tellp();
 }
 

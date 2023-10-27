@@ -8,6 +8,7 @@
 #include <cstring>
 #include <chrono>
 #include <thread>
+#include <iostream>
 
 #if defined(__x86_64__)
   #include <immintrin.h>
@@ -286,6 +287,7 @@ void Genotypes::parse_preamble(char * uncompressed, std::uint32_t & idx) {
 
 /// fast path for phased data with ploidy=2, and 8 bits per probability
 void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t & idx, std::uint32_t & nrows) {
+  std::cout << "reading haplotype probs" << std::endl;
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
     const std::uint32_t c = 255;
@@ -301,7 +303,9 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
     // end of the float array, so the mm_loadu doesn't attempt to load beyond
     // the end of the array
     // end = (((nrows * 2) - 32) - ((nrows * 2) % 16))
+    std::cout << " - starting SMID pass" << std::endl;
     for (std::uint32_t n=0; n<((nrows * 2) - ((nrows * 2) % 32)); n+=32) {
+      std::cout << " - SMID at idx=" << idx << ", n=" << n << std::endl;
       // load 16 values into a m128 register
       initial = _mm_loadu_si128((const __m128i*) &uncompressed[idx]);
       
@@ -348,6 +352,7 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
       idx += 16;
     }
     
+    std::cout << " - finished SMID pass, cleaning up final samples, n=" << ((nrows * 2) - ((nrows * 2) % 32)) << std::endl;
     // finish off the final unvectorized samples
     std::uint8_t first;
     for (std::uint32_t n=((nrows * 2) - ((nrows * 2) % 32)); n < nrows * 2; n += 2) {
