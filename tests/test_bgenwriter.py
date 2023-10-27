@@ -322,6 +322,7 @@ class TestBgenWriter(unittest.TestCase):
             for x in bfile:
                 probs = x.probabilities
                 self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth=8))
+            bfile.close()
     
     def test_ploidy_unphased(self):
         ''' check we can write unphased variants with variable ploidy per sample
