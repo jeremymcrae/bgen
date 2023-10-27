@@ -7,6 +7,7 @@ from libcpp cimport bool
 from libcpp.string cimport string
 from libcpp.vector cimport vector
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
+from libc.string cimport memcpy
 
 from cython.operator cimport dereference as deref
 
@@ -89,6 +90,13 @@ cdef extern from 'reader.h' namespace 'bgen':
         Header header
         uint64_t offset
         uint64_t fsize
+
+cdef extern from 'utils.h' namespace 'bgen':
+    cdef struct Range:
+        uint8_t _min
+        uint8_t _max
+    uint64_t fast_ploidy_sum(uint8_t * ploidy, uint32_t & size)
+    Range fast_range(uint8_t * ploidy, uint32_t & size)
 
 cdef class IFStream:
     ''' basic cython implementation of std::ifstream, for easy pickling
@@ -231,7 +239,11 @@ cdef class BgenVar:
         except ValueError:
             _ = self.probabilities
             ploid = self.thisptr.ploidy()
-        return np.copy(np.asarray(<uint8_t [:self.expected_n]>ploid))
+        cdef uint64_t size = self.expected_n
+        cdef uint8_t[::1] arr
+        arr = np.empty(size, dtype=np.uint8, order='C')
+        memcpy(&arr[0], ploid, size)
+        return arr
     @property
     def minor_allele(self):
         ''' get the minor allele of a biallelic variant
@@ -260,19 +272,27 @@ cdef class BgenVar:
         '''
         cdef float * probs = self.thisptr.probs_1d()
         cdef int cols = self.thisptr.probs_per_sample()
-        cdef int size = self.expected_n * cols
+        cdef uint32_t n_samples = self.expected_n
+        cdef uint64_t size = n_samples * cols
+        cdef uint8_t[::1] ploidy
         if self.is_phased:
             ploidy = self.ploidy
-            size = ploidy.sum() * cols
+            size = fast_ploidy_sum(&ploidy[0], n_samples) * cols
         
-        arr = np.asarray(<float [:size]>probs)
+        cdef float[::1] arr
+        arr = np.empty(size, dtype=np.float32, order='C')
+        memcpy(&arr[0], probs, size * sizeof(float))
         
         cdef int current = 0
         cdef int phase_width
+        cdef Range ploidy_range
         if self.is_phased:
-            if ploidy.min() == ploidy.max():
+            ploidy_range = fast_range(&ploidy[0], n_samples)
+            max_ploidy = ploidy_range._max
+            min_ploidy = ploidy_range._min
+            if min_ploidy == max_ploidy:
                 # quickly reshape probs if ploidy is constant
-                width = ploidy.max() * cols
+                width = max_ploidy * cols
                 data = np.reshape(arr, (-1, width))
             else:
                 # phased data initially comes as one row per haploytpe. This is
@@ -282,7 +302,7 @@ cdef class BgenVar:
                 phase_width = data.shape[1]
                 
                 # create an empty array filled with nans
-                ragged = np.empty((len(ploidy), ploidy.max() * cols))
+                ragged = np.empty((len(ploidy), max_ploidy * cols))
                 ragged.fill(np.nan)
                 
                 # fill in the empty array
@@ -297,7 +317,7 @@ cdef class BgenVar:
         else:
             data = np.reshape(arr, (-1, cols))
         
-        return data.copy()
+        return data
 
 cdef class BgenReader:
     ''' class to open bgen files from disk, and access variant data within

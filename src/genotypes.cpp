@@ -286,14 +286,85 @@ void Genotypes::parse_preamble(char * uncompressed, std::uint32_t & idx) {
 
 /// fast path for phased data with ploidy=2, and 8 bits per probability
 void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t & idx, std::uint32_t & nrows) {
-  std::uint64_t idx2 = 0;
+#if defined(__x86_64__)
+  if (__builtin_cpu_supports("avx2")) {
+    const std::uint32_t c = 255;
+    const float f = 1.0 / 255.0f;
+    __m256i k = _mm256_set_epi32(c, c, c, c, c, c, c, c);
+    __m256 j = _mm256_set_ps(f, f, f, f, f, f, f, f);
+    
+    __m128i initial;
+    __m256i widened, partner;
+    __m256 store_lo, store_hi;
+    
+    // run through most of the samples, but make sure we stay well away from the
+    // end of the float array, so the mm_loadu doesn't attempt to load beyond
+    // the end of the array
+    for (std::uint32_t n=0; n<((nrows * 2) - (((nrows * 2) - 32) % 16)); n+=32) {
+      // load 16 values into a m128 register
+      initial = _mm_loadu_si128((const __m128i*) &uncompressed[idx]);
+      
+      // expand the first 8 values to 32-bits, and get the corresponding delta
+      widened = _mm256_cvtepu8_epi32(initial);
+      partner = _mm256_sub_epi32(k, widened);
+      
+      // interleave the registers to get paired values beside each other, then
+      // convert to float and multiply by inverted constant to get probability
+      store_lo = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpacklo_epi32(widened, partner)), j);
+      store_hi = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpackhi_epi32(widened, partner)), j);
+      
+      // _mm256_unpacklo_epi32 interleaves values from two registers, but it
+      // does it within the top part of each m128 portion of the register
+      // we start with
+      // widened = [a1, b1, c1, d1, e1, f1, g1, h1]
+      // partner = [a2, b2, c2, d2, e2, f2, g2, h2]  # (1 - widened)
+      
+      // we want to store the sequential partners e.g.
+      // [a1, a2, b1, b2, c1, c2, d1, d1]
+      
+      // but _mm256_unpacklo_epi32 gives registers with mixed order
+      // [a1, a2, b1, b2, e1, e2, f1, f2]
+      // [c1, c2, d1, d2, g1, g2, h1, h2]
+      // this means we need to store the first and last four values in separate
+      // steps to ensure the correct ordering
+      _mm_storeu_ps(&probs[n], _mm256_castps256_ps128(store_lo));
+      _mm_storeu_ps(&probs[n + 4], _mm256_castps256_ps128(store_hi));
+      _mm_storeu_ps(&probs[n + 8], _mm256_extractf128_ps(store_lo, 1));
+      _mm_storeu_ps(&probs[n + 12], _mm256_extractf128_ps(store_hi, 1));
+      
+      // now repeat for the other 8 values of the original register
+      widened = _mm256_cvtepu8_epi32(_mm_bsrli_si128(initial, 8));
+      partner = _mm256_sub_epi32(k, widened);
+      
+      store_lo = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpacklo_epi32(widened, partner)), j);
+      store_hi = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpackhi_epi32(widened, partner)), j);
+      
+      _mm_storeu_ps(&probs[n + 16], _mm256_castps256_ps128(store_lo));
+      _mm_storeu_ps(&probs[n + 20], _mm256_castps256_ps128(store_hi));
+      _mm_storeu_ps(&probs[n + 24], _mm256_extractf128_ps(store_lo, 1));
+      _mm_storeu_ps(&probs[n + 28], _mm256_extractf128_ps(store_hi, 1));
+      
+      idx += 16;
+    }
+    
+    // finish off the final unvectorized samples
+    std::uint8_t first;
+    for (std::uint32_t n=((nrows * 2) - (((nrows * 2) - 32) % 16)); n < nrows * 2; n += 2) {
+      first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
+      probs[n] = lut8[first];
+      probs[n + 1] = lut8[255 - first];
+      idx += 1;
+    }
+  }
+#else
   std::uint8_t first;
   for (std::uint32_t offset=0; offset < nrows * 2; offset += 2) {
-    first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + idx2]);
+    first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
     probs[offset] = lut8[first];
     probs[offset + 1] = lut8[255 - first];
-    idx2 += 1;
+    idx += 1;
   }
+#endif
 }
 
 /// parse probabilities for layout2
