@@ -7,6 +7,7 @@
 #include <array>
 #include <string>
 #include <sstream>
+#include <iostream>
 
 namespace bgen {
 
@@ -31,7 +32,9 @@ class Genotypes {
   std::vector<int> missing;
 public:
   Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, std::uint32_t n_samples, std::uint64_t offset, std::uint32_t length) :
-     handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples), offset(offset), length(length) {};
+     handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples), offset(offset), length(length) {
+      std::cout << "starting Genotypes" << std::endl;
+     };
   Genotypes() {};
   ~Genotypes() { clear_probs(); };
   void parse_preamble(char * uncompressed, std::uint32_t & idx);
