@@ -307,8 +307,8 @@ class TestBgenWriter(unittest.TestCase):
     
     def test_phased_data_different_sizes(self):
         '''checking writing phased data with a range of sample sizes'''
-        path = self.tmpdir / 'temp.bgen'
         for n_samples in range(1, 100):
+            path = self.tmpdir / f'temp_{n_samples}.bgen'
             bfile = BgenWriter(path, n_samples)
             # construct a genotype array where the values
             a = np.linspace(0, 0.3, n_samples)
