@@ -305,6 +305,24 @@ class TestBgenWriter(unittest.TestCase):
             probs = x.probabilities
             self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth=8))
     
+    def test_phased_data_different_sizes(self):
+        '''checking writing phased data with a range of sample sizes'''
+        path = self.tmpdir / 'temp.bgen'
+        for n_samples in range(1, 100):
+            bfile = BgenWriter(path, n_samples)
+            # construct a genotype array where the values
+            a = np.linspace(0, 0.3, n_samples)
+            b = np.linspace(0.7, 1, n_samples)
+            geno = np.vstack([a, 1-a, b, 1-b]).T
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                                phased=1, bit_depth=8)
+            bfile.close()
+
+            bfile = BgenReader(path, delay_parsing=True)
+            for x in bfile:
+                probs = x.probabilities
+                self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth=8))
+    
     def test_ploidy_unphased(self):
         ''' check we can write unphased variants with variable ploidy per sample
         '''
