@@ -94,7 +94,11 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
   }
 #endif
 
-  std::this_thread::sleep_for(std::chrono::nanoseconds(10));
+  // The following sleep is a crude hack. Without it, it segfaults on macos
+  // on x86-64 when assigning nans for the relevant missing probs. I don't
+  // understand why, since it only reads the ploidy values, which were set
+  // well upstream before this.
+  std::this_thread::sleep_for(std::chrono::nanoseconds(100));
   // include the remainder not used during vectorised sum
   for ( ; i < size; i++) {
     total += x[i];
@@ -138,8 +142,11 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
   }
 #endif
 
-  std::cout << " - completing ploidy range, n=" << i << std::endl;
-  std::this_thread::sleep_for(std::chrono::nanoseconds(10));
+  // The following sleep is a crude hack. Without it, it segfaults on macos
+  // on x86-64 when assigning nans for the relevant missing probs. I don't
+  // understand why, since it only reads the ploidy values, which were set
+  // well upstream before this.
+  std::this_thread::sleep_for(std::chrono::nanoseconds(100));
   // include the remainder not used during vectorised operations
   for ( ; i < size; i++) {
     min_val = std::min(min_val, x[i]);
