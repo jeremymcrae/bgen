@@ -96,21 +96,12 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
   }
 #endif
 
-  // the following matches a step during genotype parsing. Without it, acccesing
-  // ploidy array values segfaults on macos on x86-64. but only when not using 
-  // avx2 instructions. Again, this is a mystery why it is needed.
-  if (without_avx) {
-    std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-    for ( ; i < size; i++) {
-      std::cerr << "avoiding error";
-      total += &x[i];
-    }
-  } else {
-    for ( ; i < size; i++) {
-      total += &x[i];
-    }
+  // include the remainder not used during vectorised operations
+  std::uint8_t val;
+  for ( ; i < size; i++) {
+    val = x[i];
+    total += val;
   }
-  
   std::cout << " - ploidy complete, n=" << i << std::endl;
   return total;
 }
@@ -152,22 +143,12 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
   }
 #endif
 
-  // the following matches a step during genotype parsing. Without it, acccesing
-  // ploidy array values segfaults on macos on x86-64. but only when not using 
-  // avx2 instructions. Again, this is a mystery why it is needed.
-  if (without_avx) {
-    std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-    // include the remainder not used during vectorised operations
-    for ( ; i < size; i++) {
-      min_val = std::min(min_val, &x[i]);
-      max_val = std::max(max_val, &x[i]);
-    }
-  } else {
-    // include the remainder not used during vectorised operations
-    for ( ; i < size; i++) {
-      min_val = std::min(min_val, &x[i]);
-      max_val = std::max(max_val, &x[i]);
-    }
+  // include the remainder not used during vectorised operations
+  std::uint8_t val;
+  for ( ; i < size; i++) {
+    val = x[i];
+    min_val = std::min(min_val, val);
+    max_val = std::max(max_val, val);
   }
   std::cout << " - ploidy range complete, n=" << i << std::endl;
   return {min_val, max_val};
