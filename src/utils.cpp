@@ -69,12 +69,9 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
   std::cout << "summing ploidy" << std::endl;
   std::uint32_t i = 0;
   std::uint64_t total = 0;
-  bool without_avx = true;
 
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
-    without_avx = false;
-    std::cout << " - avx2 ploidy" << std::endl;
     std::uint32_t arr[8];
     __m128i initial;
     __m256i _vals1, _vals2;
@@ -93,14 +90,31 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
     total += arr[0] + arr[1] + arr[2] + arr[3] + arr[4] + arr[5] + arr[6] + arr[7];
     _mm256_storeu_si256((__m256i*) &arr[0], _sum2);
     total += arr[0] + arr[1] + arr[2] + arr[3] + arr[4] + arr[5] + arr[6] + arr[7];
+  } else if (__builtin_cpu_supports("sse3")) {
+    std::uint32_t arr[4];
+    __m128i initial;
+    __m128i _vals1, _vals2;
+    __m128i _sum1 = _mm_set_epi32(0, 0, 0, 0);
+    __m128i _sum2 = _mm_set_epi32(0, 0, 0, 0);
+    for (; i + 8 < size; i += 8) {
+      // load data and convert to 32-bit uints
+      initial = _mm_loadu_si128((const __m128i*) &x[i]);
+      _vals1 = _mm_cvtepu8_epi32(initial);
+      _vals2 = _mm_cvtepu8_epi32(_mm_loadu_si128((const __m128i*) &x[i + 4]));
+
+      _sum1 = _mm_add_epi32(_sum1, _vals1);
+      _sum2 = _mm_add_epi32(_sum2, _vals2);
+    }
+    _mm_storeu_si128((__m128i*) &arr[0], _sum1);
+    total += arr[0] + arr[1] + arr[2] + arr[3];
+    _mm_storeu_si128((__m128i*) &arr[0], _sum2);
+    total += arr[0] + arr[1] + arr[2] + arr[3];
   }
 #endif
 
   // include the remainder not used during vectorised operations
-  std::uint8_t val;
   for ( ; i < size; i++) {
-    val = x[i];
-    total += val;
+    total += x[i];
   }
   std::cout << " - ploidy complete, n=" << i << std::endl;
   return total;
@@ -111,13 +125,9 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
   std::uint8_t min_val = 255;
   std::uint8_t max_val = 0;
   size_t i = 0;
-  bool without_avx = true;
-  std::cout << "ploidy range" << std::endl;
 
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
-    without_avx = false;
-    std::cout << " - avx2 ploidy range" << std::endl;
     std::array<std::uint8_t, 32> arr;
     __m256i values;
     __m256i _mins = _mm256_set_epi8(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -140,15 +150,33 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
     for (auto v : arr) {
       max_val = std::max(max_val, v);
     }
+  } else if (__builtin_cpu_supports("sse3")) {
+    std::array<std::uint8_t, 16> arr;
+    __m128i values;
+    __m128i _mins = _mm_set_epi8(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+                                 -1, -1, -1, -1, -1);
+    __m128i _maxs = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    for (; i + 8 < size; i += 8) {
+      // load data and convert to 32-bit uints
+      values = _mm_loadu_si128((const __m128i*) &x[i]);
+      _mins = _mm_min_epu8(_mins, values);
+      _maxs = _mm_max_epu8(_maxs, values);
+    }
+    _mm_storeu_si128((__m128i*) &arr[0], _mins);
+    for (auto v : arr) {
+      min_val = std::min(min_val, v);
+    }
+    _mm_storeu_si128((__m128i*) &arr[0], _maxs);
+    for (auto v : arr) {
+      max_val = std::max(max_val, v);
+    }
   }
 #endif
 
   // include the remainder not used during vectorised operations
-  std::uint8_t val;
   for ( ; i < size; i++) {
-    val = x[i];
-    min_val = std::min(min_val, val);
-    max_val = std::max(max_val, val);
+    min_val = std::min(min_val, x[i]);
+    max_val = std::max(max_val, x[i]);
   }
   std::cout << " - ploidy range complete, n=" << i << std::endl;
   return {min_val, max_val};
