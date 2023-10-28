@@ -137,7 +137,6 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
                                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                     0, 0, 0, 0);
     for (; i + 32 < size; i += 32) {
-      // load data and convert to 32-bit uints
       values = _mm256_loadu_si256((const __m256i*) &x[i]);
       _mins = _mm256_min_epu8(_mins, values);
       _maxs = _mm256_max_epu8(_maxs, values);
@@ -157,7 +156,6 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
                                  -1, -1, -1, -1, -1);
     __m128i _maxs = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     for (; i + 8 < size; i += 8) {
-      // load data and convert to 32-bit uints
       values = _mm_loadu_si128((const __m128i*) &x[i]);
       _mins = _mm_min_epu8(_mins, values);
       _maxs = _mm_max_epu8(_maxs, values);
