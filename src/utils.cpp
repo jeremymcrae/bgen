@@ -65,7 +65,7 @@ bool minor_certain(double freq, int n_checked, double z) {
 /// @returns sum of array
 std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
   std::cout << "summing ploidy" << std::endl;
-  size_t i = 0;
+  std::uint32_t i = 0;
   std::uint64_t total = 0;
 
 #if defined(__x86_64__)
@@ -140,6 +140,7 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
   std::cout << " - completing ploidy range, n=" << i << std::endl;
   // include the remainder not used during vectorised operations
   for ( ; i < size; i++) {
+    std::cout << "index: " << i << std::endl;
     min_val = std::min(min_val, x[i]);
     max_val = std::max(max_val, x[i]);
   }
