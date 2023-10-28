@@ -288,6 +288,7 @@ void Genotypes::parse_preamble(char * uncompressed, std::uint32_t & idx) {
 /// fast path for phased data with ploidy=2, and 8 bits per probability
 void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t & idx, std::uint32_t & nrows) {
   std::cout << "reading haplotype probs" << std::endl;
+  std::uint32_t n = 0;
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
     const std::uint32_t c = 255;
@@ -304,7 +305,7 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
     // the end of the array
     // end = (((nrows * 2) - 32) - ((nrows * 2) % 16))
     std::cout << " - starting SMID pass" << std::endl;
-    for (std::uint32_t n=0; n<((nrows * 2) - ((nrows * 2) % 32)); n+=32) {
+    for ( ; n<((nrows * 2) - ((nrows * 2) % 32)); n+=32) {
       std::cout << " - SMID at idx=" << idx << ", n=" << n << std::endl;
       // load 16 values into a m128 register
       initial = _mm_loadu_si128((const __m128i*) &uncompressed[idx]);
@@ -351,23 +352,17 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
       
       idx += 16;
     }
-    
+  std::cout << " - finished SMID pass, n=" << n << std::endl;
   }
-  std::cout << " - finished SMID pass, cleaning up final samples, n=" << ((nrows * 2) - ((nrows * 2) % 32)) << std::endl;
-  // finish off the final unvectorized samples
+  std::cout << " - out of AVX2 code, n=" << n << std::endl;
+#endif
+  std::cout << " - cleaning up final samples, n=" << n << std::endl;
+  // finish off the unvectorized samples
   std::uint8_t first;
-  for (std::uint32_t n=((nrows * 2) - ((nrows * 2) % 32)); n < nrows * 2; n += 2) {
+  for (; n < nrows * 2; n += 2) {
     first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
     probs[n] = lut8[first];
     probs[n + 1] = lut8[255 - first];
-    idx += 1;
-  }
-#else
-  std::uint8_t first;
-  for (std::uint32_t offset=0; offset < nrows * 2; offset += 2) {
-    first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
-    probs[offset] = lut8[first];
-    probs[offset + 1] = lut8[255 - first];
     idx += 1;
   }
 #endif
