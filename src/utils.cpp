@@ -111,7 +111,7 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
   for ( ; i < size; i++) {
     total += x[i];
   }
-  std::cout << " - ploidy complete, n=" << i << std::endl;
+  std::cout << " - ploidy complete, n=" << i << ", total=" << total << std::endl;
   return total;
 }
 
@@ -171,7 +171,7 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
     min_val = std::min(min_val, x[i]);
     max_val = std::max(max_val, x[i]);
   }
-  std::cout << " - ploidy range complete, n=" << i << std::endl;
+  std::cout << " - ploidy range complete, n=" << i << ", min=" << min_val << ", max=" << max_val << std::endl;
   return {min_val, max_val};
 }
 
