@@ -99,7 +99,6 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
       // load data and convert to 32-bit uints
       initial = _mm_loadu_si128((const __m128i*) &x[i]);
       _vals = _mm_cvtepu8_epi32(initial);
-
       _sum = _mm_add_epi32(_sum, _vals);
     }
     _mm_storeu_si128((__m128i*) &arr[0], _sum);
@@ -150,7 +149,7 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
     __m128i _mins = _mm_set_epi8(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                                  -1, -1, -1, -1, -1);
     __m128i _maxs = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-    for (; i + 8 < size; i += 8) {
+    for (; i + 16 < size; i += 16) {
       values = _mm_loadu_si128((const __m128i*) &x[i]);
       _mins = _mm_min_epu8(_mins, values);
       _maxs = _mm_max_epu8(_maxs, values);
