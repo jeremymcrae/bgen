@@ -1,6 +1,8 @@
 
 #include <array>
 #include <algorithm>
+#include <chrono>
+#include <thread>
 #include <iostream>
 
 #include "utils.h"
@@ -92,10 +94,9 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
   }
 #endif
 
-  std::cout << " - completing ploidy, n=" << i << std::endl;
+  std::this_thread::sleep_for(std::chrono::nanoseconds(10));
   // include the remainder not used during vectorised sum
   for ( ; i < size; i++) {
-    std::cout << "index: " << i << std::endl;
     total += x[i];
   }
   std::cout << " - ploidy complete, n=" << i << std::endl;
@@ -138,9 +139,9 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
 #endif
 
   std::cout << " - completing ploidy range, n=" << i << std::endl;
+  std::this_thread::sleep_for(std::chrono::nanoseconds(10));
   // include the remainder not used during vectorised operations
   for ( ; i < size; i++) {
-    std::cout << "index: " << i << std::endl;
     min_val = std::min(min_val, x[i]);
     max_val = std::max(max_val, x[i]);
   }
