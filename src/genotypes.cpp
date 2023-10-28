@@ -365,7 +365,6 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
     probs[n + 1] = lut8[255 - first];
     idx += 1;
   }
-#endif
 }
 
 /// parse probabilities for layout2
