@@ -1,11 +1,9 @@
 
 #include "reader.h"
-#include <iostream>
 
 namespace bgen {
 
 CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool delay_parsing) {
-  std::cout << "opening file to read" << std::endl;
   handle.open(path, std::ios::in | std::ios::binary);
   if (!handle) {
     throw std::invalid_argument("error reading from '" + path + "'");
@@ -28,7 +26,6 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
   if (!delay_parsing) {
     parse_all_variants();
   }
-  std::cout << "parsed header" << std::endl;
 }
 
 Variant CppBgenReader::next_var() {
