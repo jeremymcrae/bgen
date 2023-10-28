@@ -1,6 +1,7 @@
 
 #include <array>
 #include <algorithm>
+#include <iostream>
 
 #include "utils.h"
 
@@ -63,11 +64,13 @@ bool minor_certain(double freq, int n_checked, double z) {
 /// @param size size of array
 /// @returns sum of array
 std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
+  std::cout << "summing ploidy" << std::endl;
   size_t i = 0;
   std::uint64_t total = 0;
 
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
+    std::cout << " - avx2 ploidy" << std::endl;
     std::uint32_t arr[8];
     __m128i initial;
     __m256i _vals1, _vals2;
@@ -89,10 +92,12 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
   }
 #endif
 
+  std::cout << " - completing ploidy, n=" << i << std::endl;
   // include the remainder not used during vectorised sum
   for ( ; i < size; i++) {
     total += x[i];
   }
+  std::cout << " - ploidy complete, n=" << i << std::endl;
   return total;
 }
 
@@ -101,9 +106,11 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
   std::uint8_t min_val = 255;
   std::uint8_t max_val = 0;
   size_t i = 0;
+  std::cout << "ploidy range" << std::endl;
 
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
+    std::cout << " - avx2 ploidy range" << std::endl;
     std::array<std::uint8_t, 32> arr;
     __m256i values;
     __m256i _mins = _mm256_set_epi8(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -129,11 +136,13 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
   }
 #endif
 
+  std::cout << " - completing ploidy range, n=" << i << std::endl;
   // include the remainder not used during vectorised operations
   for ( ; i < size; i++) {
     min_val = std::min(min_val, x[i]);
     max_val = std::max(max_val, x[i]);
   }
+  std::cout << " - ploidy range complete, n=" << i << std::endl;
   return {min_val, max_val};
 }
 
