@@ -270,19 +270,23 @@ cdef class BgenVar:
     def probabilities(self):
         ''' get the allelic probabilities for a variant
         '''
+        print('getting probs')
         cdef float * probs = self.thisptr.probs_1d()
         cdef int cols = self.thisptr.probs_per_sample()
         cdef uint32_t n_samples = self.expected_n
         cdef uint64_t size = n_samples * cols
         cdef uint8_t[::1] ploidy
+        print('getting ploidy')
         if self.is_phased:
             ploidy = self.ploidy
             size = fast_ploidy_sum(&ploidy[0], n_samples) * cols
         
+        print('setting numpy array')
         cdef float[::1] arr
         arr = np.empty(size, dtype=np.float32, order='C')
         memcpy(&arr[0], probs, size * sizeof(float))
         
+        print('reshaping numpy array')
         cdef int current = 0
         cdef int phase_width
         cdef Range ploidy_range
@@ -317,6 +321,7 @@ cdef class BgenVar:
         else:
             data = np.reshape(arr, (-1, cols))
         
+        print("returning probs")
         return data
 
 cdef class BgenReader:
