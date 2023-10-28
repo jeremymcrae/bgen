@@ -352,15 +352,15 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
       idx += 16;
     }
     
-    std::cout << " - finished SMID pass, cleaning up final samples, n=" << ((nrows * 2) - ((nrows * 2) % 32)) << std::endl;
-    // finish off the final unvectorized samples
-    std::uint8_t first;
-    for (std::uint32_t n=((nrows * 2) - ((nrows * 2) % 32)); n < nrows * 2; n += 2) {
-      first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
-      probs[n] = lut8[first];
-      probs[n + 1] = lut8[255 - first];
-      idx += 1;
-    }
+  }
+  std::cout << " - finished SMID pass, cleaning up final samples, n=" << ((nrows * 2) - ((nrows * 2) % 32)) << std::endl;
+  // finish off the final unvectorized samples
+  std::uint8_t first;
+  for (std::uint32_t n=((nrows * 2) - ((nrows * 2) % 32)); n < nrows * 2; n += 2) {
+    first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
+    probs[n] = lut8[first];
+    probs[n + 1] = lut8[255 - first];
+    idx += 1;
   }
 #else
   std::uint8_t first;

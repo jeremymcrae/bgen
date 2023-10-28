@@ -19,7 +19,6 @@ namespace bgen {
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
 Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, std::uint64_t fsize) {
-  std::cout << "starting Variant" << std::endl;
   if (varoffset >= fsize) {
     throw std::out_of_range("reached end of file");
   }
