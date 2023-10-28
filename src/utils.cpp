@@ -95,6 +95,7 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
   std::cout << " - completing ploidy, n=" << i << std::endl;
   // include the remainder not used during vectorised sum
   for ( ; i < size; i++) {
+    std::cout << "index: " << i << std::endl;
     total += x[i];
   }
   std::cout << " - ploidy complete, n=" << i << std::endl;
