@@ -93,16 +93,16 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
   } else if (__builtin_cpu_supports("sse3")) {
     std::uint32_t arr[4];
     __m128i initial;
-    __m128i _vals1;
+    __m128i _vals;
     __m128i _sum = _mm_set_epi32(0, 0, 0, 0);
     for (; i + 12 < size; i += 4) {
       // load data and convert to 32-bit uints
       initial = _mm_loadu_si128((const __m128i*) &x[i]);
       _vals = _mm_cvtepu8_epi32(initial);
 
-      _sum = _mm_add_epi32(_sum1, _vals1);
+      _sum = _mm_add_epi32(_sum, _vals);
     }
-    _mm_storeu_si128((__m128i*) &arr[0], _sum1);
+    _mm_storeu_si128((__m128i*) &arr[0], _sum);
     total += arr[0] + arr[1] + arr[2] + arr[3];
   }
 #endif
