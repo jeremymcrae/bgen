@@ -286,6 +286,7 @@ void Genotypes::parse_preamble(char * uncompressed, std::uint32_t & idx) {
 
 /// fast path for phased data with ploidy=2, and 8 bits per probability
 void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t & idx, std::uint32_t & nrows) {
+  std::uint32_t n = 0;
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
     const std::uint32_t c = 255;
@@ -300,8 +301,7 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
     // run through most of the samples, but make sure we stay well away from the
     // end of the float array, so the mm_loadu doesn't attempt to load beyond
     // the end of the array
-    // end = (((nrows * 2) - 32) - ((nrows * 2) % 16))
-    for (std::uint32_t n=0; n<((nrows * 2) - ((nrows * 2) % 32)); n+=32) {
+    for ( ; n<((nrows * 2) - ((nrows * 2) % 32)); n+=32) {
       // load 16 values into a m128 register
       initial = _mm_loadu_si128((const __m128i*) &uncompressed[idx]);
       
@@ -347,25 +347,16 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
       
       idx += 16;
     }
-    
   }
-  // finish off the final unvectorized samples
+#endif
+  // finish off the unvectorized samples
   std::uint8_t first;
-  for (std::uint32_t n=((nrows * 2) - ((nrows * 2) % 32)); n < nrows * 2; n += 2) {
+  for (; n < nrows * 2; n += 2) {
     first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
     probs[n] = lut8[first];
     probs[n + 1] = lut8[255 - first];
     idx += 1;
   }
-#else
-  std::uint8_t first;
-  for (std::uint32_t offset=0; offset < nrows * 2; offset += 2) {
-    first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
-    probs[offset] = lut8[first];
-    probs[offset + 1] = lut8[255 - first];
-    idx += 1;
-  }
-#endif
 }
 
 /// parse probabilities for layout2
