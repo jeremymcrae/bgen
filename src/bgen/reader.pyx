@@ -240,8 +240,7 @@ cdef class BgenVar:
             _ = self.probabilities
             ploid = self.thisptr.ploidy()
         cdef uint64_t size = self.expected_n
-        cdef uint8_t[::1] arr
-        arr = np.empty(size, dtype=np.uint8, order='C')
+        cdef uint8_t[::1] arr = np.empty(size, dtype=np.uint8, order='C')
         memcpy(&arr[0], ploid, size)
         return arr
     @property
@@ -279,8 +278,7 @@ cdef class BgenVar:
             ploidy = self.ploidy
             size = fast_ploidy_sum(&ploidy[0], n_samples) * cols
         
-        cdef float[::1] arr
-        arr = np.empty(size, dtype=np.float32, order='C')
+        cdef float[::1] arr = np.empty(size, dtype=np.float32, order='C')
         memcpy(&arr[0], probs, size * sizeof(float))
         
         cdef int current = 0
