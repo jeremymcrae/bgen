@@ -96,7 +96,7 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
     __m128i _vals1, _vals2;
     __m128i _sum1 = _mm_set_epi32(0, 0, 0, 0);
     __m128i _sum2 = _mm_set_epi32(0, 0, 0, 0);
-    for (; i + 8 < size; i += 8) {
+    for (; i + 12 < size; i += 8) {
       // load data and convert to 32-bit uints
       initial = _mm_loadu_si128((const __m128i*) &x[i]);
       _vals1 = _mm_cvtepu8_epi32(initial);
