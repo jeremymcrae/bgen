@@ -306,7 +306,6 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
     // end = (((nrows * 2) - 32) - ((nrows * 2) % 16))
     std::cout << " - starting SMID pass" << std::endl;
     for ( ; n<((nrows * 2) - ((nrows * 2) % 32)); n+=32) {
-      std::cout << " - SMID at idx=" << idx << ", n=" << n << std::endl;
       // load 16 values into a m128 register
       initial = _mm_loadu_si128((const __m128i*) &uncompressed[idx]);
       
