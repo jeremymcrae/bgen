@@ -1,14 +1,14 @@
-### Another bgen reader
+### Another bgen parser
 ![bgen](https://github.com/jeremymcrae/bgen/workflows/bgen/badge.svg)
 
-This is a package for reading [bgen files](https://www.well.ox.ac.uk/~gav/bgen_format).
+This is a package for reading and writing [bgen files](https://www.well.ox.ac.uk/~gav/bgen_format).
 
 This package uses cython to wrap c++ code for parsing bgen files. It's fairly
 quick, it can parse genotypes from 500,000 individuals at ~300 variants per
 second within a single python process (~450 million probabilities per second
-with a 3GHz CPU). Decompressing the genotype probabilities is the slow step,
+with a 3GHz CPU). Decompressing the genotype probabilities can be the slow step,
 zlib decompression takes 80% of the total time, using zstd compressed genotypes
-would be much faster, maybe 2-3X faster?
+is ~2X faster.
 
 This has been optimized for UKBiobank bgen files (i.e. bgen version 1.2 with
 zlib compressed 8-bit genotype probabilities, but the other bgen versions and
@@ -19,7 +19,7 @@ zstd compression have also been tested using example bgen files).
 
 #### Usage
 ```python
-from bgen import BgenReader
+from bgen import BgenReader, BgenWriter
 
 bfile = BgenReader(BGEN_PATH)
 rsids = bfile.rsids()
@@ -72,8 +72,8 @@ class BgenReader(path, sample_path='', delay_parsing=False)
     iteration: variants in a BgenFile can be looped over e.g. for x in bfile: print(x)
     fetch(chrom, start=None, stop=None): get all variants within a genomic region
     drop_variants(list[int]): drops variants by index from being used in analyses
-    with_rsid(rsid): returns BgenVar with given position
-    at_position(pos): returns BgenVar with given rsid
+    with_rsid(rsid): returns BgenVar with given rsid
+    at_position(pos): returns BgenVar at a given position
     varids(): returns list of varids for variants in the bgen file.
     rsids(): returns list of rsids for variants in the bgen file.
     chroms(): returns list of chromosomes for variants in the bgen file.
@@ -95,4 +95,32 @@ class BgenVar(handle, offset, layout, compression, n_samples):
     probabilitiies:  2D numpy array of genotype probabilities, one sample per row
   
   BgenVars can be pickled e.g. pickle.dumps(var)
+
+
+class BgenWriter(path, n_samples, samples=[], compression='zstd' layout=2, metadata=None)
+    # opens a bgen file to write variants to. Automatically makes a bgenix index file
+    Arguments:
+      path: path to write data to
+      n_samples: number of samples that you have data for
+      samples: list of sample IDs (same length as n_samples)
+      compression: compression type: None, 'zstd', or 'zlib' (default='zstd')
+      layout: bgen layout format (default=2)
+      metadata: any additional metadata you want o include in the file (as str)
+    
+    Methods:
+      add_variant(varid, rsid, chrom, pos, alleles, genotypes, ploidy=2, 
+                  phased=False, bit_depth=8)
+        Arguments:
+            varid: variant ID e.g. 'var1'
+            rsid: reference SNP ID e.g. 'rs1'
+            chrom: chromosome the variant is on e.g 'chr1'
+            pos: nucleotide position of the variant e.g. 100
+            alleles: list of allele strings e.g. ['A', 'C']
+            genotypes: numpy array of genotype probabilities, ordered as per the
+                bgen samples e.g. np.array([[0, 0, 1], [0.5, 0.5, 0]])
+            ploidy: ploidy state, either as integer to indicate constant ploidy
+                (e.g. 2), or numpy array of ploidy values per sample, e.g. np.array([1, 2, 2])
+            phased: whether the genotypes are for phased data or not (default=False)
+            bit_depth: how many bits to store each genotype as (1-32, default=8)
+
 ```
