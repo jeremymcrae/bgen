@@ -1,6 +1,7 @@
-from pkg_resources import get_distribution
+from importlib.metadata import version
 
-__version__ = get_distribution('bgen').version
+__name__ = 'bgen'
+__version__ = version(__name__)
 
 from bgen.reader import BgenReader, BgenVar
 from bgen.writer import BgenWriter
