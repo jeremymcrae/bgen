@@ -75,8 +75,11 @@ class BgenReader(path, sample_path='', delay_parsing=False)
     with_rsid(rsid): returns BgenVar with given rsid
     at_position(pos): returns BgenVar at a given position
     varids(): returns list of varids for variants in the bgen file.
-    rsids(): returns list of rsids for variants in the bgen file.
-    chroms(): returns list of chromosomes for variants in the bgen file.
+    rsids(): returns list of rsids for variants in the bgen file. NOTE: this 
+      order can differ from the order of variants in the bfile if an index 
+      file is present.
+    chroms(): returns list of chromosomes for variants in the bgen file. NOTE: 
+      order can differ from variant order if index file is present.
     positions(): returns list of positions for variants in the bgen file.
 
 class BgenVar(handle, offset, layout, compression, n_samples):
