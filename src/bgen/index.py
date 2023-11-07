@@ -85,7 +85,8 @@ class Index:
         ''' get rsID list for all variants in the bgen file
         '''
         if self._rsids is None:
-            query = self.cur.execute("SELECT rsid FROM Variant")
+            query = self.cur.execute(
+                "SELECT rsid FROM Variant ORDER BY file_start_position")
             self._rsids = [x[0] for x in query.fetchall()]
         return self._rsids
     
@@ -94,7 +95,8 @@ class Index:
         ''' get chromosome list for all variants in the bgen file
         '''
         if self._chroms is None:
-            query = self.cur.execute("SELECT chromosome FROM Variant")
+            query = self.cur.execute(
+                "SELECT chromosome FROM Variant ORDER BY file_start_position")
             self._chroms = [x[0] for x in query.fetchall()]
         return self._chroms
     
@@ -103,7 +105,8 @@ class Index:
         ''' get position list for all variants in the bgen file
         '''
         if self._positions is None:
-            query = self.cur.execute("SELECT position FROM Variant")
+            query = self.cur.execute(
+                "SELECT position FROM Variant ORDER BY file_start_position")
             self._positions = np.array([x[0] for x in query.fetchall()])
         return self._positions
 
