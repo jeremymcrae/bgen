@@ -460,6 +460,7 @@ std::vector<std::uint8_t> encode_layout2(
   return encoded;
 }
 
+// convenience function for constant ploidy
 std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
                                                double *genotypes,
                                                std::uint32_t geno_len,
@@ -467,7 +468,7 @@ std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
                                                bool phased,
                                                std::uint8_t bit_depth)
 {
-  std::uint8_t *ploidy_vector;
+  std::uint8_t *ploidy_vector = {};
   return add_genotype_data(n_alleles, genotypes, geno_len, ploidy_vector, ploidy, ploidy, phased, bit_depth);
 }
 
