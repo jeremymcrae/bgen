@@ -18,7 +18,7 @@ class Genotypes {
   std::uint32_t n_samples;
   std::uint64_t offset;
   std::uint32_t length;
-  std::uint32_t bit_depth;
+  std::uint32_t bit_depth=0;
   char * uncompressed;
   float * probs;
   float * alt_dose;
@@ -28,7 +28,7 @@ class Genotypes {
   bool probs_parsed = false;
   bool minor_dosage_parsed = false;
   bool alt_dosage_parsed = false;
-  std::vector<int> missing;
+  std::vector<std::uint32_t> missing;
 public:
   Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, std::uint32_t n_samples, std::uint64_t offset, std::uint32_t length) :
      handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples), offset(offset), length(length) {};
@@ -48,11 +48,11 @@ public:
   void swap_allele_dosage(float * dose);
   void ref_dosage_slow(char * uncompressed, std::uint32_t & idx, float * dose);
   void clear_probs();
-  bool phased;
+  bool phased=false;
   std::uint32_t max_probs = 0;
-  bool constant_ploidy;
-  int min_ploidy;
-  int max_ploidy;
+  bool constant_ploidy=true;
+  int min_ploidy=0;
+  int max_ploidy=0;
   int minor_idx;
   std::uint8_t * ploidy;
 };
