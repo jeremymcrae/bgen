@@ -53,7 +53,7 @@ public:
   bool constant_ploidy=true;
   int min_ploidy=0;
   int max_ploidy=0;
-  int minor_idx;
+  int minor_idx=0;
   std::uint8_t * ploidy={};
 };
 
