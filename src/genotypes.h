@@ -19,10 +19,10 @@ class Genotypes {
   std::uint64_t offset;
   std::uint32_t length;
   std::uint32_t bit_depth=0;
-  char * uncompressed;
-  float * probs;
-  float * alt_dose;
-  float * minor_dose;
+  char * uncompressed={};
+  float * probs={};
+  float * alt_dose={};
+  float * minor_dose={};
   bool is_decompressed = false;
   bool has_ploidy = false;
   bool probs_parsed = false;
@@ -54,7 +54,7 @@ public:
   int min_ploidy=0;
   int max_ploidy=0;
   int minor_idx;
-  std::uint8_t * ploidy;
+  std::uint8_t * ploidy={};
 };
 
 std::uint32_t get_max_probs(int &max_ploidy, int &n_alleles, bool &phased);
