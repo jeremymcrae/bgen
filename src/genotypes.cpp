@@ -154,14 +154,8 @@ std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
 /// ploidy state is stored in ploidy member. Missingness is stored as indices of
 /// samples This takes 100 microseconds for 500k samples. Layout 1 variants lack
 /// ploidy info, and are assigned the same ploidy for all samples.
-///
-/// @param uncompressed char array possibly containing ploidy information
-/// @param idx uint position where the ploidy data begins
-void Genotypes::parse_ploidy(char * uncompressed, std::uint32_t & idx) {
+void Genotypes::parse_ploidy() {
   if (has_ploidy) {
-    if (layout == 2) {
-      idx += n_samples;
-    }
     return;
   }
   
@@ -215,10 +209,8 @@ void Genotypes::parse_ploidy(char * uncompressed, std::uint32_t & idx) {
 /// one for each of the three possible genotypes. Missingness is encoded for a
 /// sample when all probabilties are zero.
 ///
-/// @param uncompressed char array containing genotype probabilities
-/// @param idx uint position where the genotype probabilties begin
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
-float * Genotypes::parse_layout1(char * uncompressed, std::uint32_t & idx) {
+float * Genotypes::parse_layout1() {
   probs = new float[max_probs * n_samples];
   
   float factor = 1.0 / 32768;
@@ -242,10 +234,11 @@ float * Genotypes::parse_layout1(char * uncompressed, std::uint32_t & idx) {
 ///
 /// Layout 1 doesn't store any information before the genotype probabilities,
 /// so layout 1 just receives default values.
-///
-/// @param uncompressed char array containing genotype probabilities
-/// @param idx uint position where the genotype probabilties begin
-void Genotypes::parse_preamble(char * uncompressed, std::uint32_t & idx) {
+void Genotypes::parse_preamble() {
+  if (max_ploidy > 0) {
+    return;
+  }
+  idx = 0;
   if (layout == 1) {
     phased = false;
     min_ploidy = 2;
@@ -270,7 +263,7 @@ void Genotypes::parse_preamble(char * uncompressed, std::uint32_t & idx) {
   }
   
   constant_ploidy = (min_ploidy == max_ploidy);
-  parse_ploidy(uncompressed, idx);
+  parse_ploidy();
   
   if (layout == 2) {
     phased = (bool) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
@@ -368,10 +361,8 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
 /// so there's a fast method for parsing 8-bit encoded probabilties, since that
 /// is a common use case.
 ///
-/// @param uncompressed char array containing genotype probabilities
-/// @param idx uint position where the genotype probabilties begin
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
-float * Genotypes::parse_layout2(char * uncompressed, std::uint32_t & idx) {
+float * Genotypes::parse_layout2() {
   std::uint32_t nrows = 0;
   if (!phased) {
     nrows = n_samples;
@@ -485,7 +476,7 @@ void Genotypes::decompress() {
     return;
   }
   
-  handle->seekg(offset);  // about 1 microsecond
+  handle->seekg(file_offset);  // about 1 microsecond
   
   bool decompressed_field = false;
   std::uint32_t decompressed_len = length;
@@ -527,13 +518,12 @@ float * Genotypes::probabilities() {
     return probs;
   }
   decompress();
-  std::uint32_t idx = 0;
-  parse_preamble(uncompressed, idx);
+  parse_preamble();
   
   if (layout == 1) {
-    probs = parse_layout1(uncompressed, idx);
+    probs = parse_layout1();
   } else if (layout == 2) {
-    probs = parse_layout2(uncompressed, idx);  // about 3 milliseconds
+    probs = parse_layout2();  // about 3 milliseconds
   }
   return probs;
 }
@@ -842,8 +832,7 @@ float * Genotypes::get_allele_dosage(bool use_alt, bool use_minor) {
     }
   }
   decompress();
-  std::uint32_t idx = 0;
-  parse_preamble(uncompressed, idx);
+  parse_preamble();
   
   if (n_alleles != 2) {
     throw std::invalid_argument("can't get allele dosages for non-biallelic var.");

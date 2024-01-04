@@ -16,9 +16,10 @@ class Genotypes {
   int compression;
   int n_alleles;
   std::uint32_t n_samples;
-  std::uint64_t offset;
+  std::uint64_t file_offset;
   std::uint32_t length;
   std::uint32_t bit_depth=0;
+  std::uint32_t idx=0;
   char * uncompressed={};
   float * probs={};
   float * alt_dose={};
@@ -31,13 +32,13 @@ class Genotypes {
   std::vector<std::uint32_t> missing;
 public:
   Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, std::uint32_t n_samples, std::uint64_t offset, std::uint32_t length) :
-     handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples), offset(offset), length(length) {};
+     handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples), file_offset(offset), length(length) {};
   Genotypes() {};
   ~Genotypes() { clear_probs(); };
-  void parse_preamble(char * uncompressed, std::uint32_t & idx);
-  void parse_ploidy(char * uncompressed, std::uint32_t & idx);
-  float * parse_layout1(char *, std::uint32_t & idx);
-  float * parse_layout2(char *, std::uint32_t & idx);
+  void parse_preamble();
+  void parse_ploidy();
+  float * parse_layout1();
+  float * parse_layout2();
   void decompress();
   float * probabilities();
   void fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t & idx, std::uint32_t & nrows);
