@@ -1,6 +1,7 @@
 
 #include <array>
 #include <algorithm>
+#include <stdexcept>
 
 #include "utils.h"
 
@@ -57,7 +58,7 @@ bool minor_certain(double freq, int n_checked, double z) {
 // We need to load the data into vector registers, but we need to convert the
 // 8-bit vectors to 32-bit to avoid overflow. 32-bit uints should be sufficient,
 // since this sums ploidy states, which can be at most 255 per person, so this
-// allows at least 134 million individuals (((2 ** 31) * 16) / 255).
+// allows at least 269 million individuals (((2 ** 32) * 16) / 255).
 //
 /// @param x array of floats
 /// @param size size of array
@@ -65,6 +66,12 @@ bool minor_certain(double freq, int n_checked, double z) {
 std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
   std::uint32_t i = 0;
   std::uint64_t total = 0;
+  
+  if (size > 269000000) {
+    // raise error if this gets too many samples. the fix would be to refactor
+    // this function to use packed 64-bit ints e.g. _mm512_add_epi64
+    throw std::invalid_argument("too many samples for valid summing");
+  }
 
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
