@@ -133,22 +133,6 @@ void zstd_uncompress(char * input, int compressed_len, char * decompressed,  int
   }
 }
 
-/// figure out the maximum number of probabilities across the individuals
-///
-/// @param max_ploidy maximum ploidy value across all samples
-/// @param n_alleles number of alleles for the variant
-/// @param phased whether the genotypes are phased
-/// @return integer for maximum number of possible probabilites per sample
-std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
-  std::uint32_t max_probs;
-  if (phased) {
-    max_probs = n_alleles;
-  } else {
-    max_probs = n_choose_k(max_ploidy + n_alleles - 1, n_alleles - 1);
-  }
-  return max_probs;
-}
-
 /// Read genotype data for a variant from disk and decompress.
 ///
 /// The decompressed data is stored in the 'uncompressed' member. Decompression
@@ -191,6 +175,22 @@ void Genotypes::decompress() {
   }
   is_decompressed = true;
   delete[] compressed;
+}
+
+/// figure out the maximum number of probabilities across the individuals
+///
+/// @param max_ploidy maximum ploidy value across all samples
+/// @param n_alleles number of alleles for the variant
+/// @param phased whether the genotypes are phased
+/// @return integer for maximum number of possible probabilites per sample
+std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
+  std::uint32_t max_probs;
+  if (phased) {
+    max_probs = n_alleles;
+  } else {
+    max_probs = n_choose_k(max_ploidy + n_alleles - 1, n_alleles - 1);
+  }
+  return max_probs;
 }
 
 /// parse the initial data that defines the ploidy and phased status.
