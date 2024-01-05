@@ -199,7 +199,7 @@ std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
 /// so layout 1 just receives default values.
 void Genotypes::load_data_and_parse_header() {
   decompress();
-  if (max_ploidy > 0) {
+  if (has_ploidy) {
     return;
   }
   idx = 0;
