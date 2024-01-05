@@ -46,15 +46,9 @@ private:
   std::uint32_t bit_depth=0;
   std::uint32_t idx=0;
   char * uncompressed={};
-  // float * probs={};
-  // float * alt_dose={};
-  // float * minor_dose={};
   bool is_decompressed = false;
   bool constant_ploidy=true;
   bool has_ploidy = false;
-  // bool probs_parsed = false;
-  // bool minor_dosage_parsed = false;
-  // bool alt_dosage_parsed = false;
   std::vector<std::uint32_t> missing;
 };
 
