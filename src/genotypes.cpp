@@ -149,6 +149,98 @@ std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
   return max_probs;
 }
 
+/// Read genotype data for a variant from disk and decompress.
+///
+/// The decompressed data is stored in the 'uncompressed' member. Decompression
+/// is handled internally by either zlib_decompress, or zstd_decompress,
+/// depending on compression scheme.
+void Genotypes::decompress() {
+  if (is_decompressed) {
+    // don't decompress if already available
+    return;
+  }
+  
+  handle->seekg(file_offset);  // about 1 microsecond
+  
+  bool decompressed_field = false;
+  std::uint32_t decompressed_len = length;
+  if (compression != 0) {
+    if (layout == 1) {
+      decompressed_len = n_samples * 6;
+    } else if (layout == 2) {
+      decompressed_field = true;
+      if (! handle->read(reinterpret_cast<char*>(&decompressed_len), sizeof(std::uint32_t))) {
+        throw std::invalid_argument("couldn't read the compressed length");
+      }
+    }
+  }
+  
+  std::uint32_t compressed_len = length - decompressed_field * 4;
+  char * compressed = new char[compressed_len];
+  uncompressed = new char[decompressed_len];
+  if (! handle->read(&compressed[0], compressed_len)) {
+    throw std::invalid_argument("couldn't read the compressed data");
+  }
+
+  if (compression == 0) { //no compression
+    std::memcpy(&uncompressed[0], &compressed[0], compressed_len);
+  } else if (compression == 1) { // zlib
+    zlib_uncompress(compressed, (int) compressed_len, uncompressed, (int) decompressed_len);  // about 2 milliseconds
+  } else if (compression == 2) { // zstd
+    zstd_uncompress(compressed, (int) compressed_len, uncompressed, (int) decompressed_len);
+  }
+  is_decompressed = true;
+  delete[] compressed;
+}
+
+/// parse the initial data that defines the ploidy and phased status.
+///
+/// Layout 1 doesn't store any information before the genotype probabilities,
+/// so layout 1 just receives default values.
+void Genotypes::load_data_and_parse_header() {
+  decompress();
+  if (max_ploidy > 0) {
+    return;
+  }
+  idx = 0;
+  if (layout == 1) {
+    phased = false;
+    min_ploidy = 2;
+    max_ploidy = 2;
+    bit_depth = 16;
+  } else if (layout == 2) {
+    std::uint32_t nn_samples = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]);
+    idx += sizeof(std::uint32_t);
+    std::uint16_t allele_check = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]);
+    idx += sizeof(std::uint16_t);
+    if (nn_samples != (std::uint32_t) n_samples) {
+      throw std::invalid_argument("number of samples doesn't match!");
+    }
+    if (allele_check != n_alleles) {
+      throw std::invalid_argument("number of alleles doesn't match!");
+    }
+    
+    min_ploidy = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
+    idx += sizeof(std::uint8_t);
+    max_ploidy = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
+    idx += sizeof(std::uint8_t);
+  }
+  
+  constant_ploidy = (min_ploidy == max_ploidy);
+  parse_ploidy();
+  
+  if (layout == 2) {
+    phased = (bool) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
+    idx += sizeof(std::uint8_t);
+    bit_depth = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
+    if ((bit_depth < 1) | (bit_depth > 32)) {
+      throw std::invalid_argument("probabilities bit depth out of bounds");
+    }
+    idx += sizeof(std::uint8_t);
+  }
+  max_probs = get_max_probs(max_ploidy, n_alleles, phased);
+}
+
 /// get ploidy state for all samples (and missingness for layout2).
 ///
 /// ploidy state is stored in ploidy member. Missingness is stored as indices of
@@ -228,54 +320,6 @@ float * Genotypes::probabilities_layout1() {
   }
   probs_parsed = true;
   return probs;
-}
-
-/// parse the initial data that defines the ploidy and phased status.
-///
-/// Layout 1 doesn't store any information before the genotype probabilities,
-/// so layout 1 just receives default values.
-void Genotypes::load_data_and_parse_header() {
-  decompress();
-  if (max_ploidy > 0) {
-    return;
-  }
-  idx = 0;
-  if (layout == 1) {
-    phased = false;
-    min_ploidy = 2;
-    max_ploidy = 2;
-    bit_depth = 16;
-  } else if (layout == 2) {
-    std::uint32_t nn_samples = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]);
-    idx += sizeof(std::uint32_t);
-    std::uint16_t allele_check = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]);
-    idx += sizeof(std::uint16_t);
-    if (nn_samples != (std::uint32_t) n_samples) {
-      throw std::invalid_argument("number of samples doesn't match!");
-    }
-    if (allele_check != n_alleles) {
-      throw std::invalid_argument("number of alleles doesn't match!");
-    }
-    
-    min_ploidy = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
-    idx += sizeof(std::uint8_t);
-    max_ploidy = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
-    idx += sizeof(std::uint8_t);
-  }
-  
-  constant_ploidy = (min_ploidy == max_ploidy);
-  parse_ploidy();
-  
-  if (layout == 2) {
-    phased = (bool) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
-    idx += sizeof(std::uint8_t);
-    bit_depth = (int) *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]);
-    if ((bit_depth < 1) | (bit_depth > 32)) {
-      throw std::invalid_argument("probabilities bit depth out of bounds");
-    }
-    idx += sizeof(std::uint8_t);
-  }
-  max_probs = get_max_probs(max_ploidy, n_alleles, phased);
 }
 
 /// fast path for phased data with ploidy=2, and 8 bits per probability
@@ -464,50 +508,6 @@ float * Genotypes::probabilities_layout2() {
   }
   probs_parsed = true;
   return probs;
-}
-
-/// Read genotype data for a variant from disk and decompress.
-///
-/// The decompressed data is stored in the 'uncompressed' member. Decompression
-/// is handled internally by either zlib_decompress, or zstd_decompress,
-/// depending on compression scheme.
-void Genotypes::decompress() {
-  if (is_decompressed) {
-    // don't decompress if already available
-    return;
-  }
-  
-  handle->seekg(file_offset);  // about 1 microsecond
-  
-  bool decompressed_field = false;
-  std::uint32_t decompressed_len = length;
-  if (compression != 0) {
-    if (layout == 1) {
-      decompressed_len = n_samples * 6;
-    } else if (layout == 2) {
-      decompressed_field = true;
-      if (! handle->read(reinterpret_cast<char*>(&decompressed_len), sizeof(std::uint32_t))) {
-        throw std::invalid_argument("couldn't read the compressed length");
-      }
-    }
-  }
-  
-  std::uint32_t compressed_len = length - decompressed_field * 4;
-  char * compressed = new char[compressed_len];
-  uncompressed = new char[decompressed_len];
-  if (! handle->read(&compressed[0], compressed_len)) {
-    throw std::invalid_argument("couldn't read the compressed data");
-  }
-
-  if (compression == 0) { //no compression
-    std::memcpy(&uncompressed[0], &compressed[0], compressed_len);
-  } else if (compression == 1) { // zlib
-    zlib_uncompress(compressed, (int) compressed_len, uncompressed, (int) decompressed_len);  // about 2 milliseconds
-  } else if (compression == 2) { // zstd
-    zstd_uncompress(compressed, (int) compressed_len, uncompressed, (int) decompressed_len);
-  }
-  is_decompressed = true;
-  delete[] compressed;
 }
 
 /// parse genotype data for a single variant
@@ -702,40 +702,6 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
   }
 }
 
-/// swap sample dosages to the opposing allele. Requires a biallelic variant.
-///
-/// This replaces the values in the dose array with 2.0 - value.
-///
-/// This uses AVX and NEON vectorization to speed up calculations on relevant
-/// x86_64 and aarch64 hardware
-void Genotypes::swap_allele_dosage(float * dose) {
-  std::uint32_t n=0;
-#if defined(__x86_64__)
-  __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
-  __m256 batch;
-  for (; n<(n_samples - (n_samples % 8)); n+=8) {
-    batch = _mm256_loadu_ps(dose + n);
-    _mm256_storeu_ps(dose + n, _mm256_sub_ps(k, batch));
-  }
-#elif defined(__aarch64__)
-  float32x4_t k = vdupq_n_f32(2.0f);
-  float32x4_t batch;
-  for (; n < (n_samples - (n_samples % 4)); n += 4) {
-    batch = vld1q_f32(dose + n);
-    vst1q_f32(dose + n, vsubq_f32(k, batch));
-  }
-#endif
-  for (; n<(n_samples - (n_samples % 4)); n+=4) {
-    dose[n] = 2.0f - dose[n];
-    dose[n+1] = 2.0f - dose[n+1];
-    dose[n+2] = 2.0f - dose[n+2];
-    dose[n+3] = 2.0f - dose[n+3];
-  }
-  for (; n<n_samples; n++) {
-    dose[n] = 2.0f - dose[n];
-  }
-}
-
 /// calculate dosage of the reference (first) allele for all samples
 ///
 /// The slow path, loops across samples. Figures out ploidy at each step,
@@ -780,6 +746,41 @@ void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * 
         missing.push_back(n);
       }
     }
+  }
+}
+
+
+/// swap sample dosages to the opposing allele. Requires a biallelic variant.
+///
+/// This replaces the values in the dose array with 2.0 - value.
+///
+/// This uses AVX and NEON vectorization to speed up calculations on relevant
+/// x86_64 and aarch64 hardware
+void Genotypes::swap_allele_dosage(float * dose) {
+  std::uint32_t n=0;
+#if defined(__x86_64__)
+  __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
+  __m256 batch;
+  for (; n<(n_samples - (n_samples % 8)); n+=8) {
+    batch = _mm256_loadu_ps(dose + n);
+    _mm256_storeu_ps(dose + n, _mm256_sub_ps(k, batch));
+  }
+#elif defined(__aarch64__)
+  float32x4_t k = vdupq_n_f32(2.0f);
+  float32x4_t batch;
+  for (; n < (n_samples - (n_samples % 4)); n += 4) {
+    batch = vld1q_f32(dose + n);
+    vst1q_f32(dose + n, vsubq_f32(k, batch));
+  }
+#endif
+  for (; n<(n_samples - (n_samples % 4)); n+=4) {
+    dose[n] = 2.0f - dose[n];
+    dose[n+1] = 2.0f - dose[n+1];
+    dose[n+2] = 2.0f - dose[n+2];
+    dose[n+3] = 2.0f - dose[n+3];
+  }
+  for (; n<n_samples; n++) {
+    dose[n] = 2.0f - dose[n];
   }
 }
 
