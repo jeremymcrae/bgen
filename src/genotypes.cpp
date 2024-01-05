@@ -235,9 +235,7 @@ float * Genotypes::probabilities_layout1() {
 /// Layout 1 doesn't store any information before the genotype probabilities,
 /// so layout 1 just receives default values.
 void Genotypes::parse_preamble() {
-  if (!is_decompressed) {
-    decompress();
-  }
+  decompress();
   if (max_ploidy > 0) {
     return;
   }
@@ -520,7 +518,6 @@ float * Genotypes::probabilities() {
   if ((max_probs > 0) & probs_parsed) {
     return probs;
   }
-  decompress();
   parse_preamble();
   
   if (layout == 1) {
@@ -805,7 +802,6 @@ float * Genotypes::get_allele_dosage(bool use_alt, bool use_minor) {
       return alt_dose;
     }
   }
-  decompress();
   parse_preamble();
   
   if (n_alleles != 2) {
