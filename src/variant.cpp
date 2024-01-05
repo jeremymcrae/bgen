@@ -79,19 +79,22 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
 }
 
 int Variant::probs_per_sample() {
+  if (geno.max_probs == 0) {
+    geno.load_data_and_parse_header();
+  }
   return geno.max_probs;
 }
 
 bool Variant::phased() {
   if (geno.max_probs == 0) {
-    throw std::invalid_argument("unknown phase, run variant.probabilities() first");
+    geno.load_data_and_parse_header();
   }
   return geno.phased;
 }
 
 std::uint8_t * Variant::ploidy() {
   if (geno.max_probs == 0) {
-    throw std::invalid_argument("unknown ploidy, run variant.probabilities() first");
+    geno.load_data_and_parse_header();
   }
   return geno.ploidy;
 }
