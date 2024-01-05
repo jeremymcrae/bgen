@@ -17,8 +17,8 @@ public:
   Genotypes() {};
   ~Genotypes() { clear_probs(); };
   void load_data_and_parse_header();
-  float * probabilities();
-  float * get_allele_dosage(bool use_alt=true, bool use_minor=false);
+  void probabilities(float * probs);
+  void get_allele_dosage(float * dose, bool use_alt=true, bool use_minor=false);
   bool phased=false;
   std::uint32_t max_probs=0;
   int min_ploidy=0;
@@ -28,8 +28,8 @@ public:
 private:
   void decompress();
   void parse_ploidy();
-  float * probabilities_layout1();
-  float * probabilities_layout2();
+  void probabilities_layout1(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows);
+  void probabilities_layout2(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows);
   void fast_haplotype_probs(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows);
   void ref_dosage_fast(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows);
   void ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows);
@@ -46,15 +46,15 @@ private:
   std::uint32_t bit_depth=0;
   std::uint32_t idx=0;
   char * uncompressed={};
-  float * probs={};
-  float * alt_dose={};
-  float * minor_dose={};
+  // float * probs={};
+  // float * alt_dose={};
+  // float * minor_dose={};
   bool is_decompressed = false;
   bool constant_ploidy=true;
   bool has_ploidy = false;
-  bool probs_parsed = false;
-  bool minor_dosage_parsed = false;
-  bool alt_dosage_parsed = false;
+  // bool probs_parsed = false;
+  // bool minor_dosage_parsed = false;
+  // bool alt_dosage_parsed = false;
   std::vector<std::uint32_t> missing;
 };
 

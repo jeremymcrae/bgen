@@ -35,9 +35,9 @@ cdef extern from 'variant.h' namespace 'bgen':
         # declare class constructor and methods
         Variant(ifstream & handle, uint64_t & offset, int layout, int compression, int expected_n, uint64_t fsize) except +
         Variant() except +
-        float * minor_allele_dosage() except +
-        float * alt_dosage() except +
-        float * probs_1d() except +
+        void minor_allele_dosage(float * dosage) except +
+        void alt_dosage(float * dosage) except +
+        void probs_1d(float * dosage) except +
         int probs_per_sample() except +
         bool phased() except +
         uint8_t * ploidy() except +
@@ -243,24 +243,20 @@ cdef class BgenVar:
     def minor_allele_dosage(self):
         ''' dosage for the minor allele for a biallelic variant
         '''
-        # get an minor allele dosage float array, and convert to a numpy array 
-        # with a memoryview before returning a copy to avoid invalid memory 
-        # accesses if the BgenVar is deleted before accessing the array
-        # https://cython.readthedocs.io/en/latest/src/userguide/memoryviews.html#coercion-to-numpy
-        cdef float * dosage = self.thisptr.minor_allele_dosage()
-        return np.asarray(<float [:self.expected_n]>dosage).copy()
+        cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
+        self.thisptr.minor_allele_dosage(&dose[0])
+        return dose
     @property
     def alt_dosage(self):
         ''' dosage for the alt allele for a biallelic variant
         '''
-        # see minor_allele_dosage() for implementation details
-        cdef float * dosage = self.thisptr.alt_dosage()
-        return np.asarray(<float [:self.expected_n]>dosage).copy()
+        cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
+        self.thisptr.alt_dosage(&dose[0])
+        return dose
     @property
     def probabilities(self):
         ''' get the allelic probabilities for a variant
         '''
-        cdef float * probs = self.thisptr.probs_1d()
         cdef int cols = self.thisptr.probs_per_sample()
         cdef uint32_t n_samples = self.expected_n
         cdef uint64_t size = n_samples * cols
@@ -269,8 +265,8 @@ cdef class BgenVar:
             ploidy = self.ploidy
             size = fast_ploidy_sum(&ploidy[0], n_samples) * cols
         
-        cdef float[::1] arr = np.empty(size, dtype=np.float32, order='C')
-        memcpy(&arr[0], probs, size * sizeof(float))
+        cdef float[:] arr = np.empty(size, dtype=np.float32, order='C')
+        self.thisptr.probs_1d(&arr[0])
         
         cdef int current = 0
         cdef int phase_width

@@ -103,22 +103,20 @@ std::uint8_t * Variant::ploidy() {
 ///
 /// This makes it easy to pass the data via cython into a numpy array, which can
 /// be reshaped to a 2-D array.
-float * Variant::probs_1d() {
-  return geno.probabilities();
+void Variant::probs_1d(float * probs) {
+  geno.probabilities(probs);
 }
 
 /// get dosage of the alt allele (only works for biallelic variants)
-float * Variant::alt_dosage() {
-  float * dose = geno.get_allele_dosage(true, false);
+void Variant::alt_dosage(float * dose) {
+  geno.get_allele_dosage(dose, true, false);
   minor_allele = alleles[geno.minor_idx];
-  return dose;
 }
 
 /// get dosage of the minor allele (only works for biallelic variants)
-float * Variant::minor_allele_dosage() {
-  float * dose = geno.get_allele_dosage(false, true);
+void Variant::minor_allele_dosage(float * dose) {
+  geno.get_allele_dosage(dose, false, true);
   minor_allele = alleles[geno.minor_idx];
-  return dose;
 }
 
 } // namespace bgen

@@ -302,11 +302,9 @@ void Genotypes::parse_ploidy() {
 /// sample when all probabilties are zero.
 ///
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
-float * Genotypes::probabilities_layout1() {
-  probs = new float[max_probs * n_samples];
-  
+void Genotypes::probabilities_layout1(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows) {
   float factor = 1.0 / 32768;
-  for (std::uint32_t offset=0; offset<n_samples * max_probs; offset+=max_probs) {
+  for (std::uint32_t offset=0; offset<nrows * max_probs; offset+=max_probs) {
     probs[offset] = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]) * factor;
     probs[offset + 1] = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx + 2]) * factor;
     probs[offset + 2] = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx + 4]) * factor;
@@ -318,8 +316,6 @@ float * Genotypes::probabilities_layout1() {
       probs[offset + 2] = std::nan("1");
     }
   }
-  probs_parsed = true;
-  return probs;
 }
 
 /// fast path for phased data with ploidy=2, and 8 bits per probability
@@ -407,20 +403,7 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, std::uint32_t idx, flo
 /// is a common use case.
 ///
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
-float * Genotypes::probabilities_layout2() {
-  std::uint32_t nrows = 0;
-  if (!phased) {
-    nrows = n_samples;
-  } else {
-    // phased probabilities require as many rows per sample as the ploidy
-    if (constant_ploidy) {
-      nrows = n_samples * max_ploidy;
-    } else {
-      for (std::uint32_t n=0; n<n_samples; n++) { nrows += ploidy[n]; }
-    }
-  }
-  probs = new float[max_probs * nrows];
-  
+void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows) {
   // get genotype/allele probabilities
   std::uint32_t n_probs;
   std::uint32_t max_less_1 = max_probs - 1;
@@ -506,26 +489,31 @@ float * Genotypes::probabilities_layout2() {
       probs[offset + x] = std::nan("1");
     }
   }
-  probs_parsed = true;
-  return probs;
 }
 
 /// parse genotype data for a single variant
 ///
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
-float * Genotypes::probabilities() {
-  // avoid recomputation if called repeatedly for same variant
-  if (probs_parsed) {
-    return probs;
-  }
+void Genotypes::probabilities(float * probs) {
   load_data_and_parse_header();
   
-  if (layout == 1) {
-    probs = probabilities_layout1();
-  } else if (layout == 2) {
-    probs = probabilities_layout2();  // about 3 milliseconds
+  std::uint32_t nrows;
+  if (!phased) {
+    nrows = n_samples;
+  } else {
+    // phased probabilities require as many rows per sample as the ploidy
+    if (constant_ploidy) {
+      nrows = n_samples * max_ploidy;
+    } else {
+      nrows = fast_ploidy_sum(ploidy, n_samples);
+    }
   }
-  return probs;
+  
+  if (layout == 1) {
+    probabilities_layout1(uncompressed, idx, probs, nrows);
+  } else if (layout == 2) {
+    probabilities_layout2(uncompressed, idx, probs, nrows); // about 3 milliseconds
+  }
 }
 
 /// find which allele corresponds to the minor allele
@@ -792,16 +780,9 @@ void Genotypes::swap_allele_dosage(float * dose) {
 /// @param use_alt whether to return the alt allele dosages
 /// @param use_minor whether to return the minor allele dosages
 /// @return float array of dosage values (each from 0.0-2.0)
-float * Genotypes::get_allele_dosage(bool use_alt, bool use_minor) {
+void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
   if (use_alt == use_minor) {
     throw std::invalid_argument("one of use_alt or use_minor must be true");
-  }
-  if (max_probs > 0) {
-    if (use_minor & minor_dosage_parsed) {
-      return minor_dose;
-    } else if (use_alt & alt_dosage_parsed) {
-      return alt_dose;
-    }
   }
   load_data_and_parse_header();
   
@@ -810,7 +791,6 @@ float * Genotypes::get_allele_dosage(bool use_alt, bool use_minor) {
   }
   
   // calculate the dosage for the first allele for all samples
-  float * dose = new float[n_samples];
   if (constant_ploidy & (max_probs == 3) & (bit_depth == 8)) {
     // A fast path when we know the ploidy is constant and the bit depth is 8,
     // this avoids the bit shifts/masks used in the variable bit_depth path.
@@ -828,31 +808,12 @@ float * Genotypes::get_allele_dosage(bool use_alt, bool use_minor) {
   for (auto n: missing) {
     dose[n] = std::nan("1");
   }
-
-  if (use_alt) {
-    alt_dose = dose;
-    alt_dosage_parsed = true;
-    return alt_dose;
-  } else {
-    minor_dose = dose;
-    minor_dosage_parsed = true;
-    return minor_dose;
-  }
 }
 
 void Genotypes::clear_probs() {
   if (max_probs > 0) {
     delete[] ploidy;
     delete[] uncompressed;
-  }
-  if (probs_parsed) {
-    delete[] probs;
-  }
-  if (minor_dosage_parsed) {
-    delete[] minor_dose;
-  }
-  if (alt_dosage_parsed) {
-    delete[] alt_dose;
   }
   max_probs = 0;
 }
