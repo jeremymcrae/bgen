@@ -323,7 +323,7 @@ float * Genotypes::probabilities_layout1() {
 }
 
 /// fast path for phased data with ploidy=2, and 8 bits per probability
-void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t idx, std::uint32_t & nrows) {
+void Genotypes::fast_haplotype_probs(char * uncompressed, std::uint32_t idx, float * probs,  std::uint32_t & nrows) {
   std::uint32_t n = 0;
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
@@ -451,7 +451,7 @@ float * Genotypes::probabilities_layout2() {
     }
   } else if (constant_ploidy & (max_probs == 2) & (bit_depth == 8)) {
     // fast path for phased data with ploidy=2, and 8 bits per probability
-    fast_haplotype_probs(uncompressed, probs, idx, nrows);
+    fast_haplotype_probs(uncompressed, idx, probs, nrows);
   } else {
     for (std::uint32_t offset=0; offset < (nrows * max_probs); offset += max_probs) {
       // calculate the number of probabilities per sample (depends on whether the

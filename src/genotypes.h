@@ -30,7 +30,7 @@ private:
   void parse_ploidy();
   float * probabilities_layout1();
   float * probabilities_layout2();
-  void fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t idx, std::uint32_t & nrows);
+  void fast_haplotype_probs(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows);
   void ref_dosage_fast(char * uncompressed, std::uint32_t idx, float * dose);
   void ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * dose);
   void swap_allele_dosage(float * dose);
