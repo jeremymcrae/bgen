@@ -41,13 +41,13 @@ public:
   float * parse_layout2();
   void decompress();
   float * probabilities();
-  void fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t & idx, std::uint32_t & nrows);
+  void fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t idx, std::uint32_t & nrows);
   int find_minor_allele(float * dose);
   float * get_allele_dosage(bool use_alt=true, bool use_minor=false);
-  void ref_dosage_fast(char * uncompressed, std::uint32_t & idx, float * dose);
-  void ref_dosage_fast_fallback(char * uncompressed, std::uint32_t & idx, float * dose);
+  void ref_dosage_fast(char * uncompressed, std::uint32_t idx, float * dose);
+  void ref_dosage_fast_fallback(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t & n);
   void swap_allele_dosage(float * dose);
-  void ref_dosage_slow(char * uncompressed, std::uint32_t & idx, float * dose);
+  void ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * dose);
   void clear_probs();
   bool phased=false;
   std::uint32_t max_probs = 0;

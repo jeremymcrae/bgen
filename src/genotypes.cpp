@@ -278,7 +278,7 @@ void Genotypes::parse_preamble() {
 }
 
 /// fast path for phased data with ploidy=2, and 8 bits per probability
-void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t & idx, std::uint32_t & nrows) {
+void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::uint32_t idx, std::uint32_t & nrows) {
   std::uint32_t n = 0;
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
@@ -567,8 +567,8 @@ int Genotypes::find_minor_allele(float * dose) {
 }
 
 // the unvectorized slow path. This is ~50% slower
-void Genotypes::ref_dosage_fast_fallback(char *uncompressed, std::uint32_t &idx, float *dose) {
-  for (std::uint32_t n = 0; n < (n_samples - (n_samples % 2)); n += 2) {
+void Genotypes::ref_dosage_fast_fallback(char *uncompressed, std::uint32_t idx, float *dose, std::uint32_t & n) {
+  for (; n < (n_samples - (n_samples % 2)); n += 2) {
     // speed up throughput by calculating two samples at a time
     dose[n] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]) * 2 +
                    *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1])];
@@ -597,7 +597,8 @@ void Genotypes::ref_dosage_fast_fallback(char *uncompressed, std::uint32_t &idx,
 ///
 /// @param uncompressed char array containing genotype probabilities
 /// @param idx uint position where the genotype probabilties begin
-void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t &idx, float *dose) {
+void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *dose) {
+  std::uint32_t n=0;
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
     __m256i mask_odd = _mm256_set_epi8(0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
@@ -616,7 +617,7 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t &idx, float *d
     __m128i hi16;
     __m256i hi;
     __m256 hi_float;
-    for (std::uint32_t n=0; n<(n_samples - (n_samples % 16)); n+=16) {
+    for (; n<(n_samples - (n_samples % 16)); n+=16) {
       initial = _mm256_loadu_si256((__m256i *) &uncompressed[idx]);
       
       // get heterozygous int dosage by masking out the even bytes, and right
@@ -651,15 +652,6 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t &idx, float *d
       
       idx += 32;
     }
-    // finish off the final unvectorized samples
-    for (std::uint32_t n=(n_samples - (n_samples % 16)); n<n_samples; n++) {
-      dose[n] = lut8[*reinterpret_cast<const std::uint8_t*>(&uncompressed[idx]) * 2 +
-      *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + 1])];
-      idx += 2;
-    }
-  } else {
-    // this handles if AVX2 is not available
-    ref_dosage_fast_fallback(uncompressed, idx, dose);
   }
 #elif defined(__aarch64__)
   // using this optimised method roughly doubles the speed of computing the ref
@@ -671,7 +663,7 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t &idx, float *d
   uint8x16x2_t initial;
   uint16x8_t het, hom, total;
   float32x4_t _dose;
-  for (std::uint32_t n = 0; n < (n_samples - (n_samples % 8)); n += 8) {
+  for (; n < (n_samples - (n_samples % 8)); n += 8) {
     // load data from the array into SIMD registers. This deinterleaves the
     // het and hom counts into separate vector registers
     initial = vld2q_u8(buff + idx);
@@ -709,16 +701,11 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t &idx, float *d
 
     idx += 16;
   }
-  // finish off the final unvectorized samples
-  for (std::uint32_t n = (n_samples - (n_samples % 8)); n < n_samples; n++) {
-    dose[n] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]) * 2 +
-                   *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1])];
-    idx += 2;
-  }
-#else
-  // this handles if we cannot compile the code above (32 bit, or not x86)
-  ref_dosage_fast_fallback(uncompressed, idx, dose);
 #endif
+  // finish off the remaining unvectorized samples
+  // this also handles if we cannot compile the code above (not __aarch64__,
+  // __x86_64__ or without avx2)
+  ref_dosage_fast_fallback(uncompressed, idx, dose, n);
 }
 
 /// swap sample dosages to the opposing allele. Requires a biallelic variant.
@@ -780,7 +767,7 @@ void Genotypes::swap_allele_dosage(float * dose) {
 ///
 /// @param uncompressed char array of genotype probabilities (encoding depends on layout)
 /// @param idx uint index position in uncompressed where genotype probabilities start
-void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t & idx, float * dose) {
+void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * dose) {
   std::uint32_t ploidy = max_ploidy;
   std::uint32_t half_ploidy = ploidy / 2;
   
