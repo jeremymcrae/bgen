@@ -580,7 +580,7 @@ int Genotypes::find_minor_allele(float * dose) {
 ///
 /// @param uncompressed char array containing genotype probabilities
 /// @param idx uint position where the genotype probabilties begin
-void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *dose) {
+void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *dose, std::uint32_t nrows) {
   std::uint32_t n=0;
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
@@ -600,7 +600,7 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
     __m128i hi16;
     __m256i hi;
     __m256 hi_float;
-    for (; n<(n_samples - (n_samples % 16)); n+=16) {
+    for (; n<(nrows - (nrows % 16)); n+=16) {
       initial = _mm256_loadu_si256((__m256i *) &uncompressed[idx]);
       
       // get heterozygous int dosage by masking out the even bytes, and right
@@ -646,7 +646,7 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
   uint8x16x2_t initial;
   uint16x8_t het, hom, total;
   float32x4_t _dose;
-  for (; n < (n_samples - (n_samples % 8)); n += 8) {
+  for (; n < (nrows - (nrows % 8)); n += 8) {
     // load data from the array into SIMD registers. This deinterleaves the
     // het and hom counts into separate vector registers
     initial = vld2q_u8(buff + idx);
@@ -687,7 +687,7 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
 #endif
   // Finish off the remaining unvectorized samples. This is 50% slower than SIMD.
   // Also handles if we can't use the code above (not aarch64, x86_64 or lacks avx2)
-  for (; n < (n_samples - (n_samples % 2)); n += 2) {
+  for (; n < (nrows - (nrows % 2)); n += 2) {
     // speed up throughput by calculating two samples at a time
     dose[n] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]) * 2 +
                    *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1])];
@@ -696,8 +696,8 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
     idx += 4;
   }
   // and finish off the final sample/s
-  if (n_samples % 2) {
-    dose[n_samples - 1] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]) * 2 +
+  if (nrows % 2) {
+    dose[nrows - 1] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]) * 2 +
                                *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1])];
   }
 }
@@ -717,7 +717,7 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
 ///
 /// @param uncompressed char array of genotype probabilities (encoding depends on layout)
 /// @param idx uint index position in uncompressed where genotype probabilities start
-void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * dose) {
+void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows) {
   std::uint32_t ploidy = max_ploidy;
   std::uint32_t half_ploidy = ploidy / 2;
   
@@ -728,7 +728,7 @@ void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * 
   std::uint32_t hom_alt;
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
   std::uint32_t bit_idx = 0;  // index position in bits
-  for (std::uint32_t n=0; n<n_samples; n++) {
+  for (std::uint32_t n=0; n<nrows; n++) {
     if (!constant_ploidy) {
       ploidy = this->ploidy[n];
       half_ploidy = ploidy / 2;
@@ -814,9 +814,9 @@ float * Genotypes::get_allele_dosage(bool use_alt, bool use_minor) {
   if (constant_ploidy & (max_probs == 3) & (bit_depth == 8)) {
     // A fast path when we know the ploidy is constant and the bit depth is 8,
     // this avoids the bit shifts/masks used in the variable bit_depth path.
-    ref_dosage_fast(uncompressed, idx, dose);
+    ref_dosage_fast(uncompressed, idx, dose, n_samples);
   } else {
-    ref_dosage_slow(uncompressed, idx, dose);
+    ref_dosage_slow(uncompressed, idx, dose, n_samples);
   }
   
   minor_idx = find_minor_allele(dose);
