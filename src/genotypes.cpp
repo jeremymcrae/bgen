@@ -515,7 +515,7 @@ float * Genotypes::probabilities_layout2() {
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
 float * Genotypes::probabilities() {
   // avoid recomputation if called repeatedly for same variant
-  if ((max_probs > 0) & probs_parsed) {
+  if (probs_parsed) {
     return probs;
   }
   load_data_and_parse_header();
