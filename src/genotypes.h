@@ -45,7 +45,6 @@ public:
   int find_minor_allele(float * dose);
   float * get_allele_dosage(bool use_alt=true, bool use_minor=false);
   void ref_dosage_fast(char * uncompressed, std::uint32_t idx, float * dose);
-  void ref_dosage_fast_fallback(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t & n);
   void swap_allele_dosage(float * dose);
   void ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * dose);
   void clear_probs();

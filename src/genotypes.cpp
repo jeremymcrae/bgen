@@ -235,6 +235,9 @@ float * Genotypes::parse_layout1() {
 /// Layout 1 doesn't store any information before the genotype probabilities,
 /// so layout 1 just receives default values.
 void Genotypes::parse_preamble() {
+  if (!is_decompressed) {
+    decompress();
+  }
   if (max_ploidy > 0) {
     return;
   }
@@ -566,23 +569,6 @@ int Genotypes::find_minor_allele(float * dose) {
   }
 }
 
-// the unvectorized slow path. This is ~50% slower
-void Genotypes::ref_dosage_fast_fallback(char *uncompressed, std::uint32_t idx, float *dose, std::uint32_t & n) {
-  for (; n < (n_samples - (n_samples % 2)); n += 2) {
-    // speed up throughput by calculating two samples at a time
-    dose[n] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]) * 2 +
-                   *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1])];
-    dose[n + 1] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 2]) * 2 +
-                       *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 3])];
-    idx += 4;
-  }
-  // and finish off the final sample/s
-  if (n_samples % 2) {
-    dose[n_samples - 1] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]) * 2 +
-                               *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1])];
-  }
-}
-
 /// calculate dosage of the reference (first) allele for all samples.
 ///
 /// Writes dosage float values to the dose member.
@@ -702,10 +688,21 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
     idx += 16;
   }
 #endif
-  // finish off the remaining unvectorized samples
-  // this also handles if we cannot compile the code above (not __aarch64__,
-  // __x86_64__ or without avx2)
-  ref_dosage_fast_fallback(uncompressed, idx, dose, n);
+  // Finish off the remaining unvectorized samples. This is 50% slower than SIMD.
+  // Also handles if we can't use the code above (not aarch64, x86_64 or lacks avx2)
+  for (; n < (n_samples - (n_samples % 2)); n += 2) {
+    // speed up throughput by calculating two samples at a time
+    dose[n] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]) * 2 +
+                   *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1])];
+    dose[n + 1] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 2]) * 2 +
+                       *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 3])];
+    idx += 4;
+  }
+  // and finish off the final sample/s
+  if (n_samples % 2) {
+    dose[n_samples - 1] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]) * 2 +
+                               *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1])];
+  }
 }
 
 /// swap sample dosages to the opposing allele. Requires a biallelic variant.
@@ -715,41 +712,31 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
 /// This uses AVX and NEON vectorization to speed up calculations on relevant
 /// x86_64 and aarch64 hardware
 void Genotypes::swap_allele_dosage(float * dose) {
+  std::uint32_t n=0;
 #if defined(__x86_64__)
   __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
   __m256 batch;
-  for (std::uint32_t n=0; n<(n_samples - (n_samples % 8)); n+=8) {
+  for (; n<(n_samples - (n_samples % 8)); n+=8) {
     batch = _mm256_loadu_ps(dose + n);
     _mm256_storeu_ps(dose + n, _mm256_sub_ps(k, batch));
-  }
-  for (std::uint32_t n=(n_samples - (n_samples % 8)); n<n_samples; n++) {
-    dose[n] = 2.0f - dose[n];
   }
 #elif defined(__aarch64__)
   float32x4_t k = vdupq_n_f32(2.0f);
   float32x4_t batch;
-  for (std::uint32_t n = 0; n < (n_samples - (n_samples % 4)); n += 4) {
+  for (; n < (n_samples - (n_samples % 4)); n += 4) {
     batch = vld1q_f32(dose + n);
     vst1q_f32(dose + n, vsubq_f32(k, batch));
   }
-  for (std::uint32_t n = (n_samples - (n_samples % 4)); n < n_samples; n++) {
-    dose[n] = 2.0f - dose[n];
-  }
-#else
-  for (std::uint32_t n=0; n<(n_samples - (n_samples % 8)); n+=8) {
+#endif
+  for (; n<(n_samples - (n_samples % 4)); n+=4) {
     dose[n] = 2.0f - dose[n];
     dose[n+1] = 2.0f - dose[n+1];
     dose[n+2] = 2.0f - dose[n+2];
     dose[n+3] = 2.0f - dose[n+3];
-    dose[n+4] = 2.0f - dose[n+4];
-    dose[n+5] = 2.0f - dose[n+5];
-    dose[n+6] = 2.0f - dose[n+6];
-    dose[n+7] = 2.0f - dose[n+7];
   }
-  for (std::uint32_t n=(n_samples - (n_samples % 8)); n<n_samples; n++) {
+  for (; n<n_samples; n++) {
     dose[n] = 2.0f - dose[n];
   }
-#endif
 }
 
 /// calculate dosage of the reference (first) allele for all samples
