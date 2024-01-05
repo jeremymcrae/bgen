@@ -210,7 +210,7 @@ void Genotypes::parse_ploidy() {
 /// sample when all probabilties are zero.
 ///
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
-float * Genotypes::parse_layout1() {
+float * Genotypes::probabilities_layout1() {
   probs = new float[max_probs * n_samples];
   
   float factor = 1.0 / 32768;
@@ -365,7 +365,7 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, float * probs, std::ui
 /// is a common use case.
 ///
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
-float * Genotypes::parse_layout2() {
+float * Genotypes::probabilities_layout2() {
   std::uint32_t nrows = 0;
   if (!phased) {
     nrows = n_samples;
@@ -524,9 +524,9 @@ float * Genotypes::probabilities() {
   parse_preamble();
   
   if (layout == 1) {
-    probs = parse_layout1();
+    probs = probabilities_layout1();
   } else if (layout == 2) {
-    probs = parse_layout2();  // about 3 milliseconds
+    probs = probabilities_layout2();  // about 3 milliseconds
   }
   return probs;
 }
