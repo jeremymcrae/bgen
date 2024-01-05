@@ -16,7 +16,7 @@ public:
      handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples), file_offset(offset), length(length) {};
   Genotypes() {};
   ~Genotypes() { clear_probs(); };
-  void parse_preamble();
+  void load_data_and_parse_header();
   float * probabilities();
   float * get_allele_dosage(bool use_alt=true, bool use_minor=false);
   bool phased=false;

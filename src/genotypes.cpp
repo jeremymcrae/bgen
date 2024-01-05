@@ -234,7 +234,7 @@ float * Genotypes::probabilities_layout1() {
 ///
 /// Layout 1 doesn't store any information before the genotype probabilities,
 /// so layout 1 just receives default values.
-void Genotypes::parse_preamble() {
+void Genotypes::load_data_and_parse_header() {
   decompress();
   if (max_ploidy > 0) {
     return;
@@ -518,7 +518,7 @@ float * Genotypes::probabilities() {
   if ((max_probs > 0) & probs_parsed) {
     return probs;
   }
-  parse_preamble();
+  load_data_and_parse_header();
   
   if (layout == 1) {
     probs = probabilities_layout1();
@@ -802,7 +802,7 @@ float * Genotypes::get_allele_dosage(bool use_alt, bool use_minor) {
       return alt_dose;
     }
   }
-  parse_preamble();
+  load_data_and_parse_header();
   
   if (n_alleles != 2) {
     throw std::invalid_argument("can't get allele dosages for non-biallelic var.");
