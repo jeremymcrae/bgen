@@ -177,6 +177,9 @@ cdef class BgenWriter:
         # convert numpy array to C contiguous for storing values on disk. numpy
         # arrays default to C contiguous, so most won't need conversion, but
         # some can be fortran order, e.g. if transposed
+        if not isinstance(genotypes[0][0], np.float64):
+            genotypes = genotypes.astype(np.float64)
+        
         cdef double[:, :] geno_c
         if genotypes.flags['C_CONTIGUOUS']:
             geno_c = genotypes
