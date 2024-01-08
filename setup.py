@@ -58,6 +58,7 @@ def build_zstd():
     Returns:
         list of paths to compiled object code
     '''
+    print('building zstd')
     folder = Path('src/zstd/lib')
     include_dirs = ['src/zstd/lib/', 'src/zstd/lib/common']
     sources = flatten(
@@ -70,9 +71,18 @@ def build_zstd():
     )
     extra_compile_args = ['-std=gnu11', '-fPIC', '-O2']
     
+    # newer zstd versions have an asm file, which needs to be to compiled and
+    # used as a library for full zstd compilation.
     cc = new_compiler()
+    # the unix compiler needs to allow files with .S extension
+    cc.src_extensions += ['.S']
+    compiled = cc.compile(sources=flatten((folder / 'decompress').glob('*.S')),)
+    
+    if len(compiled) > 0:
+        extra_compile_args += [f'-L{" ".join(compiled)}']
+    
     return cc.compile(sources, include_dirs=include_dirs,
-        extra_preargs=extra_compile_args)
+        extra_preargs=extra_compile_args) + compiled
 
 if sys.platform == 'win32':
     zlib, libs = build_zlib(), []
