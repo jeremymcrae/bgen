@@ -245,14 +245,14 @@ cdef class BgenVar:
         '''
         cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
         self.thisptr.minor_allele_dosage(&dose[0])
-        return dose
+        return np.asarray(dose)
     @property
     def alt_dosage(self):
         ''' dosage for the alt allele for a biallelic variant
         '''
         cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
         self.thisptr.alt_dosage(&dose[0])
-        return dose
+        return np.asarray(dose)
     @property
     def probabilities(self):
         ''' get the allelic probabilities for a variant
