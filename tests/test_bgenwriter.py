@@ -362,3 +362,38 @@ class TestBgenWriter(unittest.TestCase):
         for x in bfile:
             probs = x.probabilities
             self.assertTrue(probs_close(geno, probs, bit_depth=8))
+    
+    def test_multiple_read_writes(self):
+        ''' check values pass correctly through multiple rounds of read/writes
+        '''
+        first_path = self.tmpdir / 'temp1.bgen'
+        second_path = self.tmpdir / 'temp2.bgen'
+        
+        bit_depth = 9
+        max_val = (2 ** bit_depth) - 1
+        half = max_val // 2
+        integer_values = [[0,                max_val,     0],
+                          [half,             half + 1,    0],
+                          [half + 1,         half,        0],
+                          [(max_val - 1),    1,           0],
+                         ]
+        integer_values = np.array(integer_values)
+        geno = integer_values / max_val
+        
+        with BgenWriter(first_path, n_samples=len(geno)) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno, bit_depth=bit_depth)
+        
+        with BgenWriter(second_path, n_samples=len(geno)) as out_bfile:
+            with BgenReader(first_path, delay_parsing=True) as bfile:
+                probs = next(bfile).probabilities
+                as_integers = (probs * max_val).round()
+                self.assertTrue(probs_close(geno, probs, bit_depth=bit_depth))
+                self.assertTrue((integer_values == as_integers).all())
+                out_bfile.add_variant(
+                    'var1', 'rs1', 'chr1', 10, ['A', 'C'], probs, bit_depth=bit_depth)
+        
+        with BgenReader(second_path, delay_parsing=True) as bfile:
+                probs = next(bfile).probabilities
+                as_integers = (probs * max_val).round()
+                self.assertTrue(probs_close(geno, probs, bit_depth=bit_depth))
+                self.assertTrue((integer_values == as_integers).all())

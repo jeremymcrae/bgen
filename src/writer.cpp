@@ -260,18 +260,13 @@ std::uint64_t emplace_probability(double &geno_prob,
                                   double &factor,
                                   double &sample_max)
 {
+  double multiplied;
   std::uint64_t converted;
   std::uint64_t window;
 
   window = *reinterpret_cast<const std::uint32_t* >(encoded);
-  converted = geno_prob * factor;
-  if (geno_prob == sample_max) {
-    // if the value is the max for the sample, round up, otherwise low-bit depth
-    // encoded values can be too low
-    converted = std::ceil(converted);
-  } else {
-    converted = std::floor(converted);
-  }
+  multiplied = geno_prob * factor;
+  converted = std::round(multiplied);
   window |= (converted << bit_remainder);
   return window;
 }
