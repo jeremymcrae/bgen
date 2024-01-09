@@ -6,6 +6,7 @@ import tempfile
 import os
 import time
 import sys
+import math
 
 import numpy as np
 
@@ -15,7 +16,7 @@ from bgen.index import Index
 def probs_close(orig, updat, bit_depth):
     ''' check if the genotype probabilities are near the original values
 
-    We lose some precision when storing genotype proabilites, dependent on the
+    We lose some precision when storing genotype probabilities, dependent on the
     bit depth we select. This accounts for the variable bit depth.
     '''
     # fix the nans from differing ploidies
