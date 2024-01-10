@@ -320,7 +320,7 @@ std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
       bit_idx += bit_depth;
     }
   }
-  return genotype_offset + (bit_idx / 8);
+  return genotype_offset + (bit_idx / 8) + (std::uint32_t)((bit_idx % 8) > 0);
 }
 
 std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
@@ -383,7 +383,7 @@ std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
     i += (max_probs * max_ploidy) - (n_probs * _ploid);
     sample_idx += 1;
   }
-  return genotype_offset + (bit_idx / 8);
+  return genotype_offset + (bit_idx / 8) + (std::uint32_t)((bit_idx % 8) > 0);
 }
 
 std::vector<std::uint8_t> encode_layout2(

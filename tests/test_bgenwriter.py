@@ -398,3 +398,48 @@ class TestBgenWriter(unittest.TestCase):
                 as_integers = (probs * max_val).round()
                 self.assertTrue(probs_close(geno, probs, bit_depth=bit_depth))
                 self.assertTrue((integer_values == as_integers).all())
+    
+    def test_all_possible_genotypes(self):
+        ''' check all possible values in the range available to the bit depths
+        '''
+        max_samples = 10000000
+        for bit_depth in range(1, 24):
+            print(bit_depth)
+            first_path = self.tmpdir / f'temp_{bit_depth}.v1.bgen'
+            second_path = self.tmpdir / f'temp2_{bit_depth}.v2.bgen'
+            
+            max_val = (2 ** bit_depth) - 1
+            increment = 1
+            if (max_val / 2) > max_samples:
+                increment = ((max_val + 1) / 2) / max_samples
+            
+            integer_values = np.arange(0, max_val + 1, increment)
+            
+            remainder = max_val - (integer_values[::2] + integer_values[::-2])
+            
+            integer_values = np.array([integer_values[::2], integer_values[::-2],
+                                       remainder], dtype=np.uint32)
+            integer_values = np.ascontiguousarray(integer_values.T)
+            geno = integer_values / max_val
+            
+            # write first round
+            with BgenWriter(first_path, n_samples=len(geno)) as bfile:
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                                  bit_depth=bit_depth)
+            
+            # check the first write
+            with BgenWriter(second_path, n_samples=len(geno)) as out_bfile:
+                with BgenReader(first_path, delay_parsing=True) as bfile:
+                    probs = next(bfile).probabilities
+                    as_integers = (probs * max_val).round()
+                    self.assertTrue(probs_close(geno, probs, bit_depth=bit_depth))
+                    self.assertTrue((integer_values == as_integers).all())
+                    out_bfile.add_variant(
+                        'var1', 'rs1', 'chr1', 10, ['A', 'C'], probs, bit_depth=bit_depth)
+            
+            # check the re-written bgen
+            with BgenReader(second_path, delay_parsing=True) as bfile:
+                    probs = next(bfile).probabilities
+                    as_integers = (probs * max_val).round()
+                    self.assertTrue(probs_close(geno, probs, bit_depth=bit_depth))
+                    self.assertTrue((integer_values == as_integers).all())
