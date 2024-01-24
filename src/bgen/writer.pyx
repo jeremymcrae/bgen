@@ -40,6 +40,7 @@ cdef extern from 'writer.h' namespace 'bgen':
                    uint32_t compression, uint32_t layout, vector[string] &samples) except +
         uint64_t write_variant_header(string &varid, string &rsid, string &chrom, 
                         uint32_t &pos, vector[string] &alleles, uint32_t _n_samples) except +
+        uint64_t write_variant_direct(vector[uint8_t] & data) except +
         uint64_t add_genotype_data(uint16_t n_alleles,
                          double *genotypes, uint32_t geno_len, uint8_t ploidy,
                          bool phased, uint8_t bit_depth) except +
@@ -197,6 +198,21 @@ cdef class BgenWriter:
         
         self.indexer.add_variant(chrom, int(pos), rsid, alleles, var_offset, 
                                  end_offset - var_offset)
+
+    def add_variant_direct(self, variant):
+        ''' insert a BgenVar directly into the bgen file
+        '''
+        chrom = variant.chrom
+        pos = int(variant.pos)
+        rsid = variant.rsid
+        alleles = variant.alleles
+        print('copying data')
+        cdef vector[uint8_t] data = variant.copy_data()
+        print('data copied from variant, writing now')
+        var_offset = self.thisptr.write_variant_direct(data)
+        end_offset = var_offset + len(data)
+
+        self.indexer.add_variant(chrom, pos, rsid, alleles, var_offset, end_offset - var_offset)
 
     def __enter__(self):
         return self

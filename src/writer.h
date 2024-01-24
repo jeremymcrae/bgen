@@ -40,6 +40,7 @@ public:
                                      std::uint32_t &pos,
                                      std::vector<std::string> &alleles,
                                      std::uint32_t _n_samples);
+  std::uint64_t write_variant_direct(std::vector<std::uint8_t> & data);
   std::uint64_t add_genotype_data(std::uint16_t n_alleles,
                                   double *genotypes,
                                   std::uint32_t geno_len,

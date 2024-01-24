@@ -364,6 +364,55 @@ class TestBgenWriter(unittest.TestCase):
             probs = x.probabilities
             self.assertTrue(probs_close(geno, probs, bit_depth=8))
     
+    def test_add_variant_direct(self):
+        ''' test adding variant data directly from BgenVar
+        '''
+        path_1 = self.tmpdir / 'temp.bgen'
+        bfile = BgenWriter(path_1, 4, samples=['a', 'b', 'c', 'd'])
+        ploidy = np.array([1, 2, 3, 3], dtype=np.uint8)
+        geno = np.array([[0.1, 0.9, float('nan'), float('nan'), float('nan'), float('nan')],
+                         [0.2, 0.8, 0.5, 0.5, float('nan'), float('nan')],
+                         [float('nan'), float('nan'), float('nan'),
+                          float('nan'), float('nan'), float('nan')],
+                         [0.3, 0.7, 0.2, 0.8, 1, 0],
+                         ])
+        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                          ploidy=ploidy, phased=1)
+
+        # and add another, slightly different, variant
+        geno = np.array([[0.1, 0.7, float('nan'), float('nan'), 0.3, 0.4],
+                         [0.2, 0.7, 0.5, 0.5, float('nan'), float('nan')],
+                         [float('nan'), float('nan'), float('nan'),
+                          float('nan'), float('nan'), float('nan')],
+                         [0.3, 0.1, 0.2, 0.8, 0.5, 0],
+                         ])
+        bfile.add_variant('var2', 'rs2', 'chr2', 20, ['G', 'TT'], geno,
+                          ploidy=ploidy, phased=1)
+        bfile.close()
+
+        path_2 = self.tmpdir / 'temp2.bgen'
+        with BgenReader(path_1) as bfile:
+            samples = bfile.samples
+            with BgenWriter(path_2, len(samples), samples) as output:
+                for var in bfile:
+                    output.add_variant_direct(var)
+
+        with BgenReader(path_1) as bfile_1, BgenReader(path_2) as bfile_2:
+            for var1, var2 in zip(bfile_1, bfile_2):
+                self.assertEqual(var1.rsid, var2.rsid)
+                self.assertEqual(var1.chrom, var2.chrom)
+                self.assertEqual(var1.pos, var2.pos)
+                self.assertEqual(var1.alleles, var2.alleles)
+                self.assertEqual(var1.fileoffset, var2.fileoffset)
+                self.assertEqual(var1.next_variant_offset, var2.next_variant_offset)
+
+                # check all the nan values match
+                self.assertTrue((np.isnan(var1.probabilities) == np.isnan(var2.probabilities)).all())
+
+                # check all the non-nan values match
+                mask = np.isfinite(var1.probabilities)
+                self.assertTrue((var1.probabilities[mask] == var2.probabilities[mask]).all())
+
     def test_multiple_read_writes(self):
         ''' check values pass correctly through multiple rounds of read/writes
         '''

@@ -17,14 +17,14 @@ namespace bgen {
 ///  @param layout bgen layout version (1 or 2)
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
-Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, std::uint64_t fsize) {
+Variant::Variant(std::ifstream * _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, std::uint64_t fsize) : handle(_handle) {
   if (varoffset >= fsize) {
     throw std::out_of_range("reached end of file");
   }
   offset = varoffset;
-  handle.seekg(offset);
+  handle->seekg(offset);
   if (layout == 1) {
-    handle.read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
+    handle->read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
   } else {
     n_samples = expected_n;
   }
@@ -35,35 +35,39 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   
   // get the variant ID (first need to know how long the field is)
   std::uint16_t item_len;
-  handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
+  handle->read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
   if (item_len > 0) {
-    std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(varid));
+    varid.resize(item_len);
+    handle->read(&varid[0], item_len);
   }
   
   // get the rsID (first need to know how long the field is)
-  handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
+  handle->read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
   if (item_len > 0) {
-    std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(rsid));
+    rsid.resize(item_len);
+    handle->read(&rsid[0], item_len);
   }
   
   // get the chromosome (first need to know how long the field is)
-  handle.read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
+  handle->read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
   if (item_len > 0) {
-    std::copy_n(std::istream_iterator<char>(handle), item_len, std::back_inserter(chrom));
+    chrom.resize(item_len);
+    handle->read(&chrom[0], item_len);
   }
   
-  handle.read(reinterpret_cast<char*>(&pos), sizeof(std::uint32_t));
+  handle->read(reinterpret_cast<char*>(&pos), sizeof(std::uint32_t));
   if (layout == 1) {
     n_alleles = 2;
   } else {
-    handle.read(reinterpret_cast<char*>(&n_alleles), sizeof(std::uint16_t));
+    handle->read(reinterpret_cast<char*>(&n_alleles), sizeof(std::uint16_t));
   }
   
   for (int x=0; x < n_alleles; x++) {
     std::uint32_t allele_len;
     std::string allele;
-    handle.read(reinterpret_cast<char*>(&allele_len), sizeof(std::uint32_t));
-    std::copy_n(std::istream_iterator<char>(handle), allele_len, std::back_inserter(allele));
+    handle->read(reinterpret_cast<char*>(&allele_len), sizeof(std::uint32_t));
+    allele.resize(allele_len);
+    handle->read(&allele[0], allele_len);
     alleles.push_back(allele);
   }
   
@@ -71,10 +75,10 @@ Variant::Variant(std::ifstream & handle, std::uint64_t & varoffset, int layout, 
   if ((layout == 1) && (compression == 0)) {
     length = n_samples * 6;
   } else {
-    handle.read(reinterpret_cast<char *>(&length), sizeof(length));
+    handle->read(reinterpret_cast<char *>(&length), sizeof(length));
   }
-  std::uint64_t geno_offset = (std::uint64_t) handle.tellg();
-  geno = Genotypes(&handle, layout, compression, n_alleles, n_samples, geno_offset, length);
+  std::uint64_t geno_offset = (std::uint64_t) handle->tellg();
+  geno = Genotypes(handle, layout, compression, n_alleles, n_samples, geno_offset, length);
   next_variant_offset = geno_offset + length;
 }
 
@@ -117,6 +121,14 @@ void Variant::alt_dosage(float * dose) {
 void Variant::minor_allele_dosage(float * dose) {
   geno.get_allele_dosage(dose, false, true);
   minor_allele = alleles[geno.minor_idx];
+}
+
+std::vector<std::uint8_t> Variant::copy_data() {
+  std::uint32_t length = next_variant_offset - offset;
+  std::vector<std::uint8_t> data(length);
+  handle->seekg(offset);
+  handle->read(reinterpret_cast<char *>(&data[0]), length);
+  return data;
 }
 
 } // namespace bgen

@@ -33,7 +33,7 @@ cdef extern from "<fstream>" namespace "std":
 cdef extern from 'variant.h' namespace 'bgen':
     cdef cppclass Variant:
         # declare class constructor and methods
-        Variant(ifstream & handle, uint64_t & offset, int layout, int compression, int expected_n, uint64_t fsize) except +
+        Variant(ifstream * handle, uint64_t & offset, int layout, int compression, int expected_n, uint64_t fsize) except +
         Variant() except +
         void minor_allele_dosage(float * dosage) except +
         void alt_dosage(float * dosage) except +
@@ -41,6 +41,7 @@ cdef extern from 'variant.h' namespace 'bgen':
         int probs_per_sample() except +
         bool phased() except +
         uint8_t * ploidy() except +
+        vector[uint8_t] copy_data() except +
         
         # declare public attributes
         string varid, rsid, chrom, minor_allele
@@ -188,7 +189,7 @@ cdef class BgenVar:
         self.fsize = fsize
         
         # construct new Variant from the handle, offset and other file info
-        self.thisptr = Variant(deref(self.handle.ptr), offset, layout, compression, expected_n, fsize)
+        self.thisptr = Variant(self.handle.ptr, offset, layout, compression, expected_n, fsize)
     
     def __repr__(self):
        return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", {self.pos}, {self.alleles}, {self.fsize})'
@@ -302,6 +303,17 @@ cdef class BgenVar:
         else:
             data = np.reshape(arr, (-1, cols))
         
+        return data
+    
+    def copy_data(self):
+        ''' get a copy of the data on disk for the variant.
+        
+        This can be used to quickly copy data from one bgen into another, if
+        you have the same set of samples between the source and destination
+        bgens. This primarily avoids decompressing, decoding, re-encoding, and
+        compressing the genotype data.
+        '''
+        cdef vector[uint8_t] data = self.thisptr.copy_data()
         return data
 
 cdef class BgenReader:

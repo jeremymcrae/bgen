@@ -142,6 +142,13 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
   return var_offset;
 }
 
+std::uint64_t CppBgenWriter::write_variant_direct(std::vector<std::uint8_t> & data) {
+  std::uint64_t var_offset = handle.tellp();
+  n_variants += 1;
+  std::copy(data.begin(), data.end(), std::ostreambuf_iterator<char>(handle));
+  return var_offset;
+}
+
 // uncompress a char array with zlib
 void zlib_compress(char * input, int input_len, std::vector<char> &output) {
   z_stream strm;
