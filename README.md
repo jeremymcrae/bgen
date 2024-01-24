@@ -108,6 +108,12 @@ class BgenWriter(path, n_samples, samples=[], compression='zstd' layout=2, metad
       metadata: any additional metadata you want o include in the file (as str)
     
     Methods:
+      add_variant_direct(variant)
+        Arguments:
+            variant: BgenVar, to be directly copied from one begn file to 
+                another. This can be done when the new bgen file is for the same
+                set of samples as the one being read from. This is much faster
+                due to not having to decode and re-encode the genotype data.
       add_variant(varid, rsid, chrom, pos, alleles, genotypes, ploidy=2, 
                   phased=False, bit_depth=8)
         Arguments:
