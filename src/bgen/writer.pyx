@@ -206,9 +206,7 @@ cdef class BgenWriter:
         pos = int(variant.pos)
         rsid = variant.rsid
         alleles = variant.alleles
-        print('copying data')
         cdef vector[uint8_t] data = variant.copy_data()
-        print('data copied from variant, writing now')
         var_offset = self.thisptr.write_variant_direct(data)
         end_offset = var_offset + len(data)
 
