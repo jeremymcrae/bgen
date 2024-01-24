@@ -404,7 +404,6 @@ class TestBgenWriter(unittest.TestCase):
         '''
         max_samples = 10000000
         for bit_depth in range(1, 24):
-            print(bit_depth)
             first_path = self.tmpdir / f'temp_{bit_depth}.v1.bgen'
             second_path = self.tmpdir / f'temp2_{bit_depth}.v2.bgen'
             
