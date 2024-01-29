@@ -92,7 +92,7 @@ class BgenVar(handle, offset, layout, compression, n_samples):
     minor_allele: the least common allele (for biallelic variants)
     minor_allele_dosage: 1D numpy array of minor allele dosages for each sample
     alt_dosage: 1D numpy array of alt allele dosages for each sample
-    probabilitiies:  2D numpy array of genotype probabilities, one sample per row
+    probabilities:  2D numpy array of genotype probabilities, one sample per row
   
   BgenVars can be pickled e.g. pickle.dumps(var)
 
