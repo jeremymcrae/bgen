@@ -93,6 +93,12 @@ class BgenVar(handle, offset, layout, compression, n_samples):
     minor_allele_dosage: 1D numpy array of minor allele dosages for each sample
     alt_dosage: 1D numpy array of alt allele dosages for each sample
     probabilities:  2D numpy array of genotype probabilities, one sample per row
+      These are most likely for biallelic diploid variants. In that scenario
+      unphased probabilities have three columns, for homozygous first allele 
+      (AA), heterozygous (Aa), homozygous second allele (aa).
+      In contrast, phased probabilities (for a biallelic diploid variant) would
+      have four columns, first two for haplotype 1 (hap1-allele1, hap1-allele2), 
+      last two for haplotype 2 (hap2-allele1, hap2-allele2).
   
   BgenVars can be pickled e.g. pickle.dumps(var)
 
