@@ -260,7 +260,7 @@ static double get_sample_max(double *genotypes, std::uint32_t &offset, std::uint
 /// @param factor scaling factor for the genotype, to convert genotype to integer
 //         in the appropriate range
 /// @param sample_max maximum probability mobserved in the sample
-/// @return
+/// @return data with probability inserted
 static std::uint64_t emplace_probability(double &geno_prob,
                                   std::uint8_t *encoded,
                                   std::uint32_t &bit_remainder,
@@ -286,7 +286,6 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
                      bool constant_ploidy,
                      std::uint32_t max_ploidy,
                      double *genotypes,
-                     std::uint32_t geno_len,
                      std::uint8_t &bit_depth)
 {
   int _ploid = (int)max_ploidy;
@@ -338,7 +337,6 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
                             bool constant_ploidy,
                             std::uint32_t max_ploidy,
                             double *genotypes,
-                            std::uint32_t geno_len,
                             std::uint8_t &bit_depth)
 {
   int _ploid = (int)max_ploidy;
@@ -452,10 +450,10 @@ static std::vector<std::uint8_t> encode_layout2(
 
   if (!phased) {
     encoded_size = encode_unphased(encoded, i, ploidy_offset, n_samples, n_alleles,
-                                constant_ploidy, max_ploidy, genotypes, geno_len, bit_depth);
+                                constant_ploidy, max_ploidy, genotypes, bit_depth);
   } else {
     encoded_size = encode_phased(encoded, i, ploidy_offset, n_samples, n_alleles,
-                                   constant_ploidy, max_ploidy, genotypes, geno_len, bit_depth);
+                                   constant_ploidy, max_ploidy, genotypes, bit_depth);
   }
 
   encoded.resize(encoded_size);
@@ -499,9 +497,9 @@ std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
   if (compression != 0) {
     compressed = compress(encoded, compression);
   }
-  std::uint32_t compressed_len = compressed.size();
+  std::uint64_t compressed_len = compressed.size();
 
-  std::uint32_t size;
+  std::uint64_t size;
   if (layout == 1) {
     if (compression == 0) {
       for (auto &x : encoded) {

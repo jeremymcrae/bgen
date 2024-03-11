@@ -706,9 +706,9 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
 /// @param uncompressed char array of genotype probabilities (encoding depends on layout)
 /// @param idx uint index position in uncompressed where genotype probabilities start
 void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows) {
-  std::uint32_t ploidy = max_ploidy;
-  std::uint32_t half_ploidy = ploidy / 2;
-  
+  std::uint32_t curr_ploidy = max_ploidy;
+  std::uint32_t half_ploidy = curr_ploidy / 2;
+
   std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
   float factor = (layout == 2) ? 1.0f / (float) maxval : 1.0f / 32768;
   std::uint32_t het;
@@ -718,14 +718,14 @@ void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * 
   std::uint32_t bit_idx = 0;  // index position in bits
   for (std::uint32_t n=0; n<nrows; n++) {
     if (!constant_ploidy) {
-      ploidy = this->ploidy[n];
-      half_ploidy = ploidy / 2;
+      curr_ploidy = this->ploidy[n];
+      half_ploidy = curr_ploidy / 2;
     }
     hom = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
     bit_idx += bit_depth;
     het = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
     bit_idx += bit_depth;
-    dose[n] = ((hom * ploidy) + het * half_ploidy) * factor;
+    dose[n] = ((hom * curr_ploidy) + het * half_ploidy) * factor;
     if (layout == 1) {
       // layout1 stores hom alt probability, and all zeros indicates missingness
       hom_alt = *reinterpret_cast<const std::uint16_t* >(&uncompressed[idx + bit_idx / 8]);
@@ -779,7 +779,6 @@ void Genotypes::swap_allele_dosage(float * dose) {
 ///
 /// @param use_alt whether to return the alt allele dosages
 /// @param use_minor whether to return the minor allele dosages
-/// @return float array of dosage values (each from 0.0-2.0)
 void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
   if (use_alt == use_minor) {
     throw std::invalid_argument("one of use_alt or use_minor must be true");
@@ -806,7 +805,7 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
 
   // for samples with missing data, just set values to NA
   for (auto n: missing) {
-    dose[n] = std::nan("1");
+    dose[n] = std::nanf("1");
   }
 }
 

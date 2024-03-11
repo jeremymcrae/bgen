@@ -12,8 +12,8 @@ namespace bgen {
 /// required, just starts it so we can get the offset of the next variant, so as
 /// to parse the bgen variants at speed.
 ///
-///  @param handle std::ifstream for bgen file
-///  @param offset start byte for variant in bgen file
+///  @param _handle std::ifstream for bgen file
+///  @param varoffset start byte for variant in bgen file
 ///  @param layout bgen layout version (1 or 2)
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
