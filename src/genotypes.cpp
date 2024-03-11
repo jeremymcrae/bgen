@@ -335,7 +335,7 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, std::uint32_t idx, flo
     // run through most of the samples, but make sure we stay well away from the
     // end of the float array, so the mm_loadu doesn't attempt to load beyond
     // the end of the array
-    for ( ; n<((nrows * 2) - ((nrows * 2) % 32)); n+=32) {
+    for ( ; n + 32 < nrows * 2; n+=32) {
       // load 16 values into a m128 register
       initial = _mm_loadu_si128((const __m128i*) &uncompressed[idx]);
       
@@ -588,7 +588,7 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
     __m128i hi16;
     __m256i hi;
     __m256 hi_float;
-    for (; n<(nrows - (nrows % 16)); n+=16) {
+    for (; n + 32 < nrows; n+=16) {
       initial = _mm256_loadu_si256((__m256i *) &uncompressed[idx]);
       
       // get heterozygous int dosage by masking out the even bytes, and right
@@ -634,7 +634,7 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
   uint8x16x2_t initial;
   uint16x8_t het, hom, total;
   float32x4_t _dose;
-  for (; n < (nrows - (nrows % 8)); n += 8) {
+  for (; n + 16 < nrows; n += 8) {
     // load data from the array into SIMD registers. This deinterleaves the
     // het and hom counts into separate vector registers
     initial = vld2q_u8(buff + idx);
@@ -749,19 +749,19 @@ void Genotypes::swap_allele_dosage(float * dose) {
 #if defined(__x86_64__)
   __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
   __m256 batch;
-  for (; n<(n_samples - (n_samples % 8)); n+=8) {
+  for (; n + 8 < n_samples; n+=8) {
     batch = _mm256_loadu_ps(dose + n);
     _mm256_storeu_ps(dose + n, _mm256_sub_ps(k, batch));
   }
 #elif defined(__aarch64__)
   float32x4_t k = vdupq_n_f32(2.0f);
   float32x4_t batch;
-  for (; n < (n_samples - (n_samples % 4)); n += 4) {
+  for (; n + 4 < n_samples; n += 4) {
     batch = vld1q_f32(dose + n);
     vst1q_f32(dose + n, vsubq_f32(k, batch));
   }
 #endif
-  for (; n<(n_samples - (n_samples % 4)); n+=4) {
+  for (; n + 4 < n_samples; n+=4) {
     dose[n] = 2.0f - dose[n];
     dose[n+1] = 2.0f - dose[n+1];
     dose[n+2] = 2.0f - dose[n+2];
