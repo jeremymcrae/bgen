@@ -12,10 +12,10 @@ namespace bgen {
 
 class Genotypes {
 public:
-  Genotypes(std::ifstream* handle, int lay, int compr, int n_alleles, std::uint32_t n_samples, std::uint64_t offset, std::uint32_t length) :
-     handle(handle), layout(lay), compression(compr), n_alleles(n_alleles), n_samples(n_samples), file_offset(offset), length(length) {};
-  Genotypes() {};
-  ~Genotypes() { clear_probs(); };
+  Genotypes(std::ifstream* _handle, int lay, int compr, int _n_alleles, std::uint32_t _n_samples, std::uint64_t _offset, std::uint32_t _length) :
+     handle(_handle), layout(lay), compression(compr), n_alleles(_n_alleles), n_samples(_n_samples), file_offset(_offset), length(_length) {}
+  Genotypes() {}
+  ~Genotypes() { clear_probs(); }
   void load_data_and_parse_header();
   void probabilities(float * probs);
   void get_allele_dosage(float * dose, bool use_alt=true, bool use_minor=false);
