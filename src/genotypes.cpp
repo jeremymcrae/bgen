@@ -105,7 +105,7 @@ const float lut8[511] = {0.0000000, 0.0039216, 0.0078431, 0.0117647, 0.0156863, 
   2.0000000};
 
 // uncompress a char array with zlib
-void zlib_uncompress(char * input, int compressed_len, char * decompressed, int decompressed_len) {
+static void zlib_uncompress(char * input, int compressed_len, char * decompressed, int decompressed_len) {
   z_stream infstream;
   infstream.zalloc = Z_NULL;
   infstream.zfree = Z_NULL;
@@ -126,7 +126,7 @@ void zlib_uncompress(char * input, int compressed_len, char * decompressed, int 
 }
 
 // uncompress a char array with zstd
-void zstd_uncompress(char * input, int compressed_len, char * decompressed,  int decompressed_len) {
+static void zstd_uncompress(char * input, int compressed_len, char * decompressed,  int decompressed_len) {
   std::size_t total_out = ZSTD_decompress(decompressed, decompressed_len, input, compressed_len);
   if (decompressed_len != (int) total_out) {
     throw std::invalid_argument("zstd decompression gave data of wrong length");

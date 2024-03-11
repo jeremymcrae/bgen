@@ -14,18 +14,18 @@
 namespace bgen {
 
 // write a 32-bit value at a given file offset
-void write_at_offset(std::ofstream &handle, std::uint32_t &val, std::uint32_t offset=0) {
+static void write_at_offset(std::ofstream &handle, std::uint32_t &val, std::uint32_t offset=0) {
   std::uint64_t orig_pos = handle.tellp();
   handle.seekp(offset);
   handle.write(reinterpret_cast<char *>(&val), 4);
   handle.seekp(orig_pos);
 }
 
-void write_variants_offset(std::ofstream &handle, std::uint32_t &offset) {
+static void write_variants_offset(std::ofstream &handle, std::uint32_t &offset) {
   write_at_offset(handle, offset, 0);
 }
 
-void write_nvariants(std::ofstream &handle, std::uint32_t &offset, std::uint32_t &n_variants) {
+static void write_nvariants(std::ofstream &handle, std::uint32_t &offset, std::uint32_t &n_variants) {
   write_at_offset(handle, n_variants, offset);
 }
 
@@ -150,7 +150,7 @@ std::uint64_t CppBgenWriter::write_variant_direct(std::vector<std::uint8_t> & da
 }
 
 // uncompress a char array with zlib
-void zlib_compress(char * input, int input_len, std::vector<char> &output) {
+static void zlib_compress(char * input, int input_len, std::vector<char> &output) {
   z_stream strm;
   strm.zalloc = Z_NULL;
   strm.zfree = Z_NULL;
@@ -169,7 +169,7 @@ void zlib_compress(char * input, int input_len, std::vector<char> &output) {
 }
 
 // uncompress a char array with zstd
-void zstd_compress(char *input, int input_len, std::vector<char> &output) {
+static void zstd_compress(char *input, int input_len, std::vector<char> &output) {
   std::size_t total_out = ZSTD_compress(&output[0], output.size(), input, input_len, 3);
   output.resize(total_out);
 }
@@ -179,7 +179,7 @@ void zstd_compress(char *input, int input_len, std::vector<char> &output) {
 /// The decompressed data is stored in the 'uncompressed' member. Decompression
 /// is handled internally by either zlib_decompress, or zstd_decompress,
 /// depending on compression scheme.
-std::vector<char> compress(std::vector<std::uint8_t> &uncompressed, std::uint32_t compression) {
+static std::vector<char> compress(std::vector<std::uint8_t> &uncompressed, std::uint32_t compression) {
   std::vector<char> compressed(uncompressed.size() * 5 + 20);
   if (compression == 1) { // zlib
     zlib_compress(reinterpret_cast<char *>(&uncompressed[0]), (int)uncompressed.size(), compressed);
@@ -189,7 +189,7 @@ std::vector<char> compress(std::vector<std::uint8_t> &uncompressed, std::uint32_
   return compressed;
 }
 
-bool missing_genotypes(double *genotypes, std::uint32_t size) {
+static bool missing_genotypes(double *genotypes, std::uint32_t size) {
   std::uint16_t nan_count = 0;
   for (std::uint32_t i=0; i<size; i++) {
     nan_count += std::isnan(genotypes[i]);
@@ -200,7 +200,7 @@ bool missing_genotypes(double *genotypes, std::uint32_t size) {
   return nan_count == size;
 }
 
-std::vector<std::uint8_t> encode_layout1(
+static std::vector<std::uint8_t> encode_layout1(
                     double *genotypes,
                     std::uint32_t geno_len) {
   // genotypes are encoded as 16-bit uints, so resize to n_genotypes * 2
@@ -237,7 +237,7 @@ std::vector<std::uint8_t> encode_layout1(
 /// @param offset offset where the samples genotypes begin
 /// @param max_probs number of proabilities stored for the sample
 /// @param missing whether the sample lacks genotype data
-double get_sample_max(double *genotypes, std::uint32_t &offset, std::uint32_t &max_probs, bool &missing) {
+static double get_sample_max(double *genotypes, std::uint32_t &offset, std::uint32_t &max_probs, bool &missing) {
   double sample_max = 0;
   double g;
   for (std::uint32_t j = 0; j < (max_probs - 1); j++)
@@ -261,7 +261,7 @@ double get_sample_max(double *genotypes, std::uint32_t &offset, std::uint32_t &m
 //         in the appropriate range
 /// @param sample_max maximum probability mobserved in the sample
 /// @return
-std::uint64_t emplace_probability(double &geno_prob,
+static std::uint64_t emplace_probability(double &geno_prob,
                                   std::uint8_t *encoded,
                                   std::uint32_t &bit_remainder,
                                   double &factor,
@@ -278,7 +278,7 @@ std::uint64_t emplace_probability(double &geno_prob,
   return window;
 }
 
-std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
+static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
                      std::uint32_t genotype_offset,
                      std::uint32_t ploidy_offset,
                      std::uint32_t n_samples,
@@ -330,7 +330,7 @@ std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
   return genotype_offset + (bit_idx / 8) + (std::uint32_t)((bit_idx % 8) > 0);
 }
 
-std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
+static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
                             std::uint32_t genotype_offset,
                             std::uint32_t ploidy_offset,
                             std::uint32_t n_samples,
@@ -393,7 +393,7 @@ std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
   return genotype_offset + (bit_idx / 8) + (std::uint32_t)((bit_idx % 8) > 0);
 }
 
-std::vector<std::uint8_t> encode_layout2(
+static std::vector<std::uint8_t> encode_layout2(
                     std::uint32_t n_samples,
                     std::uint16_t n_alleles,
                     double *genotypes,
