@@ -39,6 +39,9 @@ Variant CppBgenReader::next_var() {
 
 /// load all variants into memory at once
 void CppBgenReader::parse_all_variants() {
+  if (variants.size() == header.nvariants) {
+    return;
+  }
   offset = header.offset + 4;
   variants.clear();
   variants.resize(header.nvariants);
@@ -79,6 +82,7 @@ void CppBgenReader::drop_variants(std::vector<int> indices) {
 
 /// get all the IDs for the variants in the bgen file
 std::vector<std::string> CppBgenReader::varids() {
+  parse_all_variants();
   std::vector<std::string> varid(variants.size());
   for (std::uint32_t x=0; x<variants.size(); x++) {
     varid[x] = variants[x].varid;
@@ -88,6 +92,7 @@ std::vector<std::string> CppBgenReader::varids() {
 
 /// get all the rsIDs for the variants in the bgen file
 std::vector<std::string> CppBgenReader::rsids() {
+  parse_all_variants();
   std::vector<std::string> rsid(variants.size());
   for (std::uint32_t x=0; x<variants.size(); x++) {
     rsid[x] = variants[x].rsid;
@@ -97,6 +102,7 @@ std::vector<std::string> CppBgenReader::rsids() {
 
 /// get all the chroms for the variants in the bgen file
 std::vector<std::string> CppBgenReader::chroms() {
+  parse_all_variants();
   std::vector<std::string> chrom(variants.size());
   for (std::uint32_t x=0; x<variants.size(); x++) {
     chrom[x] = variants[x].chrom;
@@ -106,6 +112,7 @@ std::vector<std::string> CppBgenReader::chroms() {
 
 /// get all the positions for the variants in the bgen file
 std::vector<std::uint32_t> CppBgenReader::positions() {
+  parse_all_variants();
   std::vector<std::uint32_t> position(variants.size());
   for (std::uint32_t x=0; x<variants.size(); x++) {
     position[x] = variants[x].pos;
