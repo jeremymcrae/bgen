@@ -473,7 +473,7 @@ cdef class BgenReader:
               self.thisptr.fsize)
       
       if not self.delay_parsing:
-          idx = [i for i, x in enumerate(self.rsids) if x == rsid]
+          idx = [i for i, x in enumerate(self.rsids()) if x == rsid]
           if len(idx) == 0:
               raise ValueError(f'cannot find variant match for {rsid}')
           elif len(idx) > 1:
