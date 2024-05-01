@@ -53,7 +53,7 @@ class Indexer:
     ''' class to automatically index bgen files as they are being constructed
     '''
     def __init__(self, bgen_path):
-        index_path = Path(str(bgen_path + '.bgi'))
+        index_path = Path(str(bgen_path) + '.bgi')
         if index_path.exists():
             index_path.unlink()
         self.conn = sqlite3.connect(index_path)
