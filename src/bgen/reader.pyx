@@ -467,18 +467,14 @@ cdef class BgenReader:
           raise ValueError('bgen file is closed')
       
       if self.index:
-          offset = self.index.offset_by_rsid(rsid)
-          return BgenVar(self.handle, offset, self.thisptr.header.layout,
+          offsets = self.index.offset_by_rsid(rsid)
+          return[ BgenVar(self.handle, offset, self.thisptr.header.layout,
               self.thisptr.header.compression, self.thisptr.header.nsamples,
-              self.thisptr.fsize)
+              self.thisptr.fsize) for offset in offsets]
       
       if not self.delay_parsing:
           idx = [i for i, x in enumerate(self.rsids()) if x == rsid]
-          if len(idx) == 0:
-              raise ValueError(f'cannot find variant match for {rsid}')
-          elif len(idx) > 1:
-              raise ValueError(f'multiple variant matches for {rsid}')
-          return self[idx]
+          return [self[i] for i in idx]
       
       raise ValueError("can't get variant without fully loading the bgen, or indexing")
     
@@ -489,18 +485,14 @@ cdef class BgenReader:
           raise ValueError('bgen file is closed')
       
       if self.index:
-          offset = self.index.offset_by_pos(pos)
-          return BgenVar(self.handle, offset, self.thisptr.header.layout,
+          offsets = self.index.offset_by_pos(pos)
+          return[ BgenVar(self.handle, offset, self.thisptr.header.layout,
               self.thisptr.header.compression, self.thisptr.header.nsamples,
-              self.thisptr.fsize)
+              self.thisptr.fsize) for offset in offsets]
       
       if not self.delay_parsing:
           idx = [i for i, x in enumerate(self.positions) if x == pos]
-          if len(idx) == 0:
-              raise ValueError(f'cannot find variant match at pos: {pos}')
-          elif len(idx) > 1:
-              raise ValueError(f'multiple variant matches at pos: {pos}')
-          return self[idx]
+          return [self[i] for i in idx]
       
       raise ValueError("can't get variant without fully loading the bgen, or indexing")
     

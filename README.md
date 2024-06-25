@@ -72,8 +72,8 @@ class BgenReader(path, sample_path='', delay_parsing=False)
     iteration: variants in a BgenFile can be looped over e.g. for x in bfile: print(x)
     fetch(chrom, start=None, stop=None): get all variants within a genomic region
     drop_variants(list[int]): drops variants by index from being used in analyses
-    with_rsid(rsid): returns BgenVar with given rsid
-    at_position(pos): returns BgenVar at a given position
+    with_rsid(rsid): returns list of BgenVars with given rsid
+    at_position(pos): returns list of BgenVars at a given position
     varids(): returns list of varids for variants in the bgen file.
     rsids(): returns list of rsids for variants in the bgen file.
     chroms(): returns list of chromosomes for variants in the bgen file.

@@ -63,10 +63,8 @@ class Index:
 
         if len(offsets) == 0:
             raise ValueError(f'cannot find variant match for {rsid}')
-        elif len(offsets) > 1:
-            raise ValueError(f'multiple variant matches for {rsid}')
         
-        return offsets[0][0]
+        return [x[0] for x in offsets]
     
     def offset_by_pos(self, pos):
         ''' get file offset of bgen variant given a variant index
@@ -75,10 +73,8 @@ class Index:
 
         if len(offsets) == 0:
             raise ValueError(f'cannot find variant match at pos: {pos}')
-        elif len(offsets) > 1:
-            raise ValueError(f'multiple variant matches at pos: {pos}')
         
-        return offsets[0][0]
+        return [x[0] for x in offsets]
     
     @property
     def rsids(self):
