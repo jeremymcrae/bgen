@@ -60,20 +60,12 @@ class Index:
         ''' get file offset of bgen variant given a variant index
         '''
         offsets = self.cur.execute("SELECT file_start_position FROM Variant WHERE rsid= ?", (rsid, )).fetchall()
-
-        if len(offsets) == 0:
-            raise ValueError(f'cannot find variant match for {rsid}')
-        
         return [x[0] for x in offsets]
     
     def offset_by_pos(self, pos):
         ''' get file offset of bgen variant given a variant index
         '''
         offsets = self.cur.execute("SELECT file_start_position FROM Variant WHERE position= ?", (pos, )).fetchall()
-
-        if len(offsets) == 0:
-            raise ValueError(f'cannot find variant match at pos: {pos}')
-        
         return [x[0] for x in offsets]
     
     @property

@@ -468,7 +468,7 @@ cdef class BgenReader:
       
       if self.index:
           offsets = self.index.offset_by_rsid(rsid)
-          return[ BgenVar(self.handle, offset, self.thisptr.header.layout,
+          return[ BgenVar(self.handle, int(offset), self.thisptr.header.layout,
               self.thisptr.header.compression, self.thisptr.header.nsamples,
               self.thisptr.fsize) for offset in offsets]
       
@@ -486,7 +486,7 @@ cdef class BgenReader:
       
       if self.index:
           offsets = self.index.offset_by_pos(pos)
-          return[ BgenVar(self.handle, offset, self.thisptr.header.layout,
+          return[ BgenVar(self.handle, int(offset), self.thisptr.header.layout,
               self.thisptr.header.compression, self.thisptr.header.nsamples,
               self.thisptr.fsize) for offset in offsets]
       
