@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <iostream>
+
 #include "zstd/lib/zstd.h"
 #include <zlib.h>
 
@@ -320,9 +322,14 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
         g = 0;
       }
       byte_idx = genotype_offset + (bit_idx / 8);
-      bit_remainder = bit_idx % 8;
-      window = emplace_probability(g, &encoded[byte_idx], bit_remainder, factor, sample_max);
-      std::memcpy(&encoded[byte_idx], &window, 8);
+      if (bit_depth == 8) {
+        // fast path for 8-bit genotype data
+        encoded[byte_idx] = (std::uint8_t) std::round(g * factor);
+      } else {
+        bit_remainder = bit_idx % 8;
+        window = emplace_probability(g, &encoded[byte_idx], bit_remainder, factor, sample_max);
+        std::memcpy(&encoded[byte_idx], &window, 8);
+      }
       bit_idx += bit_depth;
     }
   }
