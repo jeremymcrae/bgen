@@ -1,6 +1,7 @@
 #ifndef BGEN_BGEN_H_
 #define BGEN_BGEN_H_
 
+#include <cstdint>
 #include <fstream>
 #include <stdexcept>
 #include <vector>
