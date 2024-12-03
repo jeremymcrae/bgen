@@ -106,6 +106,23 @@ class TestBgenWriter(unittest.TestCase):
         with self.assertRaises(ValueError):
             bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,)
     
+    def test_writing_metadata_with_newline(self):
+        ''' check we can write metadata (and read back!)
+        '''
+        sample_ids = ['a', 'b', 'c']
+        metadata = 'a\nbc'  # previously had errors with metadata containing newlines
+        path = self.tmpdir / 'temp.bgen'
+        
+        bit_depth = 16
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25], [0.1, 0.2, 0.7]])
+        with BgenWriter(path, n_samples=3, samples=sample_ids, metadata=metadata) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno, bit_depth=bit_depth)
+        
+        bfile = BgenReader(path)
+        self.assertEqual(metadata, bfile.header.metadata)
+        var = next(bfile)
+        self.assertTrue(probs_close(geno[:, :-1], var.probabilities[:, :-1], bit_depth))
+    
     def test_wrong_sample_number(self):
         ''' check we can't write variants with the wrong number of samples
         '''
