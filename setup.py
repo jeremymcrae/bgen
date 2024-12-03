@@ -10,11 +10,15 @@ from distutils.core import Extension
 from distutils.ccompiler import new_compiler
 from Cython.Build import cythonize
 
-EXTRA_COMPILE_ARGS = ['-std=c++11', '-I/usr/include', '-O2']
+EXTRA_COMPILE_ARGS = []
 EXTRA_LINK_ARGS = []
-if sys.platform == "darwin":
+if sys.platform == 'linux':
+    EXTRA_COMPILE_ARGS += ['-std=c++11', '-I/usr/include', '-O2']
+elif sys.platform == "darwin":
     EXTRA_COMPILE_ARGS += [
         "-stdlib=libc++",
+        "-std=c++11",
+        "-O2",
         "-I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1",
         "-I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
         ]
