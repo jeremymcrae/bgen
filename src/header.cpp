@@ -27,7 +27,8 @@ Header::Header(std::ifstream & handle) {
   // read any extra data contained in the header
   int size = header_length - 20;
   if (size > 0) {
-    std::copy_n(std::istream_iterator<char>(handle), size, std::back_inserter(extra));
+    extra.resize(size);
+    handle.read(&extra[0], size);
   }
   
   // read flags data
