@@ -21,12 +21,19 @@ Variant::Variant(std::ifstream * _handle, std::uint64_t & varoffset, int layout,
   offset = varoffset;
   handle->seekg(offset);
   if (handle->eof()) {
+    // check for end-of-file after seek, so we don't try to read after EOF
     throw std::out_of_range("reached end of file");
   }
   if (layout == 1) {
     handle->read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
   } else {
     n_samples = expected_n;
+  }
+  
+  if (handle->eof()) {
+    // Check for end-of-file after possible first read, to avoid later reads.
+    // Note that if the layout is not v1, the read above doesn't occur.
+    throw std::out_of_range("reached end of file");
   }
   
   if ((int) n_samples != expected_n) {
@@ -39,6 +46,12 @@ Variant::Variant(std::ifstream * _handle, std::uint64_t & varoffset, int layout,
   if (item_len > 0) {
     varid.resize(item_len);
     handle->read(&varid[0], item_len);
+  }
+  
+  if (handle->eof()) {
+    // check for end-of-file after other possible first read, to avoid later reads.
+    // This check is required for layout != v1.
+    throw std::out_of_range("reached end of file");
   }
   
   // get the rsID (first need to know how long the field is)
