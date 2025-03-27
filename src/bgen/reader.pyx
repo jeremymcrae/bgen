@@ -360,7 +360,6 @@ cdef class BgenReader:
     def __next__(self):
         ''' iterate through all variants in the bgen file
         '''
-        # while True:
         try:
             var = BgenVar(self.handle, self.offset, self.thisptr.header.layout,
                 self.thisptr.header.compression, self.thisptr.header.nsamples)
