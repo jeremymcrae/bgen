@@ -17,12 +17,12 @@ namespace bgen {
 ///  @param layout bgen layout version (1 or 2)
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
-Variant::Variant(std::ifstream * _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, std::uint64_t fsize) : handle(_handle) {
-  if (varoffset >= fsize) {
-    throw std::out_of_range("reached end of file");
-  }
+Variant::Variant(std::ifstream * _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) : handle(_handle) {
   offset = varoffset;
   handle->seekg(offset);
+  if (handle->eof()) {
+    throw std::out_of_range("reached end of file");
+  }
   if (layout == 1) {
     handle->read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
   } else {

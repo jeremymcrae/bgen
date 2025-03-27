@@ -28,7 +28,6 @@ public:
   Header header;
   Samples samples;
   std::uint64_t offset;
-  std::uint64_t fsize;
 };
 
 } // namespace bgen

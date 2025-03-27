@@ -5,10 +5,9 @@ namespace bgen {
 
 CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool delay_parsing) {
   handle.open(path, std::ios::in | std::ios::binary);
-  if (!handle) {
+  if (handle.fail()) {
     throw std::invalid_argument("error reading from '" + path + "'");
   }
-  fsize = handle.tellg();
   header = Header(handle);
   if (header.has_sample_ids) {
     samples = Samples(handle, header.nsamples);
@@ -18,10 +17,6 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
     samples = Samples(header.nsamples);
   }
   
-  // figure out the file length, so we don't go beyond it
-  handle.seekg(0, std::ios::end);
-  fsize = (std::uint64_t) handle.tellg() - fsize;
-  
   offset = header.offset + 4;
   if (!delay_parsing) {
     parse_all_variants();
@@ -29,10 +24,10 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
 }
 
 Variant CppBgenReader::next_var() {
-  if (handle.eof() | (offset >= fsize)) {
+  if (handle.eof()) {
     throw std::out_of_range("reached end of file");
   }
-  Variant var(&handle, offset, header.layout, header.compression, header.nsamples, fsize);
+  Variant var(&handle, offset, header.layout, header.compression, header.nsamples);
   offset = var.next_variant_offset;
   return var;
 }
