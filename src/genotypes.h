@@ -12,8 +12,19 @@ namespace bgen {
 
 class Genotypes {
 public:
-  Genotypes(std::ifstream* _handle, int lay, int compr, int _n_alleles, std::uint32_t _n_samples, std::uint64_t _offset, std::uint32_t _length) :
-     handle(_handle), layout(lay), compression(compr), n_alleles(_n_alleles), n_samples(_n_samples), file_offset(_offset), length(_length) {}
+  Genotypes(std::ifstream* _handle, 
+           int lay,
+           int compr,
+           int _n_alleles, 
+           std::uint32_t _n_samples,
+           std::uint64_t _offset,
+           std::uint32_t _length,
+           bool _is_stdin=false) :
+     handle(_handle), layout(lay), compression(compr), n_alleles(_n_alleles), n_samples(_n_samples), file_offset(_offset), length(_length), is_stdin(_is_stdin) {
+      if (is_stdin) {
+        load_data_and_parse_header();
+      }
+     }
   Genotypes() {}
   ~Genotypes() { clear_probs(); }
   void load_data_and_parse_header();
@@ -37,6 +48,7 @@ private:
   int find_minor_allele(float * dose);
   void clear_probs();
   std::ifstream* handle;
+  bool is_stdin;
   int layout;
   int compression;
   int n_alleles;

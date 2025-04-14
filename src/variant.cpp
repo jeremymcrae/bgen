@@ -17,9 +17,11 @@ namespace bgen {
 ///  @param layout bgen layout version (1 or 2)
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
-Variant::Variant(std::ifstream * _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n) : handle(_handle) {
+Variant::Variant(std::ifstream * _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, bool is_stdin) : handle(_handle) {
   offset = varoffset;
-  handle->seekg(offset);
+  if (!is_stdin) {
+    handle->seekg(offset);
+  }
   if (handle->eof()) {
     // check for end-of-file after seek, so we don't try to read after EOF
     throw std::out_of_range("reached end of file");
@@ -90,8 +92,11 @@ Variant::Variant(std::ifstream * _handle, std::uint64_t & varoffset, int layout,
   } else {
     handle->read(reinterpret_cast<char *>(&length), sizeof(length));
   }
-  std::uint64_t geno_offset = (std::uint64_t) handle->tellg();
-  geno = Genotypes(handle, layout, compression, n_alleles, n_samples, geno_offset, length);
+  std::uint64_t geno_offset = 0;
+  if (!is_stdin) {
+    geno_offset = (std::uint64_t) handle->tellg();
+  }
+  geno = Genotypes(handle, layout, compression, n_alleles, n_samples, geno_offset, length, is_stdin);
   next_variant_offset = geno_offset + length;
 }
 

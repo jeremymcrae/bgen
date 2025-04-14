@@ -9,7 +9,6 @@
 namespace bgen {
 
 Header::Header(std::ifstream & handle) {
-  handle.seekg(0);
   char buff[20];
   handle.read(&buff[0], 20);
   

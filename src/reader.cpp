@@ -4,6 +4,10 @@
 namespace bgen {
 
 CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool delay_parsing) {
+  if (path == "/dev/stdin") {
+    is_stdin = true;
+  }
+    
   handle.open(path, std::ios::in | std::ios::binary);
   if (handle.fail()) {
     throw std::invalid_argument("error reading from '" + path + "'");
@@ -27,7 +31,7 @@ Variant CppBgenReader::next_var() {
   if (handle.eof()) {
     throw std::out_of_range("reached end of file");
   }
-  Variant var(&handle, offset, header.layout, header.compression, header.nsamples);
+  Variant var(&handle, offset, header.layout, header.compression, header.nsamples, is_stdin);
   offset = var.next_variant_offset;
   return var;
 }

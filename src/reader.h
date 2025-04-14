@@ -13,6 +13,7 @@ namespace bgen {
 
 class CppBgenReader {
   std::ifstream handle;
+  bool is_stdin = false;
 public:
   CppBgenReader(std::string path, std::string sample_path = "", bool delay_parsing = false);
   void parse_all_variants();
