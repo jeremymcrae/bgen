@@ -375,6 +375,9 @@ cdef class BgenReader:
     def __next__(self):
         ''' iterate through all variants in the bgen file
         '''
+        if not self.is_open:
+            raise ValueError('bgen file is closed')
+        
         try:
             var = BgenVar(self.handle, self.offset, self.thisptr.header.layout,
                 self.thisptr.header.compression, self.thisptr.header.nsamples, self.is_stdin)
@@ -396,6 +399,9 @@ cdef class BgenReader:
     def __getitem__(self, int idx):
         ''' pull out a Variant by index position
         '''
+        if not self.is_open:
+            raise ValueError('bgen file is closed')
+        
         if idx >= len(self) or idx < 0:
             raise IndexError(f'cannot get Variant at index: {idx}')
         
