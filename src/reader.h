@@ -12,7 +12,6 @@
 namespace bgen {
 
 class CppBgenReader {
-  std::ifstream fh;
   bool is_stdin = false;
 public:
   CppBgenReader(std::string path, std::string sample_path = "", bool delay_parsing = false);

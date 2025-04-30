@@ -5,14 +5,13 @@ namespace bgen {
 
 CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool delay_parsing) {
   if (path != "/dev/stdin") {
-    fh.open(path, std::ios::in | std::ios::binary);
-    if (fh.fail()) {
-      throw std::invalid_argument("error reading from '" + path + "'");
-    }
-    handle = &fh;
+    handle = new std::ifstream(path, std::ios::in | std::ios::binary);
   } else {
     is_stdin = true;
     handle = &std::cin;
+  }
+  if (handle->fail()) {
+    throw std::invalid_argument("error reading from '" + path + "'");
   }
   header = Header(handle);
   if (header.has_sample_ids) {
