@@ -177,7 +177,13 @@ cdef class BgenVar:
     cdef uint64_t offset
     cdef int layout, compression, expected_n
     cdef bool is_stdin
-    def __cinit__(self, IStream handle, uint64_t offset, int layout, int compression, int expected_n, bool is_stdin):
+    def __cinit__(self,
+                  IStream handle,
+                  uint64_t offset,
+                  int layout,
+                  int compression,
+                  int expected_n,
+                  bool is_stdin):
         self.handle = handle
         self.offset = offset
         self.layout = layout
