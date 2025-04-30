@@ -9,14 +9,14 @@
 
 namespace bgen {
 
-Samples::Samples(std::ifstream & handle, int n_samples) {
+Samples::Samples(std::istream * handle, int n_samples) {
   /* initialize sample list if present in the bgen file
   */
   std::uint32_t sample_header_length;
-  handle.read(reinterpret_cast<char*>(&sample_header_length), sizeof(std::uint32_t));
+  handle->read(reinterpret_cast<char*>(&sample_header_length), sizeof(std::uint32_t));
   
   std::uint32_t sample_n_check;
-  handle.read(reinterpret_cast<char*>(&sample_n_check), sizeof(std::uint32_t));
+  handle->read(reinterpret_cast<char*>(&sample_n_check), sizeof(std::uint32_t));
   if (n_samples != (int) sample_n_check) {
     throw std::invalid_argument("inconsistent number of samples");
   }
@@ -24,9 +24,9 @@ Samples::Samples(std::ifstream & handle, int n_samples) {
   samples.resize(n_samples);
   std::uint16_t id_len;
   for (int i=0; i<n_samples; i++) {
-    handle.read(reinterpret_cast<char*>(&id_len), sizeof(id_len));
+    handle->read(reinterpret_cast<char*>(&id_len), sizeof(id_len));
     std::string sample_id;
-    std::copy_n(std::istream_iterator<char>(handle), id_len, std::back_inserter(sample_id));
+    std::copy_n(std::istream_iterator<char>(*handle), id_len, std::back_inserter(sample_id));
     samples[i] = sample_id;
   }
 }

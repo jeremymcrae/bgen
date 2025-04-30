@@ -2,11 +2,12 @@
 
 import logging
 from pathlib import Path
+import sys
 
 from libcpp cimport bool
 from libcpp.string cimport string
 from libcpp.vector cimport vector
-from libc.stdint cimport uint8_t, uint32_t, uint64_t
+from libc.stdint cimport uint8_t, uint32_t, uint64_t, uintptr_t
 from libc.string cimport memcpy
 
 from cython.operator cimport dereference as deref
@@ -25,15 +26,13 @@ cdef extern from "<iostream>" namespace "std::ios_base":
     cdef open_mode binary
 
 cdef extern from "<fstream>" namespace "std":
-    cdef cppclass ifstream(istream):
-        ifstream() except +
-        ifstream(const string&) except +
-        ifstream(const string&, open_mode) except +
+    cdef cppclass istream:
+        istream() except +
 
 cdef extern from 'variant.h' namespace 'bgen':
     cdef cppclass Variant:
         # declare class constructor and methods
-        Variant(ifstream * handle, uint64_t & offset, int layout, int compression, int expected_n, bool is_stdin) except +
+        Variant(istream * handle, uint64_t & offset, int layout, int compression, int expected_n, bool is_stdin) except +
         Variant() except +
         void minor_allele_dosage(float * dosage) except +
         void alt_dosage(float * dosage) except +
@@ -52,7 +51,7 @@ cdef extern from 'variant.h' namespace 'bgen':
 
 cdef extern from 'samples.h' namespace 'bgen':
     cdef cppclass Samples:
-        Samples(ifstream & handle, int n_samples) except +
+        Samples(istream * handle, int n_samples) except +
         Samples(string path, int n_samples) except +
         Samples(int n_samples) except +
         Samples() except +
@@ -62,7 +61,7 @@ cdef extern from 'samples.h' namespace 'bgen':
 
 cdef extern from 'header.h' namespace 'bgen':
     cdef cppclass Header:
-        Header(ifstream & handle) except +
+        Header(istream * handle) except +
         Header();
         uint32_t offset
         uint32_t nvariants
@@ -86,6 +85,7 @@ cdef extern from 'reader.h' namespace 'bgen':
         vector[uint32_t] positions()
         
         # declare public attributes
+        istream * handle
         vector[Variant] variants
         Samples samples
         Header header
@@ -98,24 +98,21 @@ cdef extern from 'utils.h' namespace 'bgen':
     uint64_t fast_ploidy_sum(uint8_t * ploidy, uint32_t & size) except +
     Range fast_range(uint8_t * ploidy, uint32_t & size)
 
-cdef class IFStream:
-    ''' basic cython implementation of std::ifstream, for easy pickling
+cdef class IStream:
+    ''' basic cython implementation of std::istream, for easy pickling
     '''
-    cdef ifstream * ptr
-    cdef string path
-    def __cinit__(self, string path):
-        self.path = path
-        self.ptr = new ifstream(path, binary)
+    cdef istream * ptr
+    def __cinit__(self, uint64_t ptr):
+        self.ptr = <istream*>ptr
     
     def __str__(self):
-        return self.path.decode('utf8')
+        return f'std::istream at {<uint64_t>self.ptr}'
     
     def __dealloc__(self):
-        # make sure to clean up ifstream memory once finished
-        del self.ptr
+        pass
     
     def __reduce__(self):
-        return (self.__class__, (self.path, ))
+        return (self.__class__, (<uint64_t>self.ptr, ))
 
 cdef class BgenHeader:
     ''' holds information about the Bgen file, obtained from the intial header.
@@ -175,12 +172,12 @@ cdef class BgenVar:
     parsing genotype information, which runs at about 500 variants per second
     for files with 500,000 samples.
     '''
-    cdef Variant thisptr
-    cdef IFStream handle
+    cdef Variant * thisptr
+    cdef IStream handle
     cdef uint64_t offset
     cdef int layout, compression, expected_n
     cdef bool is_stdin
-    def __cinit__(self, IFStream handle, uint64_t offset, int layout, int compression, int expected_n, bool is_stdin):
+    def __cinit__(self, IStream handle, uint64_t offset, int layout, int compression, int expected_n, bool is_stdin):
         self.handle = handle
         self.offset = offset
         self.layout = layout
@@ -189,7 +186,7 @@ cdef class BgenVar:
         self.is_stdin = is_stdin
         
         # construct new Variant from the handle, offset and other file info
-        self.thisptr = Variant(self.handle.ptr, offset, layout, compression, expected_n, is_stdin)
+        self.thisptr = new Variant(self.handle.ptr, offset, layout, compression, expected_n, is_stdin)
     
     def __repr__(self):
        return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", {self.pos}, {self.alleles})'
@@ -201,6 +198,9 @@ cdef class BgenVar:
         ''' enable pickling of a BgenVar object
         '''
         return (self.__class__, (self.handle, self.thisptr.offset, self.layout, self.compression, self.expected_n, self.is_stdin))
+    
+    def __dealloc__(self):
+        del self.thisptr
     
     @property
     def varid(self):
@@ -322,7 +322,7 @@ cdef class BgenReader:
     cdef CppBgenReader * thisptr
     cdef string path, sample_path
     cdef bool delay_parsing, is_stdin
-    cdef IFStream handle
+    cdef IStream handle
     cdef object index
     cdef bool is_open
     cdef uint64_t offset
@@ -331,7 +331,10 @@ cdef class BgenReader:
             path = str(path)
         if isinstance(sample_path, Path):
             sample_path = str(sample_path)
-        self.is_stdin = str(path) == '/dev/stdin'
+        self.is_stdin = self.is_from_stdin(path)
+        if self.is_stdin:
+            delay_parsing = True
+            path = '/dev/stdin'
         
         delay_parsing |= self._check_for_index(path)
         
@@ -342,9 +345,18 @@ cdef class BgenReader:
         samp = '' if sample_path == '' else f', (samples={self.sample_path.decode("utf")})'
         logging.debug(f'opening BgenFile from {self.path.decode("utf")}{samp}')
         self.thisptr = new CppBgenReader(self.path, self.sample_path, self.delay_parsing)
-        self.handle = IFStream(self.path)
+        self.handle = IStream(<uint64_t>self.thisptr.handle)
         self.is_open = True
         self.offset = self.thisptr.offset
+    
+    def is_from_stdin(self, bgen_path):
+        if bgen_path is sys.stdin:
+            return True
+        elif str(bgen_path) == '/dev/stdin':
+            return True
+        elif str(bgen_path) == '-':
+            return True
+        return False
     
     def __dealloc__(self):
         if self.is_open:

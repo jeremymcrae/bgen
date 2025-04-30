@@ -12,13 +12,14 @@
 namespace bgen {
 
 class CppBgenReader {
-  std::ifstream handle;
+  std::ifstream fh;
   bool is_stdin = false;
 public:
   CppBgenReader(std::string path, std::string sample_path = "", bool delay_parsing = false);
   void parse_all_variants();
   Variant next_var();
   void drop_variants(std::vector<int> indices);
+  std::istream * handle;
   std::vector<std::string> varids();
   std::vector<std::string> rsids();
   std::vector<std::string> chroms();

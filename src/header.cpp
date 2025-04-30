@@ -8,9 +8,9 @@
 
 namespace bgen {
 
-Header::Header(std::ifstream & handle) {
+Header::Header(std::istream * handle) {
   char buff[20];
-  handle.read(&buff[0], 20);
+  handle->read(&buff[0], 20);
   
   offset = *reinterpret_cast<const std::uint32_t*>(&buff[0]);
   header_length = *reinterpret_cast<const std::uint32_t*>(&buff[4]);
@@ -27,12 +27,12 @@ Header::Header(std::ifstream & handle) {
   int size = header_length - 20;
   if (size > 0) {
     extra.resize(size);
-    handle.read(&extra[0], size);
+    handle->read(&extra[0], size);
   }
   
   // read flags data
   std::bitset<32> flags;
-  handle.read(reinterpret_cast<char*>(&flags), sizeof(std::uint32_t));
+  handle->read(reinterpret_cast<char*>(&flags), sizeof(std::uint32_t));
   
   std::bitset<32> compr_mask(0b000000000000000000000000000011);
   std::bitset<32> layout_mask(0b000000000000000000000000111100);

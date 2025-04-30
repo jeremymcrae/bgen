@@ -12,14 +12,15 @@ namespace bgen {
 /// required, just starts it so we can get the offset of the next variant, so as
 /// to parse the bgen variants at speed.
 ///
-///  @param _handle std::ifstream for bgen file
+///  @param _handle std::istream for bgen file
 ///  @param varoffset start byte for variant in bgen file
 ///  @param layout bgen layout version (1 or 2)
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
-Variant::Variant(std::ifstream * _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, bool is_stdin) : handle(_handle) {
+Variant::Variant(std::istream * _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, bool is_stdin) : handle(_handle) {
   offset = varoffset;
   if (!is_stdin) {
+    handle->clear();
     handle->seekg(offset);
   }
   if (handle->eof()) {
@@ -96,7 +97,7 @@ Variant::Variant(std::ifstream * _handle, std::uint64_t & varoffset, int layout,
   if (!is_stdin) {
     geno_offset = (std::uint64_t) handle->tellg();
   }
-  geno = Genotypes(handle, layout, compression, n_alleles, n_samples, geno_offset, length, is_stdin);
+  geno.initialize(handle, layout, compression, n_alleles, n_samples, geno_offset, length, is_stdin);
   next_variant_offset = geno_offset + length;
 }
 
