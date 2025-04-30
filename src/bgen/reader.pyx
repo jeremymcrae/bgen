@@ -331,7 +331,7 @@ cdef class BgenReader:
             path = str(path)
         if isinstance(sample_path, Path):
             sample_path = str(sample_path)
-        self.is_stdin = self.is_from_stdin(path)
+        self.is_stdin = self.__is_from_stdin(path)
         if self.is_stdin:
             delay_parsing = True
             path = '/dev/stdin'
@@ -349,7 +349,7 @@ cdef class BgenReader:
         self.is_open = True
         self.offset = self.thisptr.offset
     
-    def is_from_stdin(self, bgen_path):
+    def __is_from_stdin(self, bgen_path):
         if bgen_path is sys.stdin:
             return True
         elif str(bgen_path) == '/dev/stdin':
