@@ -101,6 +101,30 @@ class TestBgenReader(unittest.TestCase):
         with self.assertRaises(ValueError):
              var = bfile.with_rsid('rs111')
     
+    def test_context_handler_variant_data_not_loaded(self):
+        ''' error raised if we try to access variant data after closing BgenFile
+        '''
+        path = self.folder / 'example.16bits.zstd.bgen'
+        with BgenReader(path) as bfile:
+            var = next(bfile)
+        
+        with self.assertRaises(ValueError):
+            # cannot access data after file closed
+            var.minor_allele_dosage
+    
+    def test_context_handler_variant_data_loaded(self):
+        '''no error raised for variant from closed BgenReader, IF data is already loaded
+        '''
+        path = self.folder / 'example.16bits.zstd.bgen'
+        with BgenReader(path) as bfile:
+            var = next(bfile)
+            var.minor_allele_dosage # load data while file still open
+        
+        # can access data after file closed, but only because the file was read 
+        # previously while still open
+        dose = var.minor_allele_dosage
+        self.assertTrue(isinstance(dose, np.ndarray))
+    
     def test_fetch(self):
         ''' can fetch variants within a genomic region
         '''
