@@ -3,8 +3,10 @@
 import logging
 from pathlib import Path
 import sys
+import warnings
 
 from libcpp cimport bool
+from libcpp.memory cimport shared_ptr, make_shared
 from libcpp.string cimport string
 from libcpp.vector cimport vector
 from libc.stdint cimport uint8_t, uint32_t, uint64_t, uintptr_t
@@ -16,18 +18,18 @@ import numpy as np
 
 from bgen.index import Index
 
-cdef extern from "<iostream>" namespace "std":
-    cdef cppclass istream:
-        pass
-
 cdef extern from "<iostream>" namespace "std::ios_base":
     cdef cppclass open_mode:
         pass
     cdef open_mode binary
+    cdef cppclass iostate:
+        pass
+    cdef iostate failbit
 
-cdef extern from "<fstream>" namespace "std":
+cdef extern from "<iostream>" namespace "std":
     cdef cppclass istream:
         istream() except +
+        void setstate(iostate state) except +
 
 cdef extern from 'variant.h' namespace 'bgen':
     cdef cppclass Variant:
@@ -48,6 +50,7 @@ cdef extern from 'variant.h' namespace 'bgen':
         long offset
         uint64_t next_variant_offset
         vector[string] alleles
+        istream * handle
 
 cdef extern from 'samples.h' namespace 'bgen':
     cdef cppclass Samples:
@@ -114,6 +117,31 @@ cdef class IStream:
     def __reduce__(self):
         return (self.__class__, (<uint64_t>self.ptr, ))
 
+cdef class OpenStatus:
+    ''' class to share status of whether a bgen file is currently open
+    
+    This uses a shared pointer so we can store the status in a BgenReader
+    object, but also pass that status to BgenVariant objects. When a bgen
+    file is closed, the status changes for all loaded variants, in order
+    to prevent reading more data from the closed file.
+    
+    This may not work for pickled BgenVariant objects (after unpickling), as
+    the BgenReader object may have been closed after the BgenVariant was 
+    pickled. In order to allow pickled BgenVariants, as part of unpickling 
+    the BgenVariant, it creates a new OpenStatus object where status=True.
+    '''
+    cdef shared_ptr[bool] ptr
+    def __cinit__(self):
+        self.ptr = make_shared[bool](True)
+    def __str__(self):
+        return f'status={deref(self.ptr)}'
+    def __eq__(self, other):
+        return deref(self.ptr) == other
+    def off(self):
+        self.ptr = make_shared[bool](False)
+    def __reduce__(self):
+        return (self.__class__, ())
+
 cdef class BgenHeader:
     ''' holds information about the Bgen file, obtained from the intial header.
     '''
@@ -177,19 +205,23 @@ cdef class BgenVar:
     cdef uint64_t offset
     cdef int layout, compression, expected_n
     cdef bool is_stdin
+    cdef OpenStatus is_open
     def __cinit__(self,
                   IStream handle,
                   uint64_t offset,
                   int layout,
                   int compression,
                   int expected_n,
-                  bool is_stdin):
+                  bool is_stdin,
+                  OpenStatus is_open,
+                  ):
         self.handle = handle
         self.offset = offset
         self.layout = layout
         self.compression = compression
         self.expected_n = expected_n
         self.is_stdin = is_stdin
+        self.is_open = is_open
         
         # construct new Variant from the handle, offset and other file info
         self.thisptr = new Variant(self.handle.ptr, offset, layout, compression, expected_n, is_stdin)
@@ -203,7 +235,8 @@ cdef class BgenVar:
     def __reduce__(self):
         ''' enable pickling of a BgenVar object
         '''
-        return (self.__class__, (self.handle, self.thisptr.offset, self.layout, self.compression, self.expected_n, self.is_stdin))
+        warnings.warn("pickling BgenVar - make sure their BgenReader objects exist when unpickling", RuntimeWarning)
+        return (self.__class__, (self.handle, self.thisptr.offset, self.layout, self.compression, self.expected_n, self.is_stdin, self.is_open))
     
     def __dealloc__(self):
         del self.thisptr
@@ -229,6 +262,26 @@ cdef class BgenVar:
     @property
     def alleles(self):
         return [x.decode('utf8') for x in self.thisptr.alleles]
+    cdef __check_closed(self):
+        ''' make sure we cannot read from a closed bgen file
+        
+        If the bgen file is closed before we try to access the genotype data,
+        then we should not be able to read from the file. However, this
+        object holds a pointer to a istream object, and it does not know if
+        the underlying memory is valid, so could try to access it anyway.
+        
+        We prevent this by checking a shared pointer held by all the BgenVars 
+        which were opened by a given BgenReader. This shared pointer will have
+        been set to false when the bgen file closed, so we can check that
+        shared status, and set the istream iostate to fail. Later cpp calls which
+        would read from the stale file handle will raise ValuErrors instead due
+        to checking the failbit before attempting to read from the istream.
+        
+        However, this does not work for pickled BgenVars, since we cannot know
+        whether the istream object exists or not.
+        '''
+        if not deref(self.is_open.ptr):
+            self.thisptr.handle.setstate(failbit)
     @property
     def is_phased(self):
         return self.thisptr.phased()
@@ -236,6 +289,7 @@ cdef class BgenVar:
     def ploidy(self):
         ''' get the ploidy for each sample
         '''
+        self.__check_closed()
         cdef uint8_t * ploid = self.thisptr.ploidy()
         cdef uint64_t size = self.expected_n
         cdef uint8_t[::1] arr = np.empty(size, dtype=np.uint8, order='C')
@@ -250,6 +304,7 @@ cdef class BgenVar:
     def minor_allele_dosage(self):
         ''' dosage for the minor allele for a biallelic variant
         '''
+        self.__check_closed()
         cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
         self.thisptr.minor_allele_dosage(&dose[0])
         return np.asarray(dose)
@@ -257,6 +312,7 @@ cdef class BgenVar:
     def alt_dosage(self):
         ''' dosage for the alt allele for a biallelic variant
         '''
+        self.__check_closed()
         cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
         self.thisptr.alt_dosage(&dose[0])
         return np.asarray(dose)
@@ -264,6 +320,7 @@ cdef class BgenVar:
     def probabilities(self):
         ''' get the allelic probabilities for a variant
         '''
+        self.__check_closed()
         cdef int cols = self.thisptr.probs_per_sample()
         cdef uint32_t n_samples = self.expected_n
         cdef uint64_t size = n_samples * cols
@@ -319,6 +376,7 @@ cdef class BgenVar:
         bgens. This primarily avoids decompressing, decoding, re-encoding, and
         compressing the genotype data.
         '''
+        self.__check_closed()
         cdef vector[uint8_t] data = self.thisptr.copy_data()
         return data
 
@@ -330,7 +388,7 @@ cdef class BgenReader:
     cdef bool delay_parsing, is_stdin
     cdef IStream handle
     cdef object index
-    cdef bool is_open
+    cdef OpenStatus is_open
     cdef uint64_t offset
     def __cinit__(self, path, sample_path='', bool delay_parsing=False):
         if isinstance(path, Path):
@@ -352,7 +410,7 @@ cdef class BgenReader:
         logging.debug(f'opening BgenFile from {self.path.decode("utf")}{samp}')
         self.thisptr = new CppBgenReader(self.path, self.sample_path, self.delay_parsing)
         self.handle = IStream(<uint64_t>self.thisptr.handle)
-        self.is_open = True
+        self.is_open = OpenStatus()
         self.offset = self.thisptr.offset
     
     def __is_from_stdin(self, bgen_path):
@@ -365,12 +423,7 @@ cdef class BgenReader:
         return False
     
     def __dealloc__(self):
-        if self.is_open:
-          del self.thisptr
-          self.handle = None
-          self.index = None
-        
-        self.is_open = False
+        self.close()
     
     def __repr__(self):
         return f'BgenFile("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
@@ -381,19 +434,20 @@ cdef class BgenReader:
     def __next__(self):
         ''' iterate through all variants in the bgen file
         '''
-        if not self.is_open:
+        if not self.is_open == True:
             raise ValueError('bgen file is closed')
         
         try:
             var = BgenVar(self.handle, self.offset, self.thisptr.header.layout,
-                self.thisptr.header.compression, self.thisptr.header.nsamples, self.is_stdin)
+                self.thisptr.header.compression, self.thisptr.header.nsamples, self.is_stdin,
+                self.is_open)
             self.offset = var.next_variant_offset
             return var
         except IndexError:
             raise StopIteration
     
     def __len__(self):
-      if not self.is_open:
+      if not self.is_open == True:
           raise ValueError("bgen file is closed")
       
       length = self.thisptr.variants.size()
@@ -405,7 +459,7 @@ cdef class BgenReader:
     def __getitem__(self, int idx):
         ''' pull out a Variant by index position
         '''
-        if not self.is_open:
+        if not self.is_open == True:
             raise ValueError('bgen file is closed')
         
         if idx >= len(self) or idx < 0:
@@ -419,7 +473,7 @@ cdef class BgenReader:
         offset = self.index.offset_by_index(idx) if self.index else self.thisptr.variants[idx].offset
         return BgenVar(self.handle, offset, self.thisptr.header.layout,
           self.thisptr.header.compression, self.thisptr.header.nsamples,
-          self.is_stdin)
+          self.is_stdin, self.is_open)
     
     def _check_for_index(self, bgen_path):
         ''' creates self.index if a bgenix index file is available
@@ -433,7 +487,7 @@ cdef class BgenReader:
     def header(self):
       ''' get header info from bgen file
       '''
-      if not self.is_open:
+      if not self.is_open == True:
           raise ValueError("bgen file is closed")
       
       hdr = self.thisptr.header
@@ -444,16 +498,16 @@ cdef class BgenReader:
     def samples(self):
       ''' get list of samples in the bgen file
       '''
-      if not self.is_open:
+      if not self.is_open == True:
           raise ValueError("bgen file is closed")
       
       samples = self.thisptr.samples.samples
       return [x.decode('utf8') for x in samples]
     
     def drop_variants(self, list indices):
-        ''' drops variants from bgen by indices, for avoiding processing variants
+        ''' drops variants from bgen by indices, for a a =ing processing variants
         '''
-        if not self.is_open:
+        if not self.is_open == True:
             raise ValueError("bgen file is closed")
         
         if self.delay_parsing:
@@ -472,7 +526,7 @@ cdef class BgenReader:
         Yields:
             BgenVars for variants within the genome region
         '''
-        if not self.is_open:
+        if not self.is_open == True:
             raise ValueError('bgen file is closed')
         
         if not self.index:
@@ -481,19 +535,19 @@ cdef class BgenReader:
         for offset in self.index.fetch(chrom, start, stop):
             yield BgenVar(self.handle, offset, self.thisptr.header.layout,
                 self.thisptr.header.compression, self.thisptr.header.nsamples,
-                self.is_stdin)
+                self.is_stdin, self.is_open)
     
     def with_rsid(self, rsid):
       ''' get BgenVar from file given an rsID
       '''
-      if not self.is_open:
+      if not self.is_open == True:
           raise ValueError('bgen file is closed')
       
       if self.index:
           offsets = self.index.offset_by_rsid(rsid)
           return [BgenVar(self.handle, int(offset), self.thisptr.header.layout,
                           self.thisptr.header.compression, self.thisptr.header.nsamples,
-                          self.is_stdin)
+                          self.is_stdin, self.is_open)
                   for offset in offsets]
       
       if not self.delay_parsing:
@@ -505,14 +559,14 @@ cdef class BgenReader:
     def at_position(self, pos):
       ''' get BgenVar from file given a position
       '''
-      if not self.is_open:
+      if not self.is_open == True:
           raise ValueError('bgen file is closed')
       
       if self.index:
           offsets = self.index.offset_by_pos(pos)
           return [BgenVar(self.handle, int(offset), self.thisptr.header.layout,
                           self.thisptr.header.compression, self.thisptr.header.nsamples,
-                          self.is_stdin) 
+                          self.is_stdin, self.is_open) 
                   for offset in offsets]
       
       if not self.delay_parsing:
@@ -524,7 +578,7 @@ cdef class BgenReader:
     def varids(self):
       ''' get the variant IDs of all variants in the bgen file
       '''
-      if not self.is_open:
+      if not self.is_open == True:
           raise ValueError("bgen file is closed")
       
       if self.index:
@@ -536,7 +590,7 @@ cdef class BgenReader:
     def rsids(self):
       ''' get the rsIDs of all variants in the bgen file
       '''
-      if not self.is_open:
+      if not self.is_open == True:
           raise ValueError("bgen file is closed")
       
       if self.index:
@@ -548,7 +602,7 @@ cdef class BgenReader:
     def chroms(self):
         ''' get the chromosomes of all variants in the bgen file
         '''
-        if not self.is_open:
+        if not self.is_open == True:
             raise ValueError("bgen file is closed")
         
         if self.index:
@@ -560,7 +614,7 @@ cdef class BgenReader:
     def positions(self):
         ''' get the positions of all variants in the bgen file
         '''
-        if not self.is_open:
+        if not self.is_open == True:
             raise ValueError("bgen file is closed")
         
         if self.index:
@@ -576,13 +630,12 @@ cdef class BgenReader:
         return False
     
     def close(self):
-        if self.is_open:
+        if self.is_open == True:
             del self.thisptr
             self.handle = None
-        if self.index:
-            self.index.close()
+            if self.index:
+                self.index.close()
             self.index = None
-        
-        self.is_open = False
+            self.is_open.off()
 
 BgenFile = BgenReader
