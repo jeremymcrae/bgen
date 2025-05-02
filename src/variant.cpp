@@ -1,6 +1,7 @@
 
 #include <stdexcept>
 #include <cmath>
+#include <iostream>
 
 #include "variant.h"
 
@@ -143,6 +144,9 @@ void Variant::minor_allele_dosage(float * dose) {
 }
 
 std::vector<std::uint8_t> Variant::copy_data() {
+  if (handle->fail()) {
+    throw std::invalid_argument("cannot read from closed bgen file");
+  }
   std::uint32_t length = next_variant_offset - offset;
   std::vector<std::uint8_t> data(length);
   handle->seekg(offset);

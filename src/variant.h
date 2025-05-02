@@ -15,7 +15,6 @@ namespace bgen {
 
 class Variant {
   Genotypes geno = Genotypes();
-  std::istream * handle;
 public:
   Variant(std::istream * _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, bool is_stdin=false);
   Variant() {}
@@ -24,6 +23,7 @@ public:
   void minor_allele_dosage(float * dosage);
   void probs_1d(float * probs);
   bool phased();
+  std::istream * handle;
   std::uint8_t * ploidy();
   std::vector<std::uint8_t> copy_data();
   std::string minor_allele;

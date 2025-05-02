@@ -144,6 +144,10 @@ void Genotypes::decompress() {
     return;
   }
   
+  if (handle->fail()) {
+    throw std::invalid_argument("cannot read from closed bgen file");
+  }
+  
   if (!is_stdin) {
     handle->seekg(file_offset);  // about 1 microsecond
   }
