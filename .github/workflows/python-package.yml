@@ -47,7 +47,7 @@ jobs:
       - name: Build sdist
         run: |
           python -m pip install --upgrade pip
-          pip install setuptools build cython numpy
+          pip install setuptools build
           python -m build
           pip install .
           python -m unittest discover
