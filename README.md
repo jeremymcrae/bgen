@@ -49,6 +49,17 @@ with BgenWriter(BGEN_PATH, n_samples=3) as bfile:
                     alleles=['A', 'G'], genotypes=geno)
 ```
 
+You can also read bgen files from stdin (to avoid local storage) e.g.
+```sh
+cat $BGEN_PATH | python -c '
+import sys
+from bgen import BgenReader
+bfile = BgenReader(sys.stdin)
+for v in bfile:
+  print(v)
+'
+```
+
 #### API documentation
 
 ``` py
@@ -56,7 +67,7 @@ class BgenReader(path, sample_path='', delay_parsing=False)
     # opens a bgen file. If a bgenix index exists for the file, the index file
     # will be opened automatically for quicker access of specific variants.
     Arguments:
-      path: path to bgen file
+      path: path to bgen file, or sys.stdin (stdin also used when path is '-' or '/dev/stdin')
       sample_path: optional path to sample file. Samples will be given integer IDs
           if sample file is not given and sample IDs not found in the bgen file
       delay_parsing: True/False option to allow for not loading all variants into
