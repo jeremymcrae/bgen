@@ -54,10 +54,12 @@ You can also read bgen files from stdin (to avoid local storage) e.g.
 cat $BGEN_PATH | python -c '
 import sys
 from bgen import BgenReader
-bfile = BgenReader(sys.stdin)
-for v in bfile:
-  print(v)
+with BgenReader(sys.stdin) as bfile:
+  for v in bfile:
+    print(v)
 '
+# NOTE: if using a separate sample file, you cannot also read that from stdin,
+#       you would need: with BgenReader(sys.stdin, SAMPLE_PATH) as bfile:
 ```
 
 #### API documentation
