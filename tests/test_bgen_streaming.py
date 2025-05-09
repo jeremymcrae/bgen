@@ -23,6 +23,9 @@ class TestBgenStream(unittest.TestCase):
         self.max_buff = 65536
         self.folder = Path(__file__).parent /  "data"
     
+    @unittest.skipIf(sys.platform == "win32", "haven't figured out file handle " \
+                                              "duplication and writing on windows " \
+                                              "at the required buffer size")
     def test_bgen_streaming(self):
         ''' check that was can open a bgen file from stdin
         '''
