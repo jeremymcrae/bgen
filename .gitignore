@@ -2,6 +2,7 @@
 __pycache__/
 dist/
 build/
+*zlib_build/
 src/bgen/*.cpp
 src/bgen/*.so
 *.egg

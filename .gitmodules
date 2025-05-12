@@ -1,6 +1,6 @@
 [submodule "src/zstd"]
 	path = src/zstd
 	url = https://github.com/facebook/zstd.git
-[submodule "src/zlib"]
-	path = src/zlib
-	url = https://github.com/madler/zlib.git
+[submodule "src/zlib-ng"]
+	path = src/zlib-ng
+	url = https://github.com/zlib-ng/zlib-ng.git

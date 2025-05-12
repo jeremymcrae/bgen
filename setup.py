@@ -1,8 +1,10 @@
 
 import glob
 import io
+import os
 from pathlib import Path
 from setuptools import setup
+import subprocess
 import sys
 import platform
 
@@ -35,18 +37,33 @@ def flatten(*lists):
     return [str(x) for sublist in lists for x in sublist]
 
 def build_zlib():
-    ''' compile zlib code to object files for linking with bgen on windows
+    ''' compile zlib code to object files for linking
     
     Returns:
         list of paths to compiled object code
     '''
-    include_dirs = ['src/zlib/']
-    sources = list(glob.glob('src/zlib/*.c'))
-    extra_compile_args = ['/O2']
+    cur_dir = Path.cwd()
+    source_dir = cur_dir / 'src' / 'zlib-ng'
+    build_dir = cur_dir / 'zlib_build'
+    build_dir.mkdir(exist_ok=True)
+    os.chdir(build_dir)
     
-    cc = new_compiler()
-    return cc.compile(sources, include_dirs=include_dirs,
-        extra_preargs=extra_compile_args)
+    cmd = ['cmake', '-S', source_dir, '-B', build_dir,
+        '-DZLIB_COMPAT=ON',
+        '-DZLIB_ENABLE_TESTS=OFF',
+        '-DBUILD_SHARED_LIBS=OFF',
+        '-DCMAKE_C_FLAGS="-fPIC"',
+    ]
+    subprocess.run(cmd)
+    subprocess.run(['cmake', '--build', build_dir, '-v', '--config', 'Release'])
+    os.chdir(cur_dir)
+    
+    objs = [str(build_dir / 'libz.a')]
+    if sys.platform == 'win32':
+        objs = [str(build_dir / 'Release' / 'zlibstatic.lib'),
+                ]
+    
+    return str(build_dir), objs
 
 def build_zstd():
     ''' compile zstd code to object files for linking with bgen c++ code
@@ -88,10 +105,7 @@ def build_zstd():
     return cc.compile(sources, include_dirs=include_dirs,
         extra_preargs=extra_compile_args) + compiled
 
-if sys.platform == 'win32':
-    zlib, libs = build_zlib(), []
-else:
-    zlib, libs = [], ['z']
+zlib_dir, zlib = build_zlib()
 zstd = build_zstd()
 
 ext = cythonize([
@@ -106,8 +120,7 @@ ext = cythonize([
             'src/utils.cpp',
             'src/variant.cpp'],
         extra_objects=zstd + zlib,
-        include_dirs=['src', 'src/zstd/lib', 'src/zlib'],
-        libraries=libs,
+        include_dirs=['src', 'src/zstd/lib', zlib_dir],
         language='c++'),
     Extension('bgen.writer',
         extra_compile_args=EXTRA_COMPILE_ARGS,
@@ -118,8 +131,7 @@ ext = cythonize([
             'src/utils.cpp',
             ],
         extra_objects=zstd + zlib,
-        include_dirs=['src', 'src/zstd/lib', 'src/zlib'],
-        libraries=libs,
+        include_dirs=['src', 'src/zstd/lib', zlib_dir],
         language='c++'),
     ])
 
