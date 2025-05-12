@@ -18,7 +18,7 @@
 #endif
 
 #include "zstd/lib/zstd.h"
-#include <zlib.h>
+#include "zlib.h"
 
 #include "genotypes.h"
 #include "utils.h"
