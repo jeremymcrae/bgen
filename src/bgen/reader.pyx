@@ -294,7 +294,7 @@ cdef class BgenVar:
         cdef uint64_t size = self.expected_n
         cdef uint8_t[::1] arr = np.empty(size, dtype=np.uint8, order='C')
         memcpy(&arr[0], ploid, size)
-        return arr
+        return np.asarray(arr)
     @property
     def minor_allele(self):
         ''' get the minor allele of a biallelic variant
