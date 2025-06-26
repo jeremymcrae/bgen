@@ -9,6 +9,8 @@
 #include <chrono>
 #include <thread>
 
+#include <iostream>
+
 #if defined(__x86_64__)
   #include <immintrin.h>
 #endif
@@ -696,7 +698,7 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
   }
 }
 
-/// calculate dosage of the reference (first) allele for all samples
+/// calculate dosage of the reference (first) allele for all samples for unphased genotpes
 ///
 /// The slow path, loops across samples. Figures out ploidy at each step,
 /// and the homozygous genotype for the minor allele. Can use any bit depth.
@@ -711,7 +713,7 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
 ///
 /// @param uncompressed char array of genotype probabilities (encoding depends on layout)
 /// @param idx uint index position in uncompressed where genotype probabilities start
-void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows) {
+void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows) {
   std::uint32_t curr_ploidy = max_ploidy;
   std::uint32_t half_ploidy = curr_ploidy / 2;
 
@@ -750,6 +752,37 @@ void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * 
   }
 }
 
+/// calculate dosage of the reference (first) allele for all samples for phased genotpes
+///
+/// The slow path, loops across samples. Figures out ploidy at each step,
+/// and the homozygous genotype for the reference allele. Can use any bit depth.
+/// For the most part we just have to use the first allele for each haplotype for
+/// a sample. This assumes the first allele is for the ref genotype.
+///
+/// @param uncompressed char array of genotype probabilities (encoding depends on layout)
+/// @param idx uint index position in uncompressed where genotype probabilities start
+void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows) {
+  std::uint32_t curr_ploidy = max_ploidy;
+
+  std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
+  float factor = (layout == 2) ? 1.0f / (float) maxval : 1.0f / 32768;
+  float prob;
+  std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
+  std::uint32_t bit_idx = 0;  // index position in bits
+  for (std::uint32_t n=0; n<nrows; n++) {
+    if (!constant_ploidy) {
+      curr_ploidy = this->ploidy[n];
+    }
+    
+    prob = 0;
+    for (uint i=0; i<curr_ploidy; i++) {
+      prob += ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask) * factor;
+      bit_idx += bit_depth;
+    }
+    dose[n] = prob;
+    
+  }
+}
 
 /// swap sample dosages to the opposing allele. Requires a biallelic variant.
 ///
@@ -803,12 +836,16 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
   }
   
   // calculate the dosage for the first allele for all samples
-  if (constant_ploidy & (max_probs == 3) & (bit_depth == 8)) {
+  if (constant_ploidy & (max_probs == 3) & (bit_depth == 8) & (!phased)) {
     // A fast path when we know the ploidy is constant and the bit depth is 8,
     // this avoids the bit shifts/masks used in the variable bit_depth path.
     ref_dosage_fast(uncompressed, idx, dose, n_samples);
   } else {
-    ref_dosage_slow(uncompressed, idx, dose, n_samples);
+    if (!phased) {
+      ref_dosage_slow_unphased(uncompressed, idx, dose, n_samples);
+    } else {
+      ref_dosage_slow_phased(uncompressed, idx, dose, n_samples);
+    }
   }
   
   minor_idx = find_minor_allele(dose);
