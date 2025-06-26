@@ -729,8 +729,15 @@ void Genotypes::ref_dosage_slow(char * uncompressed, std::uint32_t idx, float * 
     }
     hom = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
     bit_idx += bit_depth;
-    het = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
-    bit_idx += bit_depth;
+    
+    het = 0;
+    if (curr_ploidy == 2) {
+      het = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
+      bit_idx += bit_depth;
+    } else if (curr_ploidy > 2) {
+      throw std::invalid_argument("cannot compute dosage with ploidy > 2");
+    }
+    
     dose[n] = ((hom * curr_ploidy) + het * half_ploidy) * factor;
     if (layout == 1) {
       // layout1 stores hom alt probability, and all zeros indicates missingness
