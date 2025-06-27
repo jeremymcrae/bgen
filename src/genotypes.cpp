@@ -790,7 +790,7 @@ void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, f
 ///
 /// This uses AVX and NEON vectorization to speed up calculations on relevant
 /// x86_64 and aarch64 hardware
-void Genotypes::swap_allele_dosage(float * dose) {
+void Genotypes::swap_allele_dosage_simple(float * dose) {
   std::uint32_t n=0;
 #if defined(__x86_64__)
   __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
@@ -815,6 +815,15 @@ void Genotypes::swap_allele_dosage(float * dose) {
   }
   for (; n<n_samples; n++) {
     dose[n] = 2.0f - dose[n];
+  }
+}
+
+/// swap sample dosages to the opposing allele. Requires a biallelic variant.
+///
+/// This replaces the values in the dose array with ploidy - value.
+void Genotypes::swap_allele_dosage_complex(float * dose) {
+  for (std::uint32_t n=0; n<n_samples; n++) {
+    dose[n] = (float) (this->ploidy[n]) - dose[n];
   }
 }
 
@@ -850,8 +859,12 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
   
   minor_idx = find_minor_allele(dose);
   if (use_alt | (use_minor & (minor_idx != 0))) {
-    swap_allele_dosage(dose);
-  }
+    if (constant_ploidy & (max_ploidy == 2)) {
+      swap_allele_dosage_simple(dose);
+    } else {
+      swap_allele_dosage_complex(dose);
+    }
+  } 
 
   // for samples with missing data, just set values to NA
   for (auto n: missing) {

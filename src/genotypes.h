@@ -52,7 +52,8 @@ private:
   void ref_dosage_fast(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows);
   void ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows);
   void ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows);
-  void swap_allele_dosage(float * dose);
+  void swap_allele_dosage_simple(float * dose);
+  void swap_allele_dosage_complex(float * dose);
   int find_minor_allele(float * dose);
   void clear_probs();
   std::istream* handle;
