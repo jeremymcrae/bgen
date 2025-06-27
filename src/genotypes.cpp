@@ -775,7 +775,7 @@ void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, f
     }
     
     prob = 0;
-    for (uint i=0; i<curr_ploidy; i++) {
+    for (std::uint32_t i=0; i<curr_ploidy; i++) {
       prob += ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask) * factor;
       bit_idx += bit_depth;
     }
