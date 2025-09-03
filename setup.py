@@ -30,7 +30,7 @@ elif sys.platform == "darwin":
 elif sys.platform == "win32":
     EXTRA_COMPILE_ARGS += ['/std:c++14', '/O2']
 
-if platform.machine() == 'x86_64':
+if platform.machine() == 'x86_64' and sys.platform != "darwin":
     EXTRA_COMPILE_ARGS += ['-mavx', '-mavx2']
 
 def flatten(*lists):
