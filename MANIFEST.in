@@ -15,5 +15,6 @@ include src/zlib-ng/CMakeLists.txt
 include src/zlib-ng/*.in
 include src/zlib-ng/*.empty
 include src/zlib-ng/cmake/*.cmake
+include src/zlib-ng/cmake/*.c
 recursive-include src/zlib-ng/arch/*.h
 recursive-include src/zlib-ng/arch/*.c
