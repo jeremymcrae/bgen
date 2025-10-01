@@ -15,4 +15,4 @@ recursive-include src/zlib-ng/arch/*.h
 recursive-include src/zlib-ng/arch/*.c
 recursive-include src/zlib-ng/*.cmake*
 recursive-include src/zlib-ng/cmake/*
-recursive-include src/zlib-ng/CMakeLists.txt
+include src/zlib-ng/CMakeLists.txt
