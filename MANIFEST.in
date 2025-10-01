@@ -11,8 +11,9 @@ recursive-include src/zstd/lib/ *.h
 recursive-include src/zstd/lib/ *.c
 include src/zlib-ng/*.h
 include src/zlib-ng/*.c
+include src/zlib-ng/CMakeLists.txt
+include src/zlib-ng/*.in
+include src/zlib-ng/*.empty
+include src/zlib-ng/cmake/*.cmake
 recursive-include src/zlib-ng/arch/*.h
 recursive-include src/zlib-ng/arch/*.c
-recursive-include src/zlib-ng/*.cmake*
-recursive-include src/zlib-ng/cmake/*
-include src/zlib-ng/CMakeLists.txt
