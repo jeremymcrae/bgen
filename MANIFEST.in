@@ -13,6 +13,7 @@ include src/zlib-ng/*.h
 include src/zlib-ng/*.c
 include src/zlib-ng/CMakeLists.txt
 include src/zlib-ng/*.in
+include src/zlib-ng/*.cmakein
 include src/zlib-ng/*.empty
 include src/zlib-ng/cmake/*.cmake
 include src/zlib-ng/cmake/*.c
