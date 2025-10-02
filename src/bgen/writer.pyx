@@ -95,6 +95,7 @@ class Indexer:
         self.conn.commit()
         if sys.platform == 'win32':
             time.sleep(0.01)
+        self.cur.close()
 
 cdef class BgenWriter:
     ''' class to open bgen files from disk, and access variant data within
