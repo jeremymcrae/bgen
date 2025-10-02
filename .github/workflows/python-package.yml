@@ -7,7 +7,32 @@ on:
     - cron: "33 3 3 * *"
 
 jobs:
+  default_tests:
+    name: test package
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+    
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Build
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools build
+          pip install .
+          python -m unittest discover
+  
   build_wheels:
+    if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -34,6 +59,7 @@ jobs:
           name: artifact-${{ matrix.os }}-${{ matrix.python }}
 
   build_sdist:
+    if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
     name: Build source distribution
     runs-on: ubuntu-latest
     steps:
