@@ -1,2 +1,31 @@
 [build-system]
 requires = ["cython", "setuptools >= 40.6.0", "wheel"]
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'bgen'
+version = '1.9.4'
+description = 'Package for loading data from bgen files'
+readme = 'README.md'
+requires-python = '>=3.8'
+authors = [
+    {name = "Jeremy McRae", email = 'jmcrae@illumina.com'},
+]
+license = "MIT"
+
+dependencies = [
+    'numpy',
+]
+
+classifiers = [
+    'Development Status :: 4 - Beta',
+    'Topic :: Scientific/Engineering :: Bio-Informatics',
+]
+
+[tool.setuptools]
+packages = [
+    'bgen',
+]
+
+[project.urls]
+homepage = 'https://github.com/jeremymcrae/bgen'

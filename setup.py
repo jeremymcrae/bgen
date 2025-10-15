@@ -108,7 +108,7 @@ def build_zstd():
 zlib_dir, zlib = build_zlib()
 zstd = build_zstd()
 
-ext = cythonize([
+extensions = [
     Extension('bgen.reader',
         extra_compile_args=EXTRA_COMPILE_ARGS,
         extra_link_args=EXTRA_LINK_ARGS,
@@ -133,26 +133,10 @@ ext = cythonize([
         extra_objects=zstd + zlib,
         include_dirs=['src', 'src/zstd/lib', zlib_dir],
         language='c++'),
-    ])
+    ]
 
-setup(name='bgen',
-    description='Package for loading data from bgen files',
-    long_description=io.open('README.md', encoding='utf-8').read(),
-    long_description_content_type='text/markdown',
-    version='1.9.4',
-    author='Jeremy McRae',
-    author_email='jmcrae@illumina.com',
-    license="MIT",
-    url='https://github.com/jeremymcrae/bgen',
-    packages=['bgen'],
+setup(
     package_dir={'': 'src'},
-    install_requires=[
-        'numpy',
-    ],
-    classifiers=[
-        'Development Status :: 4 - Beta',
-        'Topic :: Scientific/Engineering :: Bio-Informatics',
-    ],
-    ext_modules=ext,
+    ext_modules=cythonize(ext),
     test_loader='unittest:TestLoader',
     )
