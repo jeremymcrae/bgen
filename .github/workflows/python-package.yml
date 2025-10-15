@@ -51,7 +51,7 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-*
           CIBW_SKIP: '*i686'
           CIBW_TEST_COMMAND: "python -m unittest discover --verbose -s {project}"
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux2014_x86_64:latest
           CIBW_ARCHS: native
 
       - uses: actions/upload-artifact@v4
