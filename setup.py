@@ -137,6 +137,6 @@ extensions = [
 
 setup(
     package_dir={'': 'src'},
-    ext_modules=cythonize(ext),
+    ext_modules=cythonize(extensions),
     test_loader='unittest:TestLoader',
     )
