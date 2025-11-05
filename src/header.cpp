@@ -18,8 +18,11 @@ Header::Header(std::istream * handle) {
   nsamples = *reinterpret_cast<const std::uint32_t*>(&buff[12]);
   magic = std::string(&buff[16], 4);
   
-  // make sure we are reading a bgen file
-  if ((magic != "bgen") && ((int) (magic[0] & magic[1] & magic[2] & magic[3]) != 0)) {
+  if ((magic != "bgen") || (
+      (int) magic[0] != 0 || 
+      (int) magic[1] != 0 || 
+      (int) magic[2] != 0 || 
+      (int) magic[3] != 0)) {
     throw std::invalid_argument("doesn't appear to be a bgen file");
   }
   
