@@ -18,7 +18,7 @@ Header::Header(std::istream * handle) {
   nsamples = *reinterpret_cast<const std::uint32_t*>(&buff[12]);
   magic = std::string(&buff[16], 4);
   
-  if ((magic != "bgen") || (
+  if ((magic != "bgen") && (
       (int) magic[0] != 0 || 
       (int) magic[1] != 0 || 
       (int) magic[2] != 0 || 
