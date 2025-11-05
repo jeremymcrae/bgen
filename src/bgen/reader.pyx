@@ -400,6 +400,9 @@ cdef class BgenReader:
             delay_parsing = True
             path = '/dev/stdin'
         
+        if Path(path).exists() and Path(path).is_dir():
+            raise ValueError(f'bgen path is for a folder: {path}')
+        
         delay_parsing |= self._check_for_index(path)
         
         self.path = path.encode('utf8')
