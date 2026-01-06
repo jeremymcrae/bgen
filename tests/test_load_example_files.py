@@ -1,10 +1,11 @@
 
 from pathlib import Path
 import unittest
+import tempfile
 
 import numpy as np
 
-from bgen import BgenReader
+from bgen import BgenReader, BgenWriter
 
 from tests.utils import load_gen_data, load_vcf_data, load_haps_data, arrays_equal
 
