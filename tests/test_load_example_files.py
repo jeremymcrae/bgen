@@ -109,14 +109,14 @@ class TestExampleBgens(unittest.TestCase):
             
             # check bgen files without internal IDs or an external file instead
             # use numeric IDs (converted to strings)
-            bfile = BgenReader(bgen_path)
-            numeric_ids = [f'{x}' for x in range(len(orig_samples))]
-            self.assertEqual(numeric_ids, bfile.samples)
+            with BgenReader(bgen_path) as bfile:
+                numeric_ids = [f'{x}' for x in range(len(orig_samples))]
+                self.assertEqual(numeric_ids, bfile.samples)
             
             # reading sample IDs from the corresponding sample file should give
             # identical IDs
-            bfile = BgenReader(bgen_path, sample_path)
-            self.assertEqual(orig_samples, bfile.samples)
+            with BgenReader(bgen_path, sample_path) as bfile:
+                self.assertEqual(orig_samples, bfile.samples)
             
             # check we raise an error with too few sample IDs
             missing_path = tmp / 'empty.sample'
@@ -124,7 +124,7 @@ class TestExampleBgens(unittest.TestCase):
             missing.close()
             
             with self.assertRaises(ValueError):
-                bfile = BgenReader(bgen_path, missing_path)
+                BgenReader(bgen_path, missing_path)
             
             # check we raise an error with too many sample IDs
             extra_path = tmp / 'empty.sample'
@@ -132,7 +132,7 @@ class TestExampleBgens(unittest.TestCase):
                 extra.write('id\n0\nsample_0\nsample_1\nsample_2\nsample_3\nsample_4\n')
             
             with self.assertRaises(ValueError):
-                bfile = BgenReader(bgen_path, extra_path)
+                BgenReader(bgen_path, extra_path)
     
     def test_load_missing_file(self):
         ''' check passing in a path to a missing file fails gracefully
