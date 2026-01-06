@@ -40,9 +40,9 @@ Samples::Samples(std::string path, int n_samples) {
   }
   
   std::string header;
-  std::getline(handle, header);
+  std::getline(handle, header, '\n');
   std::string types;
-  std::getline(handle, types);
+  std::getline(handle, types, '\n');
   
   // find the file length post header, then read it all in to memory
   auto pos = handle.tellg();
