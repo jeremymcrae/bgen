@@ -60,6 +60,9 @@ Samples::Samples(std::string path, int n_samples) {
   int idx = 0;
   std::string line;
   while (std::getline(iss, line, '\n')) {
+    if (idx >= n_samples) {
+      throw std::invalid_argument("inconsistent number of samples");
+    }
     samples[idx] = line.substr(0, line.find(' '));
     idx += 1;
   }
