@@ -39,6 +39,7 @@ Samples::Samples(std::string path, int n_samples) {
     throw std::invalid_argument("error with sample file: '" + path + "'");
   }
   
+  // read first two header lines
   std::string header;
   std::getline(handle, header, '\n');
   std::string types;
@@ -53,13 +54,20 @@ Samples::Samples(std::string path, int n_samples) {
   handle.read(&lines[0], fsize);
   
   samples.resize(n_samples);
-  std::string sample_id;
   std::istringstream iss(lines);
   
   // run through all lines and gte the first column as sample_id
   int idx = 0;
   std::string line;
   while (std::getline(iss, line, '\n')) {
+    // skip empty lines
+    if ((line.size() == 0) || (line[0] == 0)) {
+      // std::getline() on win32 at end of file can create string with null
+      // characters. The null character indicates the line doesn't contain an
+      // ID, even though string size might be > 0. Only affects win32.
+      continue;
+    }
+    
     if (idx >= n_samples) {
       throw std::invalid_argument("inconsistent number of samples");
     }
