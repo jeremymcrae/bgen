@@ -113,6 +113,7 @@ class TestExampleBgens(unittest.TestCase):
             numeric_ids = [f'{x}' for x in range(len(orig_samples))]
             self.assertEqual(numeric_ids, bfile.samples)
             bfile.close()
+            del bfile
             
             # # reading sample IDs from the corresponding sample file should give
             # # identical IDs
