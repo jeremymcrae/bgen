@@ -116,7 +116,7 @@ class TestExampleBgens(unittest.TestCase):
             self.assertEqual(orig_samples, bfile.samples)
         
         # check we raise an error with too few sample IDs
-        missing_path = tmp / 'empty.sample'
+        missing_path = self.folder / 'empty.sample'
         missing = open(missing_path, 'wt')
         missing.close()
         
@@ -124,7 +124,7 @@ class TestExampleBgens(unittest.TestCase):
             BgenReader(bgen_path, missing_path)
         
         # check we raise an error with too many sample IDs
-        extra_path = tmp / 'empty.sample'
+        extra_path = self.folder / 'extra.sample'
         with open(extra_path, 'wt') as extra:
             extra.write('id\n0\nsample_0\nsample_1\nsample_2\nsample_3\nsample_4\n')
         
