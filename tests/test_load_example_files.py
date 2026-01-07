@@ -2,6 +2,7 @@
 from pathlib import Path
 import unittest
 import tempfile
+import time
 
 import numpy as np
 
@@ -109,11 +110,14 @@ class TestExampleBgens(unittest.TestCase):
             
             # check bgen files without internal IDs or an external file instead
             # use numeric IDs (converted to strings)
-            bfile = BgenReader(bgen_path) 
-            numeric_ids = [f'{x}' for x in range(len(orig_samples))]
-            self.assertEqual(numeric_ids, bfile.samples)
-            bfile.close()
-            del bfile
+            with BgenReader(bgen_path) as bfile:
+                numeric_ids = [f'{x}' for x in range(len(orig_samples))]
+                self.assertEqual(numeric_ids, bfile.samples)
+            
+            try:
+                bgen_path.unlink()
+            except PermissionError:
+                time.sleep(5)
             
             # # reading sample IDs from the corresponding sample file should give
             # # identical IDs
