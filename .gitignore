@@ -5,6 +5,7 @@ build/
 *zlib_build/
 src/bgen/*.cpp
 src/bgen/*.so
+test/data/temp.bgen
 *.egg
 *.egg-info/
 *.DS_Store
