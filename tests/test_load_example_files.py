@@ -1,8 +1,6 @@
 
 from pathlib import Path
 import unittest
-import tempfile
-import time
 
 import numpy as np
 
@@ -99,46 +97,39 @@ class TestExampleBgens(unittest.TestCase):
         orig = BgenReader(bgen_path)
         orig_samples = orig.samples
         
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            # construct a bgen file without any sample IDs inside (otherwise 
-            # the internal IDs take priority).
-            bgen_path = tmp / 'temp.bgen'
-            with BgenWriter(bgen_path, n_samples=len(orig.samples)) as bfile:
-                for var in orig:
-                    bfile.add_variant_direct(var)
-            
-            # check bgen files without internal IDs or an external file instead
-            # use numeric IDs (converted to strings)
-            with BgenReader(bgen_path) as bfile:
-                numeric_ids = [f'{x}' for x in range(len(orig_samples))]
-                self.assertEqual(numeric_ids, bfile.samples)
-            
-            try:
-                bgen_path.unlink()
-            except PermissionError:
-                time.sleep(5)
-            
-            # # reading sample IDs from the corresponding sample file should give
-            # # identical IDs
-            # with BgenReader(bgen_path, sample_path) as bfile:
-            #     self.assertEqual(orig_samples, bfile.samples)
-            
-            # # check we raise an error with too few sample IDs
-            # missing_path = tmp / 'empty.sample'
-            # missing = open(missing_path, 'wt')
-            # missing.close()
-            
-            # with self.assertRaises(ValueError):
-            #     BgenReader(bgen_path, missing_path)
-            
-            # # check we raise an error with too many sample IDs
-            # extra_path = tmp / 'empty.sample'
-            # with open(extra_path, 'wt') as extra:
-            #     extra.write('id\n0\nsample_0\nsample_1\nsample_2\nsample_3\nsample_4\n')
-            
-            # with self.assertRaises(ValueError):
-            #     BgenReader(bgen_path, extra_path)
+        # construct a bgen file without any sample IDs inside (otherwise 
+        # the internal IDs take priority).
+        bgen_path = self.folder / 'temp.bgen'
+        with BgenWriter(bgen_path, n_samples=len(orig.samples)) as bfile:
+            for var in orig:
+                bfile.add_variant_direct(var)
+        
+        # check bgen files without internal IDs or an external file instead
+        # use numeric IDs (converted to strings)
+        with BgenReader(bgen_path) as bfile:
+            numeric_ids = [f'{x}' for x in range(len(orig_samples))]
+            self.assertEqual(numeric_ids, bfile.samples)
+        
+        # # reading sample IDs from the corresponding sample file should give
+        # # identical IDs
+        # with BgenReader(bgen_path, sample_path) as bfile:
+        #     self.assertEqual(orig_samples, bfile.samples)
+        
+        # # check we raise an error with too few sample IDs
+        # missing_path = tmp / 'empty.sample'
+        # missing = open(missing_path, 'wt')
+        # missing.close()
+        
+        # with self.assertRaises(ValueError):
+        #     BgenReader(bgen_path, missing_path)
+        
+        # # check we raise an error with too many sample IDs
+        # extra_path = tmp / 'empty.sample'
+        # with open(extra_path, 'wt') as extra:
+        #     extra.write('id\n0\nsample_0\nsample_1\nsample_2\nsample_3\nsample_4\n')
+        
+        # with self.assertRaises(ValueError):
+        #     BgenReader(bgen_path, extra_path)
     
     def test_load_missing_file(self):
         ''' check passing in a path to a missing file fails gracefully
