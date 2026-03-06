@@ -163,9 +163,14 @@ static void zlib_compress(char * input, int input_len, std::vector<char> &output
   strm.avail_out = output.size();        // size of output
   strm.next_out = (Bytef *) &output[0]; // output char array
 
+  int ret;
   deflateInit(&strm, 6);
-  deflate(&strm, Z_FINISH);
+  ret = deflate(&strm, Z_FINISH);
   deflateEnd(&strm);
+
+  if (ret != Z_STREAM_END) {
+    throw(std::invalid_argument("zlib compression encountered an error"));
+  }
 
   output.resize(strm.total_out);
 }
@@ -173,6 +178,11 @@ static void zlib_compress(char * input, int input_len, std::vector<char> &output
 // compress a char array with zstd
 static void zstd_compress(char *input, int input_len, std::vector<char> &output) {
   std::size_t total_out = ZSTD_compress(&output[0], output.size(), input, input_len, 3);
+
+  if (ZSTD_isError(total_out)) {
+    throw(std::invalid_argument("zstd compression encountered an error"));
+  }
+
   output.resize(total_out);
 }
 
