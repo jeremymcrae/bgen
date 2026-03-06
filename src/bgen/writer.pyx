@@ -99,7 +99,7 @@ class Indexer:
         self.conn.close()
 
 cdef class BgenWriter:
-    ''' class to open bgen files from disk, and access variant data within
+    ''' class to write bgen files to disk
     '''
     cdef CppBgenWriter * thisptr
     cdef string path
