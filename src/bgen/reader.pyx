@@ -176,8 +176,6 @@ cdef class BgenHeader:
     @property
     def nvariants(self): return self._nvariants
     @property
-    def compression(self): return [None, 'zlib', 'zstd'][self._compression]
-    @property
     def compression(self): return self.compress_formats[self._compression]
     @property
     def layout(self): return self._layout
