@@ -506,7 +506,7 @@ cdef class BgenReader:
       return [x.decode('utf8') for x in samples]
     
     def drop_variants(self, list indices):
-        ''' drops variants from bgen by indices, for a a =ing processing variants
+        ''' drops variants from bgen by indices, for avoiding processing variants
         '''
         if not self.is_open == True:
             raise ValueError("bgen file is closed")
