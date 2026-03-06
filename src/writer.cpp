@@ -151,7 +151,7 @@ std::uint64_t CppBgenWriter::write_variant_direct(std::vector<std::uint8_t> & da
   return var_offset;
 }
 
-// uncompress a char array with zlib
+// compress a char array with zlib
 static void zlib_compress(char * input, int input_len, std::vector<char> &output) {
   z_stream strm;
   strm.zalloc = Z_NULL;
