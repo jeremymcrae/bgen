@@ -15,6 +15,7 @@ class CppBgenReader {
   bool is_stdin = false;
 public:
   CppBgenReader(std::string path, std::string sample_path = "", bool delay_parsing = false);
+  ~CppBgenReader() { if (handle != nullptr) { delete handle; } }
   void parse_all_variants();
   Variant next_var();
   void drop_variants(std::vector<int> indices);
