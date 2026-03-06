@@ -1,5 +1,4 @@
 
-import bisect
 import sqlite3
 import logging
 
