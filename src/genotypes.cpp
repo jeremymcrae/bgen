@@ -873,11 +873,12 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
 }
 
 void Genotypes::clear_probs() {
-  if (max_probs > 0) {
-    delete[] ploidy;
+  if (uncompressed != nullptr) {
     delete[] uncompressed;
   }
-  max_probs = 0;
+  if (ploidy != nullptr) {
+    delete[] ploidy;
+  }
 }
 
 } //namespace bgen
