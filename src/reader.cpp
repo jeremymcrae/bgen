@@ -45,14 +45,8 @@ void CppBgenReader::parse_all_variants() {
   offset = header.offset + 4;
   variants.clear();
   variants.resize(header.nvariants);
-  int idx = 0;
-  while (true) {
-    try {
-      variants[idx] = next_var();
-      idx += 1;
-    } catch (const std::out_of_range & e) {
-      break;
-    }
+  for (std::uint32_t idx=0; idx < header.nvariants; idx++) {
+    variants[idx] = next_var();
   }
   // finally reset the offset position to the first variant, so we can iterate
   // over variants more easily in python
