@@ -509,31 +509,23 @@ std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
   std::uint64_t size;
   if (layout == 1) {
     if (compression == 0) {
-      for (auto &x : encoded) {
-        handle << x;
-      }
+      handle.write(reinterpret_cast<char *>(encoded.data()), encoded.size());
     } else {
       handle.write(reinterpret_cast<char *>(&compressed_len), 4);
-      for (auto &x : compressed) {
-        handle << x;
-      }
+      handle.write(reinterpret_cast<char *>(compressed.data()), compressed.size());
     }
   } else if (layout == 2) {
     // layout 2
     if (compression == 0) {
       size = encoded.size();
       handle.write(reinterpret_cast<char *>(&size), 4);
-      for (auto &x : encoded) {
-        handle << x;
-      }
+      handle.write(reinterpret_cast<char *>(encoded.data()), encoded.size());
     } else {
       size = compressed_len + 4;
       handle.write(reinterpret_cast<char *>(&size), 4);
       size = encoded.size();
       handle.write(reinterpret_cast<char *>(&size), 4);
-      for (auto &x : compressed) {
-        handle << x;
-      }
+      handle.write(reinterpret_cast<char *>(compressed.data()), compressed.size());
     }
   } else {
     throw std::invalid_argument("layout must be 1 or 2");
