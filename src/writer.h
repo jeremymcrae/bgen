@@ -1,5 +1,5 @@
-#ifndef BGEN_BGEN_H_
-#define BGEN_BGEN_H_
+#ifndef BGEN_WRITER_H_
+#define BGEN_WRITER_H_
 
 #include <cstdint>
 #include <fstream>
@@ -60,4 +60,4 @@ public:
 
 } // namespace bgen
 
-#endif  // BGEN_BGEN_H_
+#endif  // BGEN_WRITER_H_
