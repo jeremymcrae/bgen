@@ -64,8 +64,7 @@ void CppBgenReader::drop_variants(std::vector<int> indices) {
   }
   
   for (auto idx : indices) {
-    variants[idx] = variants.back();
-    variants.pop_back();
+    variants.erase(variants.begin() + idx);
   }
   variants.shrink_to_fit();
   
