@@ -170,7 +170,7 @@ static void zlib_compress(char * input, int input_len, std::vector<char> &output
   output.resize(strm.total_out);
 }
 
-// uncompress a char array with zstd
+// compress a char array with zstd
 static void zstd_compress(char *input, int input_len, std::vector<char> &output) {
   std::size_t total_out = ZSTD_compress(&output[0], output.size(), input, input_len, 3);
   output.resize(total_out);
