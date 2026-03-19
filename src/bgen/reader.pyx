@@ -374,6 +374,8 @@ cdef class BgenVar:
         bgens. This primarily avoids decompressing, decoding, re-encoding, and
         compressing the genotype data.
         '''
+        if self.is_stdin:
+            raise ValueError('cannot copy variant data directly while reading from stdin')
         self.__check_closed()
         cdef vector[uint8_t] data = self.thisptr.copy_data()
         return data
