@@ -15,6 +15,8 @@ from cython.operator cimport dereference as deref
 
 import numpy as np
 
+_IS_WIN32 = sys.platform == 'win32'
+
 cdef extern from "<iostream>" namespace "std":
     cdef cppclass ostream:
         pass
@@ -93,7 +95,7 @@ class Indexer:
     
     def close(self):
         self.conn.commit()
-        if sys.platform == 'win32':
+        if _IS_WIN32 and time is not None:
             time.sleep(0.01)
         self.cur.close()
         self.conn.close()
@@ -228,5 +230,5 @@ cdef class BgenWriter:
             self.indexer.close()
         self.is_open = False
         self.indexer = None
-        if sys.platform == 'win32':
+        if _IS_WIN32 and time is not None:
             time.sleep(0.01)
