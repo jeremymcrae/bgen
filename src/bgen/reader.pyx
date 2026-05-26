@@ -18,6 +18,10 @@ import numpy as np
 
 from bgen.index import Index
 
+class PerformanceWarning(UserWarning):
+    ''' warning for operations that may be unexpectedly slow, e.g. linear scans without an index file.'''
+    pass
+
 cdef extern from "<iostream>" namespace "std::ios_base":
     cdef cppclass open_mode:
         pass
@@ -390,6 +394,8 @@ cdef class BgenReader:
     cdef object index
     cdef OpenStatus is_open
     cdef uint64_t offset
+    cdef object warned
+    
     def __cinit__(self, path, sample_path='', bool delay_parsing=False):
         if isinstance(path, Path):
             path = str(path)
@@ -415,6 +421,7 @@ cdef class BgenReader:
         self.handle = IStream(<uint64_t>self.thisptr.handle)
         self.is_open = OpenStatus()
         self.offset = self.thisptr.offset
+        self.warned = set()
     
     def __is_from_stdin(self, bgen_path):
         if bgen_path is sys.stdin:
@@ -485,7 +492,7 @@ cdef class BgenReader:
         idx_exists = index_path.exists()
         self.index = Index(index_path) if idx_exists else None
         return idx_exists
-    
+
     @property
     def header(self):
       ''' get header info from bgen file
@@ -554,6 +561,12 @@ cdef class BgenReader:
                   for offset in offsets]
       
       if not self.delay_parsing:
+          if 'with_rsid' not in self.warned:
+              self.warned.add('with_rsid')
+              warnings.warn("No .bgi index found — falling back to linear scan of all rsids. "
+                            "This can take both time and memory. Consider indexing with bgenix.",
+                            PerformanceWarning,
+                            stacklevel=2)
           idx = [i for i, x in enumerate(self.rsids()) if x == rsid]
           return [self[i] for i in idx]
       
@@ -573,6 +586,12 @@ cdef class BgenReader:
                   for offset in offsets]
       
       if not self.delay_parsing:
+          if 'at_position' not in self.warned:
+              self.warned.add('at_position')
+              warnings.warn("No .bgi index found — falling back to linear scan of all positions. "
+                              "This can take both time and memory. Consider indexing with bgenix.",
+                              PerformanceWarning,
+                              stacklevel=2)
           idx = [i for i, x in enumerate(self.positions()) if x == pos]
           return [self[i] for i in idx]
       
