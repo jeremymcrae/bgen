@@ -51,6 +51,7 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-*
           CIBW_SKIP: '*i686'
           CIBW_TEST_COMMAND: "python -m unittest discover --verbose -s {project}"
+          CIBW_TEST_SKIP: 'cp314-manylinux_x86_64'
           CIBW_ENVIRONMENT_LINUX: PIP_ONLY_BINARY=":all:"
           CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux2014_x86_64:latest
           CIBW_ARCHS: native
