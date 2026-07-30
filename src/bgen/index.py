@@ -54,7 +54,7 @@ class Index:
     def offset_by_rsid(self, rsid) -> list[int]:
         ''' get file offset of bgen variant given a variant index
         '''
-        query = "SELECT file_start_positionFROM Variant WHERE rsid = ?"
+        query = "SELECT file_start_position FROM Variant WHERE rsid = ?"
         params = (rsid, )
         return [x[0] for x in self.cur.execute(query, params)]
     
