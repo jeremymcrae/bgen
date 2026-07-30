@@ -3,7 +3,9 @@ include MANIFEST.in
 include pyproject.toml
 include src/bgen/*.cpp
 include src/bgen/*.py
+include src/bgen/*.pyi
 include src/bgen/*.pyx
+include src/bgen/py.typed
 include src/*.h
 include src/*.cpp
 include src/zstd/lib/*.h

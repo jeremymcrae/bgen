@@ -27,5 +27,11 @@ packages = [
     'bgen',
 ]
 
+[tool.setuptools.package-data]
+bgen = [
+    'py.typed',
+    '*.pyi',
+]
+
 [project.urls]
 homepage = 'https://github.com/jeremymcrae/bgen'
