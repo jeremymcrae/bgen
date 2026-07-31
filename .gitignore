@@ -8,6 +8,7 @@ src/bgen/*.so
 tests/data/temp.bgen
 tests/data/empty.sample
 tests/data/extra.sample
+benchmark.py
 *.egg
 *.egg-info/
 *.DS_Store
