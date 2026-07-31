@@ -70,7 +70,7 @@ class BgenReader(path, sample_path='', delay_parsing=False)
       sample_path: optional path to sample file. Samples will be given integer IDs
           if sample file is not given and sample IDs not found in the bgen file
       delay_parsing: True/False option to allow for not loading all variants into
-          memory when the BgenFile is opened. This can save time when iterating
+          memory when the BgenReader is opened. This can save time when iterating
           across variants in the file
   
   Attributes:
@@ -78,8 +78,8 @@ class BgenReader(path, sample_path='', delay_parsing=False)
     header: BgenHeader with info about the bgen version and compression.
   
   Methods:
-    slicing: BgenVars can be accessed by slicing the BgenFile e.g. bfile[1000]
-    iteration: variants in a BgenFile can be looped over e.g. for x in bfile: print(x)
+    slicing: BgenVars can be accessed by slicing the BgenReader e.g. bfile[1000]
+    iteration: variants in a BgenReader can be looped over e.g. for x in bfile: print(x)
     fetch(chrom, start=None, stop=None): get all variants within a genomic region
     drop_variants(list[int]): drops variants by index from being used in analyses
     with_rsid(rsid): returns list of BgenVars with given rsid
@@ -90,7 +90,7 @@ class BgenReader(path, sample_path='', delay_parsing=False)
     positions(): returns list of positions for variants in the bgen file.
 
 class BgenVar(handle, offset, layout, compression, n_samples):
-  # Note: this isn't called directly, but instead returned from BgenFile methods
+  # Note: this isn't called directly, but instead returned from BgenReader methods
   Attributes:
     varid: ID for variant
     rsid: reference SNP ID for variant
@@ -98,7 +98,7 @@ class BgenVar(handle, offset, layout, compression, n_samples):
     pos: nucleotide position variant is at
     alleles: list of alleles for variant
     is_phased: True/False for whether variant has phased genotype data
-    ploidy: list of ploidy for each sample. Samples are ordered as per BgenFile.samples
+    ploidy: list of ploidy for each sample. Samples are ordered as per BgenReader.samples
     minor_allele: the least common allele (for biallelic variants)
     minor_allele_dosage: 1D numpy array of minor allele dosages for each sample
     alt_dosage: 1D numpy array of alt allele dosages for each sample
