@@ -134,6 +134,9 @@ cdef class BgenWriter:
         elif compression == 'zstd':
             compress_flag = 2
         
+        if layout not in [1, 2]:
+            raise ValueError(f'layout must be 1 or 2: {layout}')
+        
         # re-define variables into cpp objects
         cdef string _metadata = metadata.encode('utf8') if metadata is not None else b''
         cdef vector[string] _samples = [x.encode('utf8') for x in samples]
@@ -167,7 +170,7 @@ cdef class BgenWriter:
             ploidy: integer for constant ploidy, or numpy array of ploidy values per 
                 sample, in same order as genotypes
             phased: whether the genotypes are for phased data or not
-            bit_depth: interger from 1-32 (inclusive) for how many bits to store
+            bit_depth: integer from 1-32 (inclusive) for how many bits to store
                 each genotype in.
         '''
 
@@ -182,22 +185,28 @@ cdef class BgenWriter:
             raise ValueError("bgen file is closed")
         var_offset = self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles, n_samples)
 
+        if bit_depth < 1 or bit_depth > 32:
+            raise ValueError(f'bit_depth must be between 1 and 32: {bit_depth}')
+
         # determine ploidy levels
         cdef uint32_t ploidy_n=0
         cdef uint8_t[:] ploidy_arr = np.array([], dtype=np.uint8)
-        if isinstance(ploidy, int):
+        if isinstance(ploidy, np.isscalar(ploidy)) and np.issubdtype(type(ploidy), np.integer) and ploidy >= 0:
             ploidy_n = ploidy
         elif isinstance(ploidy, np.ndarray):
-            ploidy_arr = ploidy
+            ploidy_arr = np.asarray(ploidy, dtype=np.uint8)
         else:
             raise ValueError('ploidy must be either integer, or numpy array of integers')
+        
+        # ensure the genotypes array is the correct size and type
+        if genotypes.ndim != 2:
+            raise ValueError('genotypes must be a 2D array')
+        if genotypes.dtype != np.float64:
+            genotypes = genotypes.astype(np.float64)
         
         # convert numpy array to C contiguous for storing values on disk. numpy
         # arrays default to C contiguous, so most won't need conversion, but
         # some can be fortran order, e.g. if transposed
-        if not isinstance(genotypes[0][0], np.float64):
-            genotypes = genotypes.astype(np.float64)
-        
         cdef double[:, :] geno_c
         if genotypes.flags['C_CONTIGUOUS']:
             geno_c = genotypes
