@@ -12,6 +12,7 @@ class Index:
         self.cur = self.conn.cursor()
         self.dropped_variants = None
         
+        self._offsets: list[int] | None = None
         self._rsids: list[str] | None = None
         self._chroms: list[str] | None = None
         self._positions: list[int] | None = None
@@ -47,9 +48,10 @@ class Index:
     def offset_by_index(self, index) -> int:
         ''' get file offset of bgen variant given a variant index
         '''
-        query = "SELECT file_start_position FROM Variant LIMIT 1 OFFSET ?"
-        params = (index, )
-        return self.cur.execute(query, params).fetchone()[0]
+        if self._offsets is None:
+            query = "SELECT file_start_position FROM Variant ORDER BY file_start_position"
+            self._offsets = np.array([x[0] for x in self.cur.execute(query)], dtype=np.uint64)
+        return self._offsets[index]
         
     def offset_by_rsid(self, rsid) -> list[int]:
         ''' get file offset of bgen variant given a variant index
