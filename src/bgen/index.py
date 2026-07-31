@@ -10,7 +10,6 @@ class Index:
         self.path = str(path)
         self.conn = sqlite3.connect(self.path)
         self.cur = self.conn.cursor()
-        self.dropped_variants = None
         
         self._offsets: list[int] | None = None
         self._rsids: list[str] | None = None
