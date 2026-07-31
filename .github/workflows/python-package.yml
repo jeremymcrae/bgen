@@ -80,6 +80,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install setuptools build
           python -m build --sdist
+      
+      - name: test mypy signatures
+        run: |
+          pip install mypy-stubtest
+          python -m mypy.stubtest bgen.reader bgen.writer
 
       - uses: actions/upload-artifact@v4
         with:
