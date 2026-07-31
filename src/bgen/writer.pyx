@@ -32,9 +32,6 @@ cdef extern from "<fstream>" namespace "std":
         ofstream(const string&) except +
         ofstream(const string&, open_mode) except +
 
-cdef extern from 'genotypes.h' namespace 'bgen':
-    uint32_t get_max_probs(int &max_ploidy, int &n_alleles, bool &phased)
-
 cdef extern from 'writer.h' namespace 'bgen':
     cdef cppclass CppBgenWriter:
         # declare class constructor and methods
