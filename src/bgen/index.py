@@ -50,8 +50,8 @@ class Index:
         '''
         if self._offsets is None:
             query = "SELECT file_start_position FROM Variant ORDER BY file_start_position"
-            self._offsets = np.array([x[0] for x in self.cur.execute(query)], dtype=np.uint64)
-        return self._offsets[index]
+            self._offsets = np.fromiter((x[0] for x in self.cur.execute(query)), dtype=np.uint64)
+        return int(self._offsets[index])
         
     def offset_by_rsid(self, rsid) -> list[int]:
         ''' get file offset of bgen variant given a variant index
