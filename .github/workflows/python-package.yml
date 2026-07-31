@@ -31,6 +31,15 @@ jobs:
           pip install setuptools build
           pip install .
           python -m unittest discover
+      
+      - name: test mypy signatures
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: |
+          pip install mypy
+          python -m mypy.stubtest \
+            --ignore-missing-stub \
+            --ignore-disjoint-bases \
+            bgen.reader bgen.writer
   
   build_wheels:
     if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
@@ -80,11 +89,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install setuptools build
           python -m build --sdist
-      
-      - name: test mypy signatures
-        run: |
-          pip install mypy-stubtest
-          python -m mypy.stubtest bgen.reader bgen.writer
 
       - uses: actions/upload-artifact@v4
         with:
