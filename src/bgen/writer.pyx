@@ -87,8 +87,10 @@ class Indexer:
         self.cur.execute('CREATE INDEX rsid_index on Variant(rsid)')
     
     def add_variant(self, chrom, pos, rsid, alleles, offset, size):
+        allele_1 = alleles[0]
+        allele_2 = alleles[1] if len(alleles) > 1 else None
         query = '''INSERT INTO Variant VALUES (?, ?, ?, ?, ?, ?, ?, ?)'''
-        params = (chrom, pos, rsid, len(alleles), alleles[0], alleles[1], offset, size)
+        params = (chrom, pos, rsid, len(alleles), allele_1, allele_2, offset, size)
         self.cur.execute(query, params)
     
     def add_metadata(self):
