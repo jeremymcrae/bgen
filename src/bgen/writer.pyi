@@ -26,14 +26,14 @@ class Indexer:
 class BgenWriter:
     ''' class to write bgen files to disk
     '''
-    def __init__(self,
-                 path: str | os.PathLike[str],
-                 n_samples: int,
-                 samples: Iterable[str] = ...,
-                 compression: str | None = 'zstd',
-                 layout: int = 2,
-                 metadata: str | None = None,
-                 ) -> None: ...
+    def __new__(cls,
+                path: str | os.PathLike[str],
+                n_samples: int,
+                samples: Iterable[str] = ...,
+                compression: str | None = 'zstd',
+                layout: int = 2,
+                metadata: str | None = None,
+                ) -> BgenWriter: ...
     def __repr__(self) -> str: ...
     def __enter__(self) -> BgenWriter: ...
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> bool: ...

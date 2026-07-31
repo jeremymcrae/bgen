@@ -7,31 +7,31 @@ from numpy.typing import NDArray
 class IStream:
     ''' basic cython implementation of std::istream, for easy pickling
     '''
-    def __init__(self, ptr: int) -> None: ...
+    def __new__(cls, ptr: int) -> IStream: ...
     def __str__(self) -> str: ...
     def __reduce__(self) -> tuple[Any, ...]: ...
 
 class OpenStatus:
     ''' class to share status of whether a bgen file is currently open
     '''
-    def __init__(self) -> None: ...
+    def __new__(cls) -> OpenStatus: ...
     def __str__(self) -> str: ...
-    def __eq__(self, other: object) -> bool: ...
+    def __eq__(self, other: object, /) -> bool: ...
     def off(self) -> None: ...
     def __reduce__(self) -> tuple[Any, ...]: ...
 
 class BgenHeader:
     ''' holds information about the Bgen file, obtained from the intial header.
     '''
-    def __init__(self,
-                 offset: int,
-                 nvariants: int,
-                 nsamples: int,
-                 compression: int,
-                 layout: int,
-                 has_sample_ids: bool,
-                 metadata: bytes,
-                 ) -> None: ...
+    def __new__(cls,
+                offset: int,
+                nvariants: int,
+                nsamples: int,
+                compression: int,
+                layout: int,
+                has_sample_ids: bool,
+                metadata: bytes,
+                ) -> BgenHeader: ...
     def __repr__(self) -> str: ...
     @property
     def offset(self) -> int: ...
@@ -54,15 +54,15 @@ class BgenHeader:
 class BgenVar:
     ''' holds data for a Variant from a bgen file
     '''
-    def __init__(self,
-                 handle: IStream,
-                 offset: int,
-                 layout: int,
-                 compression: int,
-                 expected_n: int,
-                 is_stdin: bool,
-                 is_open: OpenStatus,
-                 ) -> None: ...
+    def __new__(cls,
+                handle: IStream,
+                offset: int,
+                layout: int,
+                compression: int,
+                expected_n: int,
+                is_stdin: bool,
+                is_open: OpenStatus,
+                ) -> BgenVar: ...
     def __repr__(self) -> str: ...
     def __str__(self) -> str: ...
     def __reduce__(self) -> tuple[Any, ...]: ...
@@ -115,11 +115,11 @@ class BgenVar:
 class BgenReader:
     ''' class to open bgen files from disk, and access variant data within
     '''
-    def __init__(self,
-                 path: str | os.PathLike[str] | IO[Any],
-                 sample_path: str | os.PathLike[str] = '',
-                 delay_parsing: bool = False,
-                 ) -> None: ...
+    def __new__(cls,
+                path: str | os.PathLike[str] | IO[Any],
+                sample_path: str | os.PathLike[str] = '',
+                delay_parsing: bool = False,
+                ) -> BgenReader: ...
     def __repr__(self) -> str: ...
     def __iter__(self) -> Iterator[BgenVar]: ...
     def __next__(self) -> BgenVar: ...
