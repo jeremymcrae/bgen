@@ -203,6 +203,9 @@ cdef class BgenWriter:
     def add_variant_direct(self, variant):
         ''' insert a BgenVar directly into the bgen file
         '''
+        if not self.is_open:
+            raise ValueError("bgen file is closed")
+
         chrom = variant.chrom
         pos = int(variant.pos)
         rsid = variant.rsid
