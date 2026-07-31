@@ -52,10 +52,11 @@ class Indexer:
     ''' class to automatically index bgen files as they are being constructed
     '''
     def __init__(self, bgen_path):
-        index_path = Path(str(bgen_path) + '.bgi')
-        if index_path.exists():
-            index_path.unlink()
-        self.conn = sqlite3.connect(index_path)
+        self.index_path = Path(str(bgen_path) + '.bgi')
+        if self.index_path.exists():
+            self.index_path.unlink()
+        self.create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+        self.conn = sqlite3.connect(self.index_path)
         self.cur = self.conn.cursor()
         self.create_tables()
     
@@ -90,12 +91,25 @@ class Indexer:
         params = (chrom, pos, rsid, len(alleles), alleles[0], alleles[1], offset, size)
         self.cur.execute(query, params)
     
+    def add_metadata(self):
+        bgen_path = self.index_path.with_suffix('')
+        bgen_size = bgen_path.stat().st_size
+        bgen_time = int(bgen_path.stat().st_mtime)
+        with open(bgen_path, 'rb') as f:
+            first_1000_bytes = f.read(1000)
+        query = '''INSERT INTO Metadata VALUES (?, ?, ?, ?, ?)'''
+        params = (str(bgen_path), bgen_size, bgen_time, first_1000_bytes, self.create_time)
+        self.cur.execute(query, params)
+
     def close(self):
-        self.conn.commit()
-        if _IS_WIN32 and time is not None:
-            time.sleep(0.01)
-        self.cur.close()
-        self.conn.close()
+        try:
+            self.add_metadata()
+        finally:
+            self.conn.commit()
+            if _IS_WIN32 and time is not None:
+                time.sleep(0.01)
+            self.cur.close()
+            self.conn.close()
 
 cdef class BgenWriter:
     ''' class to write bgen files to disk
