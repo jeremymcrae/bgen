@@ -5,9 +5,9 @@ build/
 *zlib_build/
 src/bgen/*.cpp
 src/bgen/*.so
-test/data/temp.bgen
-test/data/empty.sample
-test/data/extra.sample
+tests/data/temp.bgen
+tests/data/empty.sample
+tests/data/extra.sample
 *.egg
 *.egg-info/
 *.DS_Store
