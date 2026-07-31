@@ -78,7 +78,7 @@ class BgenReader(path, sample_path='', delay_parsing=False)
     header: BgenHeader with info about the bgen version and compression.
   
   Methods:
-    slicing: BgenVars can be accessed by slicing the BgenReader e.g. bfile[1000]
+    indexing: BgenVars can be accessed by index e.g. bfile[1000]
     iteration: variants in a BgenReader can be looped over e.g. for x in bfile: print(x)
     fetch(chrom, start=None, stop=None): get all variants within a genomic region
     drop_variants(list[int]): drops variants by index from being used in analyses
