@@ -105,10 +105,10 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
                                                   std::vector<std::string> &alleles,
                                                   std::uint32_t _n_samples) {
   std::uint64_t var_offset = handle.tellp();
-  n_variants += 1;
   if (_n_samples != n_samples) {
     throw std::invalid_argument("number of samples doesn't match sample count in file");
   }
+  n_variants += 1;
   if (layout == 1) {
     handle.write(reinterpret_cast<char *>(&_n_samples), 4);
     // handle << _n_samples;

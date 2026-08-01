@@ -9,7 +9,7 @@ import time
 from libcpp cimport bool
 from libcpp.string cimport string
 from libcpp.vector cimport vector
-from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t
+from libc.stdint cimport int8_t, int32_t, uint8_t, uint16_t, uint32_t, uint64_t
 
 from cython.operator cimport dereference as deref
 
@@ -45,7 +45,7 @@ cdef extern from 'writer.h' namespace 'bgen':
                          bool phased, uint8_t bit_depth) except +
         uint64_t add_genotype_data(uint16_t n_alleles,
                          double *genotypes, uint32_t geno_len, uint8_t *ploidy,
-                         uint32_t min_ploidy, uint32_t max_ploidy,
+                         uint8_t min_ploidy, uint8_t max_ploidy,
                          bool phased, uint8_t bit_depth) except +
 
 class Indexer:
@@ -120,8 +120,10 @@ cdef class BgenWriter:
     cdef string path
     cdef bool is_open
     cdef object indexer
+    cdef int layout
+    cdef uint32_t n_samples
     def __cinit__(self, path, uint32_t n_samples, samples=[], compression='zstd',
-                  layout=2, metadata=None):
+                  int layout=2, metadata=None):
         if isinstance(path, Path):
             path = str(path)
         
@@ -137,6 +139,12 @@ cdef class BgenWriter:
         if layout not in [1, 2]:
             raise ValueError(f'layout must be 1 or 2: {layout}')
         
+        if layout == 1 and compression == 'zstd':
+            raise ValueError('layout 1 is not supported with zstd compression')
+        
+        self.n_samples = n_samples
+        self.layout = layout
+
         # re-define variables into cpp objects
         cdef string _metadata = metadata.encode('utf8') if metadata is not None else b''
         cdef vector[string] _samples = [x.encode('utf8') for x in samples]
@@ -154,9 +162,79 @@ cdef class BgenWriter:
     def __repr__(self):
         return f'BgenFile("{self.path.decode("utf8")}")'
     
+
+    def _validate_genotypes(self, genotypes):
+        ''' check the genotype values
+        '''
+        # ensure the genotypes array is the correct size and type
+        genotypes = np.asarray(genotypes, dtype=np.float64)
+        if genotypes.ndim != 2:
+            raise ValueError('genotypes must be a 2D array')
+        
+        if genotypes.size == 0:
+            raise ValueError('genotypes array must be non-empty')
+        
+        n_samples = genotypes.shape[0]
+        n_genos = genotypes.shape[1]
+        if n_samples != self.n_samples:
+            raise ValueError(f'genotypes array must have {self.n_samples} samples, not {n_samples}')
+        
+        return genotypes, n_samples, n_genos
+    
+    def _make_contiguous(self, genotypes):
+        ''' make genotypes array C contiguous
+        '''
+        # convert numpy array to C contiguous for storing values on disk. numpy
+        # arrays default to C contiguous, so most won't need conversion, but
+        # some can be fortran order, e.g. if transposed
+        cdef double[:, :] geno_c
+        if genotypes.flags['C_CONTIGUOUS']:
+            geno_c = genotypes
+        else:
+            geno_c = np.ascontiguousarray(genotypes)
+        
+        return geno_c
+
+    def _validate_ploidy(self, ploidy, n_samples):
+        ''' check the ploidy values
+        '''
+        if isinstance(ploidy, list):
+            ploidy = np.array(ploidy)
+        
+        # determine ploidy levels
+        cdef int32_t min_ploidy, max_ploidy
+        cdef uint8_t[:] ploidy_arr = np.array([], dtype=np.uint8)
+        if np.isscalar(ploidy) and np.issubdtype(type(ploidy), np.integer):
+            min_ploidy, max_ploidy = ploidy, ploidy
+        elif isinstance(ploidy, np.ndarray) and np.issubdtype(ploidy.dtype, np.integer):
+            if ploidy.ndim != 1 or ploidy.size != n_samples:
+                raise ValueError("ploidy array doesn't must match sample number")
+
+            min_ploidy, max_ploidy = np.min(ploidy), np.max(ploidy)
+            if min_ploidy != max_ploidy:
+                ploidy_arr = np.asarray(ploidy, dtype=np.uint8)
+        else:
+            raise ValueError('ploidy must be either integer, or numpy array of integers')
+        
+        if min_ploidy < 0 or max_ploidy > 63:
+            raise ValueError('ploidy values must be between 0 and 63')
+        
+        return min_ploidy, max_ploidy, ploidy_arr
+
+    def _validate_layout1_data(self, vector[string] _alleles, uint32_t n_samples, uint32_t n_genos, bool phased):
+        ''' validate layout 1 data
+        '''
+        if self.layout == 1 and _alleles.size() != 2:
+            raise ValueError('layout 1 requires exactly two alleles')
+        elif self.layout == 1 and n_genos != 3:
+            raise ValueError('layout 1 requires 3 genotype probabilities per variant')
+        elif self.layout == 1 and phased:
+            raise ValueError('layout 1 cannot use phased data')
+
+
     def add_variant(self, varid, rsid, chrom, uint32_t pos, alleles, 
                     genotypes, ploidy=2, bool phased=False,
-                    uint8_t bit_depth=8):
+                    int bit_depth=8):
         ''' add a variant to the bgen file on disk
 
         Args:
@@ -173,54 +251,45 @@ cdef class BgenWriter:
             bit_depth: integer from 1-32 (inclusive) for how many bits to store
                 each genotype in.
         '''
+        if not self.is_open:
+            raise ValueError("bgen file is closed")
 
         # re-define variables into cpp objects
         cdef string _varid = varid.encode('utf8')
         cdef string _rsid = rsid.encode('utf8')
         cdef string _chrom = chrom.encode('utf8')
-        cdef vector[string] _alleles = [x.encode('utf8') for x in alleles]
-        cdef uint32_t n_samples = len(genotypes)
 
-        if not self.is_open:
-            raise ValueError("bgen file is closed")
-        var_offset = self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles, n_samples)
+        alleles = list(alleles)
+        if len(alleles) == 0:
+            raise ValueError('alleles must be a non-empty list')
+        cdef vector[string] _alleles = [x.encode('utf8') for x in alleles]
 
         if bit_depth < 1 or bit_depth > 32:
             raise ValueError(f'bit_depth must be between 1 and 32: {bit_depth}')
-
-        # determine ploidy levels
-        cdef uint32_t ploidy_n=0
-        cdef uint8_t[:] ploidy_arr = np.array([], dtype=np.uint8)
-        if isinstance(ploidy, np.isscalar(ploidy)) and np.issubdtype(type(ploidy), np.integer) and ploidy >= 0:
-            ploidy_n = ploidy
-        elif isinstance(ploidy, np.ndarray):
-            ploidy_arr = np.asarray(ploidy, dtype=np.uint8)
-        else:
-            raise ValueError('ploidy must be either integer, or numpy array of integers')
         
-        # ensure the genotypes array is the correct size and type
-        if genotypes.ndim != 2:
-            raise ValueError('genotypes must be a 2D array')
-        if genotypes.dtype != np.float64:
-            genotypes = genotypes.astype(np.float64)
-        
-        # convert numpy array to C contiguous for storing values on disk. numpy
-        # arrays default to C contiguous, so most won't need conversion, but
-        # some can be fortran order, e.g. if transposed
+        # sanatize genotypes
         cdef double[:, :] geno_c
-        if genotypes.flags['C_CONTIGUOUS']:
-            geno_c = genotypes
-        else:
-            geno_c = np.ascontiguousarray(genotypes)
+        cdef uint32_t n_samples, n_genos
+        genotypes, n_samples, n_genos = self._validate_genotypes(genotypes)
+        geno_c = self._make_contiguous(genotypes)
+    
+        # validate ploidy levels
+        cdef int32_t min_ploidy, max_ploidy
+        cdef uint8_t[:] ploidy_arr
+        min_ploidy, max_ploidy, ploidy_arr = self._validate_ploidy(ploidy, n_samples)
         
-        cdef geno_len = genotypes.shape[0] * genotypes.shape[1]
-        if len(ploidy_arr) == 0:
+        self._validate_layout1_data(_alleles, n_samples, n_genos, phased)
+        
+        var_offset = self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles, n_samples)
+
+        cdef uint32_t geno_len = n_samples * n_genos
+        if min_ploidy == max_ploidy:
             end_offset = self.thisptr.add_genotype_data(_alleles.size(), &geno_c[0, 0],
-                                           geno_len, ploidy_n, phased, bit_depth)
+                                           geno_len, min_ploidy, phased, bit_depth)
         else:
             end_offset = self.thisptr.add_genotype_data(_alleles.size(), &geno_c[0, 0],
-                                           geno_len, &ploidy_arr[0], min(ploidy), 
-                                           max(ploidy), phased, bit_depth)
+                                           geno_len, &ploidy_arr[0], min_ploidy, 
+                                           max_ploidy, phased, bit_depth)
         
         self.indexer.add_variant(chrom, int(pos), rsid, alleles, var_offset, 
                                  end_offset - var_offset)

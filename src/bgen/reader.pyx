@@ -349,7 +349,7 @@ cdef class BgenVar:
                 phase_width = data.shape[1]
                 
                 # create an empty array filled with nans
-                ragged = np.empty((len(ploidy), max_ploidy * cols))
+                ragged = np.empty((len(ploidy), max_ploidy * cols), dtype=np.float32)
                 ragged.fill(np.nan)
                 
                 # fill in the empty array
@@ -459,14 +459,21 @@ cdef class BgenReader:
       else:
           return self.thisptr.header.nvariants
     
-    def __getitem__(self, int idx):
+    def __getitem__(self, Py_ssize_t idx):
         ''' pull out a Variant by index position
         '''
+        cdef Py_ssize_t orig_idx, size
+        
         if not self.is_open == True:
             raise ValueError('bgen file is closed')
         
-        if idx >= len(self) or idx < 0:
-            raise IndexError(f'cannot get Variant at index: {idx}')
+        orig_idx = idx
+        size = len(self)
+        if idx < 0:
+            idx += size
+        
+        if idx >= size or idx < 0:
+            raise IndexError(f'cannot get Variant at index: {orig_idx}')
         
         # account for lazy loading variants from bgen
         if self.index is None and self.thisptr.variants.size() == 0:
