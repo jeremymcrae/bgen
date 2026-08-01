@@ -252,11 +252,32 @@ cdef class BgenVar:
     def __str__(self):
        return f'{self.rsid} - {self.chrom}:{self.pos} {self.alleles}'
     
+    cdef tuple _init_args(self):
+        ''' the arguments needed to rebuild an equivalent BgenVar
+        '''
+        return (self.handle, self.thisptr.offset, self.layout, self.compression,
+                self.expected_n, self.is_stdin, self.is_open)
+    
     def __reduce__(self):
         ''' enable pickling of a BgenVar object
         '''
         warnings.warn("pickling BgenVar - make sure their BgenReader objects exist when unpickling", RuntimeWarning)
-        return (self.__class__, (self.handle, self.thisptr.offset, self.layout, self.compression, self.expected_n, self.is_stdin, self.is_open))
+        return (self.__class__, self._init_args())
+    
+    def __copy__(self):
+        ''' copy a BgenVar without hitting the __reduce__ warning
+        '''
+        return self.__class__(*self._init_args())
+    
+    def __deepcopy__(self, memo):
+        ''' deepcopy a BgenVar
+        
+        The bgen file is shared with the original rather than duplicated, since
+        the point of a BgenVar is to read from an open bgen file.
+        '''
+        cdef BgenVar var = self.__class__(*self._init_args())
+        memo[id(self)] = var
+        return var
     
     def __dealloc__(self):
         del self.thisptr
