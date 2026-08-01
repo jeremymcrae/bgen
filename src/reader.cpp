@@ -6,6 +6,14 @@
 
 namespace bgen {
 
+/// smallest number of bytes a variant can occupy in a bgen
+///
+/// This is a deliberate underestimate of the per variant fields (the identifiers
+/// and alleles all have length prefixes, and layout 1 has fewer fields), since it
+/// is only used to cap how much space is reserved up front. Undercounting just
+/// makes the reserve smaller than it could be.
+const std::uint64_t MIN_VARIANT_BYTES = 12;
+
 CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool delay_parsing) {
   if (path != "/dev/stdin") {
     handle = std::make_shared<std::ifstream>(path, std::ios::in | std::ios::binary);
@@ -17,8 +25,28 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
   if (handle->fail()) {
     throw std::invalid_argument("error reading from '" + path + "'");
   }
+  if (!is_stdin) {
+    // Record the file size, so counts read from the header can be checked
+    // against what the file could actually hold. stdin cannot be seeked, so its
+    // size is left as zero, meaning unknown.
+    handle->seekg(0, std::ios::end);
+    if (handle->good()) {
+      file_size = (std::uint64_t) handle->tellg();
+    }
+    handle->clear();
+    handle->seekg(0);
+  }
   header = Header(handle.get());
   if (header.has_sample_ids) {
+    // Check the sample count against the file before it sizes any allocation, as
+    // a corrupt count would otherwise ask for an allocation of any size. Each ID
+    // in the sample block carries at least a two byte length prefix, so the file
+    // size is a generous upper bound. This only holds when the IDs really are in
+    // the bgen - when they are generated, or come from an external .sample file,
+    // there is no per sample data here to bound it by.
+    if ((file_size > 0) && (header.nsamples > file_size / 2)) {
+      throw std::invalid_argument("bgen has more samples than the file can hold");
+    }
     samples = Samples(handle.get(), header.nsamples);
   } else if (sample_path.size() > 0) {
     samples = Samples(sample_path, header.nsamples);
@@ -57,7 +85,17 @@ void CppBgenReader::parse_all_variants() {
   }
   offset = first_variant_offset();
   variants.clear();
-  variants.reserve(header.nvariants);
+  // Only reserve what the file could hold. nvariants comes straight from the
+  // header, so a corrupt count would otherwise ask for hundreds of GB of
+  // Variants up front. Parsing still stops at whatever the file really contains.
+  std::uint64_t n_reserve = header.nvariants;
+  if (file_size > 0) {
+    std::uint64_t possible = file_size / MIN_VARIANT_BYTES + 1;
+    if (n_reserve > possible) {
+      n_reserve = possible;
+    }
+  }
+  variants.reserve(n_reserve);
   try {
     for (std::uint32_t idx=0; idx < header.nvariants; idx++) {
       variants.push_back(next_var());
