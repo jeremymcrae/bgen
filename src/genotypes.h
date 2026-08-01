@@ -11,6 +11,14 @@
 
 namespace bgen {
 
+/// bytes of padding to allocate past the end of the decompressed genotype data
+///
+/// probabilities_layout2 reads 8 bytes at a time so that a probability can be
+/// extracted in a single read, even at bit depths which straddle byte
+/// boundaries. Without this padding, the read for the final probability would
+/// run past the end of the buffer.
+const std::uint32_t PROBS_READ_PAD = 8;
+
 class Genotypes {
 public:
   Genotypes() {}

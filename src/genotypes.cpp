@@ -6,8 +6,6 @@
 #include <cmath>
 #include <cassert>
 #include <cstring>
-#include <chrono>
-#include <thread>
 
 #include <iostream>
 
@@ -175,7 +173,11 @@ void Genotypes::decompress() {
   
   std::uint32_t compressed_len = length - decompressed_field * 4;
   char * compressed = new char[compressed_len];
-  uncompressed = new char[decompressed_len];
+  // pad the buffer, since probabilities_layout2 reads 8 bytes at a time and the
+  // read for the final probability would otherwise run off the end of the
+  // genotype data. Zero the padding so those trailing bits are deterministic.
+  uncompressed = new char[decompressed_len + PROBS_READ_PAD];
+  std::memset(uncompressed + decompressed_len, 0, PROBS_READ_PAD);
   if (! handle->read(&compressed[0], compressed_len)) {
     throw std::invalid_argument("couldn't read the compressed data");
   }
@@ -493,11 +495,6 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
   for (auto n: missing) {
     offset = max_probs * n;
     if (phased) {
-      // The following sleep is a crude hack. Without it, it segfaults on macos
-      // on x86-64 when assigning nans for the relevant missing probs. I don't
-      // understand why, since it only reads the ploidy values, which were set
-      // well upstream before this.
-      std::this_thread::sleep_for(std::chrono::nanoseconds(10));
       if (constant_ploidy) {
           offset *= k;
       } else {
