@@ -7,6 +7,31 @@
 
 namespace bgen {
 
+/// read a fixed width value from the bgen, and check the read succeeded
+///
+/// A read which runs past the end of the file leaves the target value
+/// indeterminate, so the reads have to be checked before the values get used,
+/// otherwise we end up branching on (or sizing allocations from) uninitialised
+/// memory. Throws out_of_range, so that running off the end of the file during
+/// iteration surfaces in python as StopIteration.
+template <typename T>
+static void read_checked(std::istream & handle, T & value) {
+  if (!handle.read(reinterpret_cast<char *>(&value), sizeof(T))) {
+    throw std::out_of_range("reached end of file");
+  }
+}
+
+/// read a string which is prefixed by its length, and check the reads succeeded
+template <typename LenType>
+static void read_prefixed_string(std::istream & handle, std::string & value) {
+  LenType len;
+  read_checked(handle, len);
+  value.resize(len);
+  if (len > 0 && !handle.read(&value[0], len)) {
+    throw std::out_of_range("reached end of file");
+  }
+}
+
 /// initialise a single variant with chrom, pos, rsID identifiers
 ///
 /// This starts a Genotypes object, but this doesn't parse the genotypes until
@@ -26,66 +51,36 @@ Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t & varoffse
     handle->seekg(offset);
   }
   if (handle->eof()) {
-    // check for end-of-file after seek, so we don't try to read after EOF
+    // check for end-of-file before reading, so we don't try to read after EOF.
+    // This is how iteration over a stdin bgen terminates, since we cannot seek
+    // back on stdin to check whether another variant follows.
     throw std::out_of_range("reached end of file");
   }
   if (layout == 1) {
-    handle->read(reinterpret_cast<char*>(&n_samples), sizeof(n_samples));
+    read_checked(*handle, n_samples);
   } else {
     n_samples = expected_n;
-  }
-  
-  if (handle->eof()) {
-    // Check for end-of-file after possible first read, to avoid later reads.
-    // Note that if the layout is not v1, the read above doesn't occur.
-    throw std::out_of_range("reached end of file");
   }
   
   if ((int) n_samples != expected_n) {
     throw std::invalid_argument("number of samples doesn't match");
   }
   
-  // get the variant ID (first need to know how long the field is)
-  std::uint16_t item_len;
-  handle->read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
-  if (item_len > 0) {
-    varid.resize(item_len);
-    handle->read(&varid[0], item_len);
-  }
+  read_prefixed_string<std::uint16_t>(*handle, varid);
+  read_prefixed_string<std::uint16_t>(*handle, rsid);
+  read_prefixed_string<std::uint16_t>(*handle, chrom);
   
-  if (handle->eof()) {
-    // check for end-of-file after other possible first read, to avoid later reads.
-    // This check is required for layout != v1.
-    throw std::out_of_range("reached end of file");
-  }
-  
-  // get the rsID (first need to know how long the field is)
-  handle->read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
-  if (item_len > 0) {
-    rsid.resize(item_len);
-    handle->read(&rsid[0], item_len);
-  }
-  
-  // get the chromosome (first need to know how long the field is)
-  handle->read(reinterpret_cast<char*>(&item_len), sizeof(std::uint16_t));
-  if (item_len > 0) {
-    chrom.resize(item_len);
-    handle->read(&chrom[0], item_len);
-  }
-  
-  handle->read(reinterpret_cast<char*>(&pos), sizeof(std::uint32_t));
+  read_checked(*handle, pos);
   if (layout == 1) {
     n_alleles = 2;
   } else {
-    handle->read(reinterpret_cast<char*>(&n_alleles), sizeof(std::uint16_t));
+    read_checked(*handle, n_alleles);
   }
   
+  alleles.reserve(n_alleles);
   for (int x=0; x < n_alleles; x++) {
-    std::uint32_t allele_len;
     std::string allele;
-    handle->read(reinterpret_cast<char*>(&allele_len), sizeof(std::uint32_t));
-    allele.resize(allele_len);
-    handle->read(&allele[0], allele_len);
+    read_prefixed_string<std::uint32_t>(*handle, allele);
     alleles.push_back(allele);
   }
   
@@ -93,7 +88,7 @@ Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t & varoffse
   if ((layout == 1) && (compression == 0)) {
     length = n_samples * 6;
   } else {
-    handle->read(reinterpret_cast<char *>(&length), sizeof(length));
+    read_checked(*handle, length);
   }
   std::uint64_t geno_offset = 0;
   if (!is_stdin) {
@@ -154,7 +149,9 @@ std::vector<std::uint8_t> Variant::copy_data() {
   std::uint32_t length = next_variant_offset - offset;
   std::vector<std::uint8_t> data(length);
   handle->seekg(offset);
-  handle->read(reinterpret_cast<char *>(&data[0]), length);
+  if (!handle->read(reinterpret_cast<char *>(data.data()), length)) {
+    throw std::invalid_argument("could not read variant data - is the bgen truncated?");
+  }
   return data;
 }
 
