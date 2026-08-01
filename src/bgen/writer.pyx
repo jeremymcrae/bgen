@@ -124,7 +124,7 @@ cdef class BgenWriter:
     cdef object indexer
     cdef int layout
     cdef uint32_t n_samples
-    def __cinit__(self, path, uint32_t n_samples, samples=[], compression='zstd',
+    def __cinit__(self, path, uint32_t n_samples, samples=None, compression='zstd',
                   int layout=2, metadata=None):
         if isinstance(path, Path):
             path = str(path)
@@ -149,7 +149,7 @@ cdef class BgenWriter:
 
         # re-define variables into cpp objects
         cdef string _metadata = metadata.encode('utf8') if metadata is not None else b''
-        cdef vector[string] _samples = [x.encode('utf8') for x in samples]
+        cdef vector[string] _samples = [x.encode('utf8') for x in samples] if samples is not None else []
 
         self.path = path.encode('utf8')
         

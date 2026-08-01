@@ -29,7 +29,7 @@ class BgenWriter:
     def __new__(cls,
                 path: str | os.PathLike[str],
                 n_samples: int,
-                samples: Iterable[str] = ...,
+                samples: Iterable[str] | None = ...,
                 compression: str | None = 'zstd',
                 layout: int = 2,
                 metadata: str | None = None,

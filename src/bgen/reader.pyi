@@ -103,7 +103,7 @@ class BgenVar:
         '''
         ...
     @property
-    def probabilities(self) -> NDArray[np.floating[Any]]:
+    def probabilities(self) -> NDArray[np.float32]:
         ''' get the allelic probabilities for a variant
         '''
         ...
