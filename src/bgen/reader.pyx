@@ -426,7 +426,13 @@ cdef class BgenReader:
         return False
     
     def __dealloc__(self):
-        self.close()
+        # a deallocated reader has nobody left to report errors to, so drop them
+        # rather than emitting 'Exception ignored in __dealloc__' noise. Call
+        # close() directly (or use a with block) to have errors raised.
+        try:
+            self.close()
+        except Exception:
+            pass
     
     def __repr__(self):
         return f'BgenFile("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
@@ -640,12 +646,30 @@ cdef class BgenReader:
         return False
     
     def close(self):
-        if self.is_open == True:
+        if not self.is_open == True:
+            # this can also be a partially constructed reader, where __cinit__
+            # raised before is_open was set, so still release the index
+            self._close_index()
+            return
+        
+        # mark the bgen as closed before releasing anything, so that an error
+        # part way through cannot leave this reporting itself as open while
+        # holding a freed pointer, and so a second close() cannot delete the
+        # pointer twice
+        self.is_open.off()
+        try:
             del self.thisptr
+            self.thisptr = NULL
             self.handle = None
-            if self.index:
-                self.index.close()
-            self.index = None
-            self.is_open.off()
+        finally:
+            self._close_index()
+    
+    def _close_index(self):
+        ''' release the bgenix index, if one was opened
+        '''
+        index = self.index
+        self.index = None
+        if index is not None:
+            index.close()
 
 BgenFile = BgenReader
