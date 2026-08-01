@@ -1,4 +1,7 @@
 
+#include <algorithm>
+#include <string>
+
 #include "reader.h"
 
 namespace bgen {
@@ -56,11 +59,23 @@ void CppBgenReader::parse_all_variants() {
 
 /// drop a subset of variants passed in by indexes
 void CppBgenReader::drop_variants(std::vector<int> indices) {
+  // Check every index before dropping any, so a bad index cannot leave the
+  // variants half dropped. Without this, an out of range index builds an invalid
+  // iterator and erases from outside the vector, which segfaults.
+  for (auto idx : indices) {
+    if ((idx < 0) || ((std::size_t) idx >= variants.size())) {
+      throw std::out_of_range("variant index " + std::to_string(idx) +
+                              " is out of range for a bgen with " +
+                              std::to_string(variants.size()) + " variants");
+    }
+  }
+  
   // sort indices in descending order, so dropping elemtns doesn't affect later items
   std::sort(indices.rbegin(), indices.rend());
   
-  auto it = std::unique(indices.begin(), indices.end());
-  if (it != indices.end()) {
+  // adjacent_find checks for duplicates without editing indices, whereas
+  // std::unique would shuffle them about before we then throw
+  if (std::adjacent_find(indices.begin(), indices.end()) != indices.end()) {
     throw std::invalid_argument("can't drop variants with duplicate indices");
   }
   

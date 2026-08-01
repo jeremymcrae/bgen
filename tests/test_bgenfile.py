@@ -1,6 +1,7 @@
 
 from pathlib import Path
 import unittest
+import warnings
 
 import numpy as np
 
@@ -175,3 +176,46 @@ class TestBgenReader(unittest.TestCase):
         
         # check that we don't get any variants in a region without any
         self.assertEqual(list(bfile.fetch(chrom, start * 1000, stop * 1000)), [])
+    
+    def test_drop_variants_out_of_range(self):
+        ''' dropping variants by an out of range index raises an error
+        
+        Out of range indices used to build an invalid iterator in the c++ code,
+        which segfaulted rather than raising.
+        '''
+        path = self.folder / 'example.16bits.bgen'
+        with warnings.catch_warnings():
+            # drop_variants is deprecated, but still needs to not segfault
+            warnings.simplefilter('ignore', DeprecationWarning)
+            for idx in [-1, -100, 10000000]:
+                with BgenReader(path, delay_parsing=True) as bfile:
+                    with self.assertRaises(IndexError):
+                        bfile.drop_variants([idx])
+            
+            # a bad index must not drop any of the valid ones alongside it
+            with BgenReader(path, delay_parsing=True) as bfile:
+                before = len(bfile)
+                with self.assertRaises(IndexError):
+                    bfile.drop_variants([0, 1, -1])
+                self.assertEqual(len(bfile), before)
+    
+    def test_drop_variants_duplicate_indices(self):
+        ''' dropping variants with duplicated indices raises an error
+        '''
+        path = self.folder / 'example.16bits.bgen'
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            with BgenReader(path, delay_parsing=True) as bfile:
+                with self.assertRaises(ValueError):
+                    bfile.drop_variants([1, 1])
+    
+    def test_drop_variants(self):
+        ''' dropping variants by index drops the expected number
+        '''
+        path = self.folder / 'example.16bits.bgen'
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            with BgenReader(path, delay_parsing=True) as bfile:
+                before = len(bfile)
+                bfile.drop_variants([0, 2, 5])
+                self.assertEqual(len(bfile), before - 3)

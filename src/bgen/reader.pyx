@@ -571,6 +571,10 @@ cdef class BgenReader:
     def drop_variants(self, list indices):
         ''' drops variants from bgen by indices, for avoiding processing variants
         
+        Raises IndexError if any index is negative or beyond the last variant,
+        and ValueError if any index is duplicated. Nothing is dropped unless
+        every index is valid.
+        
         .. deprecated::
             This does not drop variants consistently, and will be removed. Only
             len() reflects the dropped variants - iterating the BgenReader still

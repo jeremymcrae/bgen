@@ -145,6 +145,8 @@ class BgenReader:
     def drop_variants(self, indices: list[int]) -> None:
         ''' drops variants from bgen by indices, for avoiding processing variants
         
+        Raises IndexError for out of range indices, and ValueError for duplicates.
+        
         .. deprecated::
             This does not drop variants consistently, and will be removed.
             Filter the variants in python instead.
