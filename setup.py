@@ -15,7 +15,7 @@ from Cython.Build import cythonize
 EXTRA_COMPILE_ARGS = []
 EXTRA_LINK_ARGS = []
 if sys.platform == 'linux':
-    EXTRA_COMPILE_ARGS += ['-std=c++11', '-I/usr/include', '-O2']
+    EXTRA_COMPILE_ARGS += ['-std=c++11', '-O2']
 elif sys.platform == "darwin":
     EXTRA_COMPILE_ARGS += [
         "-stdlib=libc++",
@@ -30,7 +30,7 @@ elif sys.platform == "darwin":
 elif sys.platform == "win32":
     EXTRA_COMPILE_ARGS += ['/std:c++14', '/O2']
 
-if platform.machine() == 'x86_64' and sys.platform != "darwin":
+if platform.machine() == 'x86_64' and sys.platform == "linux":
     EXTRA_COMPILE_ARGS += ['-mavx', '-mavx2']
 
 def flatten(*lists):
