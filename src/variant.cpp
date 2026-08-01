@@ -13,12 +13,13 @@ namespace bgen {
 /// required, just starts it so we can get the offset of the next variant, so as
 /// to parse the bgen variants at speed.
 ///
-///  @param _handle std::istream for bgen file
+///  @param _handle std::istream for bgen file, shared with the CppBgenReader so
+///     the file stays open for as long as this Variant might read from it
 ///  @param varoffset start byte for variant in bgen file
 ///  @param layout bgen layout version (1 or 2)
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
-Variant::Variant(std::istream * _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, bool is_stdin) : handle(_handle) {
+Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, bool is_stdin) : handle(_handle) {
   offset = varoffset;
   if (!is_stdin) {
     handle->clear();

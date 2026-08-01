@@ -5,12 +5,26 @@
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <istream>
 #include <map>
+#include <memory>
 #include <string>
 #include <sstream>
 #include <vector>
 
 namespace bgen {
+
+/// wrap a stream which we do not own in a shared_ptr
+///
+/// The bgen stream is shared between a CppBgenReader and every Variant opened
+/// from it, so that it stays open for as long as any of them still need it. A
+/// couple of streams are not ours to close though: std::cin, and the stream
+/// belonging to an unpickled variant (which is owned by whichever reader is
+/// still holding it). Those get a shared_ptr with a no-op deleter, so they can
+/// be stored in the same way without being closed from under their owner.
+inline std::shared_ptr<std::istream> borrowed_stream(std::istream * handle) {
+  return std::shared_ptr<std::istream>(handle, [](std::istream *) {});
+}
 
 // Mark a function as being compiled for a specific x86_64 instruction set, so
 // that SIMD code can be built without those instructions being enabled for the

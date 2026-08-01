@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <fstream>
+#include <memory>
 #include <vector>
 #include <array>
 #include <string>
@@ -14,7 +15,7 @@ class Genotypes {
 public:
   Genotypes() {}
   ~Genotypes() { clear_probs(); }
-  void initialize(std::istream* _handle, 
+  void initialize(std::shared_ptr<std::istream> _handle,
            int lay,
            int compr,
            int _n_alleles, 
@@ -56,7 +57,7 @@ private:
   void swap_allele_dosage_complex(float * dose);
   int find_minor_allele(float * dose);
   void clear_probs();
-  std::istream* handle;
+  std::shared_ptr<std::istream> handle;
   int layout;
   int compression;
   int n_alleles;

@@ -2,6 +2,7 @@
 #define BGEN_READER_H_
 
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
@@ -18,7 +19,9 @@ public:
   void parse_all_variants();
   Variant next_var();
   void drop_variants(std::vector<int> indices);
-  std::istream * handle;
+  // the bgen stream, shared with every Variant opened from this reader, so the
+  // file is closed once this reader and all of its variants are gone
+  std::shared_ptr<std::istream> handle;
   std::vector<std::string> varids();
   std::vector<std::string> rsids();
   std::vector<std::string> chroms();

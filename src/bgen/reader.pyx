@@ -31,10 +31,19 @@ cdef extern from "<iostream>" namespace "std":
         istream() except +
         void setstate(iostate state) except +
 
+cdef extern from "<memory>" namespace "std":
+    cdef cppclass shared_ptr_istream "std::shared_ptr<std::istream>":
+        shared_ptr_istream() except +
+        shared_ptr_istream(const shared_ptr_istream &) except +
+        istream * get()
+
+cdef extern from 'utils.h' namespace 'bgen':
+    shared_ptr_istream borrowed_stream(istream * handle) except +
+
 cdef extern from 'variant.h' namespace 'bgen':
     cdef cppclass Variant:
         # declare class constructor and methods
-        Variant(istream * handle, uint64_t & offset, int layout, int compression, int expected_n, bool is_stdin) except +
+        Variant(shared_ptr_istream handle, uint64_t & offset, int layout, int compression, int expected_n, bool is_stdin) except +
         Variant() except +
         void minor_allele_dosage(float * dosage) except +
         void alt_dosage(float * dosage) except +
@@ -50,7 +59,7 @@ cdef extern from 'variant.h' namespace 'bgen':
         long offset
         uint64_t next_variant_offset
         vector[string] alleles
-        istream * handle
+        shared_ptr_istream handle
 
 cdef extern from 'samples.h' namespace 'bgen':
     cdef cppclass Samples:
@@ -88,7 +97,7 @@ cdef extern from 'reader.h' namespace 'bgen':
         vector[uint32_t] positions()
         
         # declare public attributes
-        istream * handle
+        shared_ptr_istream handle
         vector[Variant] variants
         Samples samples
         Header header
@@ -103,19 +112,32 @@ cdef extern from 'utils.h' namespace 'bgen':
 
 cdef class IStream:
     ''' basic cython implementation of std::istream, for easy pickling
+    
+    This holds a share of the bgen stream, so that the file stays open for as
+    long as any BgenVar still needs to read from it, even if the BgenReader it
+    came from has been closed.
     '''
-    cdef istream * ptr
+    cdef shared_ptr_istream ptr
     def __cinit__(self, uint64_t ptr):
-        self.ptr = <istream*>ptr
+        # a stream passed in as a raw address (i.e. from unpickling) belongs to
+        # some other reader, so hold it without taking ownership
+        self.ptr = borrowed_stream(<istream*>ptr)
     
     def __str__(self):
-        return f'std::istream at {<uint64_t>self.ptr}'
+        return f'std::istream at {<uint64_t>self.ptr.get()}'
     
     def __dealloc__(self):
         pass
     
     def __reduce__(self):
-        return (self.__class__, (<uint64_t>self.ptr, ))
+        return (self.__class__, (<uint64_t>self.ptr.get(), ))
+
+cdef IStream wrap_stream(shared_ptr_istream ptr):
+    ''' build an IStream which shares ownership of an already open stream
+    '''
+    cdef IStream stream = IStream.__new__(IStream, 0)
+    stream.ptr = ptr
+    return stream
 
 cdef class OpenStatus:
     ''' class to share status of whether a bgen file is currently open
@@ -279,7 +301,7 @@ cdef class BgenVar:
         whether the istream object exists or not.
         '''
         if not deref(self.is_open.ptr):
-            self.thisptr.handle.setstate(failbit)
+            self.thisptr.handle.get().setstate(failbit)
     @property
     def is_phased(self):
         return self.thisptr.phased()
@@ -412,7 +434,7 @@ cdef class BgenReader:
         samp = '' if sample_path == '' else f', (samples={self.sample_path.decode("utf")})'
         logging.debug(f'opening BgenFile from {self.path.decode("utf")}{samp}')
         self.thisptr = new CppBgenReader(self.path, self.sample_path, self.delay_parsing)
-        self.handle = IStream(<uint64_t>self.thisptr.handle)
+        self.handle = wrap_stream(self.thisptr.handle)
         self.is_open = OpenStatus()
         self.offset = self.thisptr.offset
     

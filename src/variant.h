@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -16,14 +17,14 @@ namespace bgen {
 class Variant {
   Genotypes geno = Genotypes();
 public:
-  Variant(std::istream * _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, bool is_stdin=false);
+  Variant(std::shared_ptr<std::istream> _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, bool is_stdin=false);
   Variant() {}
   int probs_per_sample();
   void alt_dosage(float * dosage);
   void minor_allele_dosage(float * dosage);
   void probs_1d(float * probs);
   bool phased();
-  std::istream * handle;
+  std::shared_ptr<std::istream> handle;
   std::uint8_t * ploidy();
   std::vector<std::uint8_t> copy_data();
   std::string minor_allele;

@@ -5,17 +5,18 @@ namespace bgen {
 
 CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool delay_parsing) {
   if (path != "/dev/stdin") {
-    handle = new std::ifstream(path, std::ios::in | std::ios::binary);
+    handle = std::make_shared<std::ifstream>(path, std::ios::in | std::ios::binary);
   } else {
     is_stdin = true;
-    handle = &std::cin;
+    // std::cin is not ours to close, so hold it without owning it
+    handle = borrowed_stream(&std::cin);
   }
   if (handle->fail()) {
     throw std::invalid_argument("error reading from '" + path + "'");
   }
-  header = Header(handle);
+  header = Header(handle.get());
   if (header.has_sample_ids) {
-    samples = Samples(handle, header.nsamples);
+    samples = Samples(handle.get(), header.nsamples);
   } else if (sample_path.size() > 0) {
     samples = Samples(sample_path, header.nsamples);
   } else {
