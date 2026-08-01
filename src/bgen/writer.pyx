@@ -209,7 +209,7 @@ cdef class BgenWriter:
             min_ploidy, max_ploidy = ploidy, ploidy
         elif isinstance(ploidy, np.ndarray) and np.issubdtype(ploidy.dtype, np.integer):
             if ploidy.ndim != 1 or ploidy.size != n_samples:
-                raise ValueError("ploidy array doesn't must match sample number")
+                raise ValueError(f'ploidy array must have {n_samples} entries, not {ploidy.size}')
 
             min_ploidy, max_ploidy = np.min(ploidy), np.max(ploidy)
             if min_ploidy != max_ploidy:
@@ -222,7 +222,7 @@ cdef class BgenWriter:
         
         return min_ploidy, max_ploidy, ploidy_arr
 
-    def _validate_layout1_data(self, vector[string] _alleles, uint32_t n_samples, uint32_t n_genos, bool phased):
+    def _validate_layout1_data(self, vector[string] _alleles, uint32_t n_genos, bool phased):
         ''' validate layout 1 data
         '''
         if self.layout == 1 and _alleles.size() != 2:
@@ -231,7 +231,6 @@ cdef class BgenWriter:
             raise ValueError('layout 1 requires 3 genotype probabilities per variant')
         elif self.layout == 1 and phased:
             raise ValueError('layout 1 cannot use phased data')
-
 
     def add_variant(self, varid, rsid, chrom, uint32_t pos, alleles, 
                     genotypes, ploidy=2, bool phased=False,
@@ -279,7 +278,7 @@ cdef class BgenWriter:
         cdef uint8_t[:] ploidy_arr
         min_ploidy, max_ploidy, ploidy_arr = self._validate_ploidy(ploidy, n_samples)
         
-        self._validate_layout1_data(_alleles, n_samples, n_genos, phased)
+        self._validate_layout1_data(_alleles, n_genos, phased)
         
         # encode the genotypes before writing anything, so that a variant with
         # invalid genotypes cannot leave a partial variant in the bgen file
