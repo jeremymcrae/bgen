@@ -81,7 +81,9 @@ class BgenReader(path, sample_path='', delay_parsing=False)
     indexing: BgenVars can be accessed by index e.g. bfile[1000]
     iteration: variants in a BgenReader can be looped over e.g. for x in bfile: print(x)
     fetch(chrom, start=None, stop=None): get all variants within a genomic region
-    drop_variants(list[int]): drops variants by index from being used in analyses
+    drop_variants(list[int]): deprecated - drops variants by index from being
+      used in analyses. This is inconsistent (iteration and indexed access can
+      ignore it), so filter variants in python instead.
     with_rsid(rsid): returns list of BgenVars with given rsid
     at_position(pos): returns list of BgenVars at a given position
     varids(): returns list of varids for variants in the bgen file.

@@ -549,9 +549,28 @@ cdef class BgenReader:
     
     def drop_variants(self, list indices):
         ''' drops variants from bgen by indices, for avoiding processing variants
+        
+        .. deprecated::
+            This does not drop variants consistently, and will be removed. Only
+            len() reflects the dropped variants - iterating the BgenReader still
+            yields every variant, calling rsids()/varids()/chroms()/positions()
+            re-parses the bgen and so undoes the drop, and indexed access only
+            respects the drop if no bgenix (.bgi) index file is present. Filter
+            the variants in python instead, e.g. by skipping the unwanted ones
+            while iterating, or by selecting indices with bfile[i].
         '''
         if not self.is_open == True:
             raise ValueError("bgen file is closed")
+        
+        # NOTE: no stacklevel here. A compiled cython method does not push a
+        # python frame, so the default stacklevel=1 already attributes the
+        # warning to the calling python code. Passing stacklevel=2 would skip
+        # past the caller, report the location as 'sys:1', and stop the default
+        # warning filters from displaying it at all.
+        warnings.warn('BgenReader.drop_variants is deprecated and will be '
+                      'removed - it does not drop variants consistently. '
+                      'Filter variants in python instead.',
+                      DeprecationWarning)
         
         if self.delay_parsing:
             self.thisptr.parse_all_variants()
