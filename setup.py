@@ -6,7 +6,6 @@ from pathlib import Path
 from setuptools import setup
 import subprocess
 import sys
-import platform
 
 from distutils.core import Extension
 from distutils.ccompiler import new_compiler
@@ -29,9 +28,6 @@ elif sys.platform == "darwin":
         ]
 elif sys.platform == "win32":
     EXTRA_COMPILE_ARGS += ['/std:c++14', '/O2']
-
-if platform.machine() == 'x86_64' and sys.platform == "linux":
-    EXTRA_COMPILE_ARGS += ['-mavx', '-mavx2']
 
 def flatten(*lists):
     return [str(x) for sublist in lists for x in sublist]

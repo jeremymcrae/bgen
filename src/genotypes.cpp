@@ -26,7 +26,7 @@
 #include "utils.h"
 
 namespace bgen {
-  
+
 // create lookup table of all probs for 8 bit integers. This has 511 entries, in
 // order to allow for looking up values for the minor allele dosage, which can
 // be up to 2.0 if a sample contains both copies are of the minor allele
@@ -326,69 +326,80 @@ void Genotypes::probabilities_layout1(char * uncompressed, std::uint32_t idx, fl
   }
 }
 
+#if defined(__x86_64__)
+// the AVX2 half of fast_haplotype_probs below. Compiled for AVX2 in isolation,
+// so it is only ever entered after a runtime check for AVX2 support.
+BGEN_TARGET_AVX2
+static void haplotype_probs_avx2(char * uncompressed, std::uint32_t & idx,
+                                 float * probs, std::uint32_t & nrows,
+                                 std::uint32_t & n) {
+  const std::uint32_t c = 255;
+  const float f = 1.0 / 255.0f;
+  __m256i k = _mm256_set_epi32(c, c, c, c, c, c, c, c);
+  __m256 j = _mm256_set_ps(f, f, f, f, f, f, f, f);
+
+  __m128i initial;
+  __m256i widened, partner;
+  __m256 store_lo, store_hi;
+
+  // run through most of the samples, but make sure we stay well away from the
+  // end of the float array, so the mm_loadu doesn't attempt to load beyond
+  // the end of the array
+  for ( ; n + 32 < nrows * 2; n+=32) {
+    // load 16 values into a m128 register
+    initial = _mm_loadu_si128((const __m128i*) &uncompressed[idx]);
+
+    // expand the first 8 values to 32-bits, and get the corresponding delta
+    widened = _mm256_cvtepu8_epi32(initial);
+    partner = _mm256_sub_epi32(k, widened);
+
+    // interleave the registers to get paired values beside each other, then
+    // convert to float and multiply by inverted constant to get probability
+    store_lo = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpacklo_epi32(widened, partner)), j);
+    store_hi = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpackhi_epi32(widened, partner)), j);
+
+    // _mm256_unpacklo_epi32 interleaves values from two registers, but it
+    // does it within the top part of each m128 portion of the register
+    // we start with
+    // widened = [a1, b1, c1, d1, e1, f1, g1, h1]
+    // partner = [a2, b2, c2, d2, e2, f2, g2, h2]  # (1 - widened)
+
+    // we want to store the sequential partners e.g.
+    // [a1, a2, b1, b2, c1, c2, d1, d1]
+
+    // but _mm256_unpacklo_epi32 gives registers with mixed order
+    // [a1, a2, b1, b2, e1, e2, f1, f2]
+    // [c1, c2, d1, d2, g1, g2, h1, h2]
+    // this means we need to store the first and last four values in separate
+    // steps to ensure the correct ordering
+    _mm_storeu_ps(&probs[n], _mm256_castps256_ps128(store_lo));
+    _mm_storeu_ps(&probs[n + 4], _mm256_castps256_ps128(store_hi));
+    _mm_storeu_ps(&probs[n + 8], _mm256_extractf128_ps(store_lo, 1));
+    _mm_storeu_ps(&probs[n + 12], _mm256_extractf128_ps(store_hi, 1));
+
+    // now repeat for the other 8 values of the original register
+    widened = _mm256_cvtepu8_epi32(_mm_bsrli_si128(initial, 8));
+    partner = _mm256_sub_epi32(k, widened);
+
+    store_lo = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpacklo_epi32(widened, partner)), j);
+    store_hi = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpackhi_epi32(widened, partner)), j);
+
+    _mm_storeu_ps(&probs[n + 16], _mm256_castps256_ps128(store_lo));
+    _mm_storeu_ps(&probs[n + 20], _mm256_castps256_ps128(store_hi));
+    _mm_storeu_ps(&probs[n + 24], _mm256_extractf128_ps(store_lo, 1));
+    _mm_storeu_ps(&probs[n + 28], _mm256_extractf128_ps(store_hi, 1));
+
+    idx += 16;
+  }
+}
+#endif
+
 /// fast path for phased data with ploidy=2, and 8 bits per probability
 void Genotypes::fast_haplotype_probs(char * uncompressed, std::uint32_t idx, float * probs,  std::uint32_t & nrows) {
   std::uint32_t n = 0;
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
-    const std::uint32_t c = 255;
-    const float f = 1.0 / 255.0f;
-    __m256i k = _mm256_set_epi32(c, c, c, c, c, c, c, c);
-    __m256 j = _mm256_set_ps(f, f, f, f, f, f, f, f);
-    
-    __m128i initial;
-    __m256i widened, partner;
-    __m256 store_lo, store_hi;
-    
-    // run through most of the samples, but make sure we stay well away from the
-    // end of the float array, so the mm_loadu doesn't attempt to load beyond
-    // the end of the array
-    for ( ; n + 32 < nrows * 2; n+=32) {
-      // load 16 values into a m128 register
-      initial = _mm_loadu_si128((const __m128i*) &uncompressed[idx]);
-      
-      // expand the first 8 values to 32-bits, and get the corresponding delta
-      widened = _mm256_cvtepu8_epi32(initial);
-      partner = _mm256_sub_epi32(k, widened);
-      
-      // interleave the registers to get paired values beside each other, then
-      // convert to float and multiply by inverted constant to get probability
-      store_lo = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpacklo_epi32(widened, partner)), j);
-      store_hi = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpackhi_epi32(widened, partner)), j);
-      
-      // _mm256_unpacklo_epi32 interleaves values from two registers, but it
-      // does it within the top part of each m128 portion of the register
-      // we start with
-      // widened = [a1, b1, c1, d1, e1, f1, g1, h1]
-      // partner = [a2, b2, c2, d2, e2, f2, g2, h2]  # (1 - widened)
-      
-      // we want to store the sequential partners e.g.
-      // [a1, a2, b1, b2, c1, c2, d1, d1]
-      
-      // but _mm256_unpacklo_epi32 gives registers with mixed order
-      // [a1, a2, b1, b2, e1, e2, f1, f2]
-      // [c1, c2, d1, d2, g1, g2, h1, h2]
-      // this means we need to store the first and last four values in separate
-      // steps to ensure the correct ordering
-      _mm_storeu_ps(&probs[n], _mm256_castps256_ps128(store_lo));
-      _mm_storeu_ps(&probs[n + 4], _mm256_castps256_ps128(store_hi));
-      _mm_storeu_ps(&probs[n + 8], _mm256_extractf128_ps(store_lo, 1));
-      _mm_storeu_ps(&probs[n + 12], _mm256_extractf128_ps(store_hi, 1));
-      
-      // now repeat for the other 8 values of the original register
-      widened = _mm256_cvtepu8_epi32(_mm_bsrli_si128(initial, 8));
-      partner = _mm256_sub_epi32(k, widened);
-      
-      store_lo = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpacklo_epi32(widened, partner)), j);
-      store_hi = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpackhi_epi32(widened, partner)), j);
-      
-      _mm_storeu_ps(&probs[n + 16], _mm256_castps256_ps128(store_lo));
-      _mm_storeu_ps(&probs[n + 20], _mm256_castps256_ps128(store_hi));
-      _mm_storeu_ps(&probs[n + 24], _mm256_extractf128_ps(store_lo, 1));
-      _mm_storeu_ps(&probs[n + 28], _mm256_extractf128_ps(store_hi, 1));
-      
-      idx += 16;
-    }
+    haplotype_probs_avx2(uncompressed, idx, probs, nrows, n);
   }
 #endif
   // finish off the unvectorized samples
@@ -562,6 +573,67 @@ int Genotypes::find_minor_allele(float * dose) {
   }
 }
 
+#if defined(__x86_64__)
+// the AVX2 half of ref_dosage_fast below. Compiled for AVX2 in isolation, so it
+// is only ever entered after a runtime check for AVX2 support.
+BGEN_TARGET_AVX2
+static void ref_dosage_avx2(char * uncompressed, std::uint32_t & idx,
+                            float * dose, std::uint32_t & nrows,
+                            std::uint32_t & n) {
+  __m256i mask_odd = _mm256_set_epi8(0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+    -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,  -1, 0, -1, 0, -1, 0, -1);
+  __m256i mask_even = _mm256_set_epi8(-1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+    -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0);
+  const float c = 1.0f / 255.0f;
+  __m256 k = _mm256_set_ps(c, c, c, c, c, c, c, c);
+
+  __m256i initial;
+  __m256i first;
+  __m256i second;
+  __m128i lo16;
+  __m256i lo;
+  __m256 lo_float;
+  __m128i hi16;
+  __m256i hi;
+  __m256 hi_float;
+  for (; n + 32 < nrows; n+=16) {
+    initial = _mm256_loadu_si256((__m256i *) &uncompressed[idx]);
+
+    // get heterozygous int dosage by masking out the even bytes, and right
+    // shifting by one byte, to align homozygous and heterozygous counts. The
+    // shift operation is from https://stackoverflow.com/a/25264853.
+    second = _mm256_and_si256(initial, mask_even);
+    second = _mm256_alignr_epi8(_mm256_permute2x128_si256(second, second, _MM_SHUFFLE(2, 0, 0, 1)), second, 1);
+
+    // get homozygous int dosage by masking odd bytes, and left shift one bit to
+    // multiply homozygous counts by 2 (since ploidy=2)
+    first = _mm256_and_si256(initial, mask_odd);
+    first = _mm256_slli_epi32(first, 1);
+
+    // Now we have two 256 bit vectors with dosage counts adjusted for ploidy.
+    // One for homozygous counts and one for heterozygous counts. Counts started
+    // as 8-bit uints, interleaved with empty bytes (hom count spreads into
+    // adjacent byte, as 9-bit uint). We can treat them as 16-bit ints for addition
+    initial = _mm256_add_epi16(first, second);
+
+    // convert the first half to floats, via 32 bit ints
+    lo16 = _mm256_castsi256_si128(initial);
+    lo = _mm256_cvtepi16_epi32(lo16);
+    lo_float = _mm256_cvtepi32_ps(lo);
+
+    // convert the second half to floats, via 32 bit ints
+    hi16 = _mm256_extractf128_si256(initial, 1);
+    hi = _mm256_cvtepi16_epi32(hi16);
+    hi_float = _mm256_cvtepi32_ps(hi);
+
+    _mm256_storeu_ps(&dose[n], _mm256_mul_ps(lo_float, k));
+    _mm256_storeu_ps(&dose[n + 8], _mm256_mul_ps(hi_float, k));
+
+    idx += 32;
+  }
+}
+#endif
+
 /// calculate dosage of the reference (first) allele for all samples.
 ///
 /// Writes dosage float values to the dose member.
@@ -580,57 +652,7 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
   std::uint32_t n=0;
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
-    __m256i mask_odd = _mm256_set_epi8(0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
-      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,  -1, 0, -1, 0, -1, 0, -1);
-    __m256i mask_even = _mm256_set_epi8(-1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
-      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0);
-    const float c = 1.0f / 255.0f;
-    __m256 k = _mm256_set_ps(c, c, c, c, c, c, c, c);
-    
-    __m256i initial;
-    __m256i first;
-    __m256i second;
-    __m128i lo16;
-    __m256i lo;
-    __m256 lo_float;
-    __m128i hi16;
-    __m256i hi;
-    __m256 hi_float;
-    for (; n + 32 < nrows; n+=16) {
-      initial = _mm256_loadu_si256((__m256i *) &uncompressed[idx]);
-      
-      // get heterozygous int dosage by masking out the even bytes, and right
-      // shifting by one byte, to align homozygous and heterozygous counts. The
-      // shift operation is from https://stackoverflow.com/a/25264853.
-      second = _mm256_and_si256(initial, mask_even);
-      second = _mm256_alignr_epi8(_mm256_permute2x128_si256(second, second, _MM_SHUFFLE(2, 0, 0, 1)), second, 1);
-      
-      // get homozygous int dosage by masking odd bytes, and left shift one bit to
-      // multiply homozygous counts by 2 (since ploidy=2)
-      first = _mm256_and_si256(initial, mask_odd);
-      first = _mm256_slli_epi32(first, 1);
-      
-      // Now we have two 256 bit vectors with dosage counts adjusted for ploidy.
-      // One for homozygous counts and one for heterozygous counts. Counts started
-      // as 8-bit uints, interleaved with empty bytes (hom count spreads into
-      // adjacent byte, as 9-bit uint). We can treat them as 16-bit ints for addition
-      initial = _mm256_add_epi16(first, second);
-      
-      // convert the first half to floats, via 32 bit ints
-      lo16 = _mm256_castsi256_si128(initial);
-      lo = _mm256_cvtepi16_epi32(lo16);
-      lo_float = _mm256_cvtepi32_ps(lo);
-      
-      // convert the second half to floats, via 32 bit ints
-      hi16 = _mm256_extractf128_si256(initial, 1);
-      hi = _mm256_cvtepi16_epi32(hi16);
-      hi_float = _mm256_cvtepi32_ps(hi);
-      
-      _mm256_storeu_ps(&dose[n], _mm256_mul_ps(lo_float, k));
-      _mm256_storeu_ps(&dose[n + 8], _mm256_mul_ps(hi_float, k));
-      
-      idx += 32;
-    }
+    ref_dosage_avx2(uncompressed, idx, dose, nrows, n);
   }
 #elif defined(__aarch64__)
   // using this optimised method roughly doubles the speed of computing the ref
@@ -784,6 +806,22 @@ void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, f
   }
 }
 
+#if defined(__x86_64__)
+// the AVX half of swap_allele_dosage_simple below. This only needs AVX, not
+// AVX2, and is compiled in isolation so it is only ever entered after a runtime
+// check for AVX support.
+BGEN_TARGET_AVX
+static void swap_dosage_avx(float * dose, std::uint32_t & n_samples,
+                            std::uint32_t & n) {
+  __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
+  __m256 batch;
+  for (; n + 8 < n_samples; n+=8) {
+    batch = _mm256_loadu_ps(dose + n);
+    _mm256_storeu_ps(dose + n, _mm256_sub_ps(k, batch));
+  }
+}
+#endif
+
 /// swap sample dosages to the opposing allele. Requires a biallelic variant.
 ///
 /// This replaces the values in the dose array with 2.0 - value.
@@ -793,11 +831,8 @@ void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, f
 void Genotypes::swap_allele_dosage_simple(float * dose) {
   std::uint32_t n=0;
 #if defined(__x86_64__)
-  __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
-  __m256 batch;
-  for (; n + 8 < n_samples; n+=8) {
-    batch = _mm256_loadu_ps(dose + n);
-    _mm256_storeu_ps(dose + n, _mm256_sub_ps(k, batch));
+  if (__builtin_cpu_supports("avx")) {
+    swap_dosage_avx(dose, n_samples, n);
   }
 #elif defined(__aarch64__)
   float32x4_t k = vdupq_n_f32(2.0f);

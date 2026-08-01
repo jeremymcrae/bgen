@@ -11,6 +11,110 @@
 
 namespace bgen {
 
+#if defined(__x86_64__)
+
+// sum ploidy states with AVX2. Compiled for AVX2 in isolation, so that this is
+// only ever entered after a runtime check for AVX2 support.
+BGEN_TARGET_AVX2
+static std::uint64_t ploidy_sum_avx2(std::uint8_t * x, std::uint32_t & size, std::uint32_t & i) {
+  std::uint64_t total = 0;
+  std::uint32_t arr[8];
+  __m128i initial;
+  __m256i _vals1, _vals2;
+  __m256i _sum1 = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0);
+  __m256i _sum2 = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0);
+  for (; i + 16 < size; i += 16) {
+    // load data and convert to 32-bit uints
+    initial = _mm_loadu_si128((const __m128i*) &x[i]);
+    _vals1 = _mm256_cvtepu8_epi32(initial);
+    _vals2 = _mm256_cvtepu8_epi32(_mm_bsrli_si128(initial, 8));
+
+    _sum1 = _mm256_add_epi32(_sum1, _vals1);
+    _sum2 = _mm256_add_epi32(_sum2, _vals2);
+  }
+  _mm256_storeu_si256((__m256i*) &arr[0], _sum1);
+  total += arr[0] + arr[1] + arr[2] + arr[3] + arr[4] + arr[5] + arr[6] + arr[7];
+  _mm256_storeu_si256((__m256i*) &arr[0], _sum2);
+  total += arr[0] + arr[1] + arr[2] + arr[3] + arr[4] + arr[5] + arr[6] + arr[7];
+  return total;
+}
+
+// this code is solely here to avoid a bug on macosx x86_64 when AVX2 is not
+// available. If not present, the final stage to clean up the remainder
+// segfaults. It's a mystery why.
+BGEN_TARGET_SSE4
+static std::uint64_t ploidy_sum_sse4(std::uint8_t * x, std::uint32_t & size, std::uint32_t & i) {
+  std::uint64_t total = 0;
+  std::uint32_t arr[4];
+  __m128i initial;
+  __m128i _vals;
+  __m128i _sum = _mm_set_epi32(0, 0, 0, 0);
+  for (; i + 12 < size; i += 4) {
+    // load data and convert to 32-bit uints
+    initial = _mm_loadu_si128((const __m128i*) &x[i]);
+    _vals = _mm_cvtepu8_epi32(initial);
+    _sum = _mm_add_epi32(_sum, _vals);
+  }
+  _mm_storeu_si128((__m128i*) &arr[0], _sum);
+  total += arr[0] + arr[1] + arr[2] + arr[3];
+  return total;
+}
+
+// get min and max of ploidy values with AVX2
+BGEN_TARGET_AVX2
+static void range_avx2(std::uint8_t * x, std::uint32_t & size, size_t & i,
+                       std::uint8_t & min_val, std::uint8_t & max_val) {
+  std::array<std::uint8_t, 32> arr;
+  __m256i values;
+  __m256i _mins = _mm256_set_epi8(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+  __m256i _maxs = _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                  0, 0, 0, 0);
+  for (; i + 32 < size; i += 32) {
+    values = _mm256_loadu_si256((const __m256i*) &x[i]);
+    _mins = _mm256_min_epu8(_mins, values);
+    _maxs = _mm256_max_epu8(_maxs, values);
+  }
+  _mm256_storeu_si256((__m256i*) &arr[0], _mins);
+  for (auto v : arr) {
+    min_val = std::min(min_val, v);
+  }
+  _mm256_storeu_si256((__m256i*) &arr[0], _maxs);
+  for (auto v : arr) {
+    max_val = std::max(max_val, v);
+  }
+}
+
+// this code is solely here to avoid a bug on macosx x86_64 when AVX2 is not
+// available. If not present, the final stage to clean up the remainder
+// segfaults. It's a mystery why.
+BGEN_TARGET_SSE4
+static void range_sse4(std::uint8_t * x, std::uint32_t & size, size_t & i,
+                       std::uint8_t & min_val, std::uint8_t & max_val) {
+  std::array<std::uint8_t, 16> arr;
+  __m128i values;
+  __m128i _mins = _mm_set_epi8(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+                               -1, -1, -1, -1, -1);
+  __m128i _maxs = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  for (; i + 16 < size; i += 16) {
+    values = _mm_loadu_si128((const __m128i*) &x[i]);
+    _mins = _mm_min_epu8(_mins, values);
+    _maxs = _mm_max_epu8(_maxs, values);
+  }
+  _mm_storeu_si128((__m128i*) &arr[0], _mins);
+  for (auto v : arr) {
+    min_val = std::min(min_val, v);
+  }
+  _mm_storeu_si128((__m128i*) &arr[0], _maxs);
+  for (auto v : arr) {
+    max_val = std::max(max_val, v);
+  }
+}
+
+#endif
+
 // Returns value of Binomial Coefficient C(n, k)
 std::uint32_t n_choose_k(int n, int k) {
   std::uint32_t res = 1;
@@ -75,40 +179,9 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
 
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
-    std::uint32_t arr[8];
-    __m128i initial;
-    __m256i _vals1, _vals2;
-    __m256i _sum1 = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0);
-    __m256i _sum2 = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0);
-    for (; i + 16 < size; i += 16) {
-      // load data and convert to 32-bit uints
-      initial = _mm_loadu_si128((const __m128i*) &x[i]);
-      _vals1 = _mm256_cvtepu8_epi32(initial);
-      _vals2 = _mm256_cvtepu8_epi32(_mm_bsrli_si128(initial, 8));
-
-      _sum1 = _mm256_add_epi32(_sum1, _vals1);
-      _sum2 = _mm256_add_epi32(_sum2, _vals2);
-    }
-    _mm256_storeu_si256((__m256i*) &arr[0], _sum1);
-    total += arr[0] + arr[1] + arr[2] + arr[3] + arr[4] + arr[5] + arr[6] + arr[7];
-    _mm256_storeu_si256((__m256i*) &arr[0], _sum2);
-    total += arr[0] + arr[1] + arr[2] + arr[3] + arr[4] + arr[5] + arr[6] + arr[7];
-  } else if (__builtin_cpu_supports("sse3")) {
-    // this code is solely here to avoid a bug on macosx x86_64 when AVX2 is not 
-    // available. If not present, the final stage to clean up the remainder 
-    // segfaults. It's a mystery why.
-    std::uint32_t arr[4];
-    __m128i initial;
-    __m128i _vals;
-    __m128i _sum = _mm_set_epi32(0, 0, 0, 0);
-    for (; i + 12 < size; i += 4) {
-      // load data and convert to 32-bit uints
-      initial = _mm_loadu_si128((const __m128i*) &x[i]);
-      _vals = _mm_cvtepu8_epi32(initial);
-      _sum = _mm_add_epi32(_sum, _vals);
-    }
-    _mm_storeu_si128((__m128i*) &arr[0], _sum);
-    total += arr[0] + arr[1] + arr[2] + arr[3];
+    total += ploidy_sum_avx2(x, size, i);
+  } else if (__builtin_cpu_supports("sse4.1")) {
+    total += ploidy_sum_sse4(x, size, i);
   }
 #endif
 
@@ -127,49 +200,9 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
 
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
-    std::array<std::uint8_t, 32> arr;
-    __m256i values;
-    __m256i _mins = _mm256_set_epi8(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                                    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                                    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
-    __m256i _maxs = _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                    0, 0, 0, 0);
-    for (; i + 32 < size; i += 32) {
-      values = _mm256_loadu_si256((const __m256i*) &x[i]);
-      _mins = _mm256_min_epu8(_mins, values);
-      _maxs = _mm256_max_epu8(_maxs, values);
-    }
-    _mm256_storeu_si256((__m256i*) &arr[0], _mins);
-    for (auto v : arr) {
-      min_val = std::min(min_val, v);
-    }
-    _mm256_storeu_si256((__m256i*) &arr[0], _maxs);
-    for (auto v : arr) {
-      max_val = std::max(max_val, v);
-    }
-  } else if (__builtin_cpu_supports("sse3")) {
-    // this code is solely here to avoid a bug on macosx x86_64 when AVX2 is not 
-    // available. If not present, the final stage to clean up the remainder 
-    // segfaults. It's a mystery why.
-    std::array<std::uint8_t, 16> arr;
-    __m128i values;
-    __m128i _mins = _mm_set_epi8(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                                 -1, -1, -1, -1, -1);
-    __m128i _maxs = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-    for (; i + 16 < size; i += 16) {
-      values = _mm_loadu_si128((const __m128i*) &x[i]);
-      _mins = _mm_min_epu8(_mins, values);
-      _maxs = _mm_max_epu8(_maxs, values);
-    }
-    _mm_storeu_si128((__m128i*) &arr[0], _mins);
-    for (auto v : arr) {
-      min_val = std::min(min_val, v);
-    }
-    _mm_storeu_si128((__m128i*) &arr[0], _maxs);
-    for (auto v : arr) {
-      max_val = std::max(max_val, v);
-    }
+    range_avx2(x, size, i, min_val, max_val);
+  } else if (__builtin_cpu_supports("sse4.1")) {
+    range_sse4(x, size, i, min_val, max_val);
   }
 #endif
 
