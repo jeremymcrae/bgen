@@ -1,7 +1,5 @@
 
-#include <algorithm>
 #include <cstdint>
-#include <iterator>
 #include <stdexcept>
 
 #include "samples.h"
@@ -12,22 +10,26 @@ namespace bgen {
 Samples::Samples(std::istream * handle, int n_samples) {
   /* initialize sample list if present in the bgen file
   */
+  // the sample block length is read only to step over it, the IDs follow it
   std::uint32_t sample_header_length;
-  handle->read(reinterpret_cast<char*>(&sample_header_length), sizeof(std::uint32_t));
+  if (!read_value(*handle, sample_header_length)) {
+    throw std::invalid_argument("bgen file is truncated inside the sample block");
+  }
   
   std::uint32_t sample_n_check;
-  handle->read(reinterpret_cast<char*>(&sample_n_check), sizeof(std::uint32_t));
+  if (!read_value(*handle, sample_n_check)) {
+    throw std::invalid_argument("bgen file is truncated inside the sample block");
+  }
   if (n_samples != (int) sample_n_check) {
     throw std::invalid_argument("inconsistent number of samples");
   }
   
   samples.resize(n_samples);
-  std::uint16_t id_len;
   for (int i=0; i<n_samples; i++) {
-    handle->read(reinterpret_cast<char*>(&id_len), sizeof(id_len));
-    std::string sample_id;
-    std::copy_n(std::istream_iterator<char>(*handle), id_len, std::back_inserter(sample_id));
-    samples[i] = sample_id;
+    // read the IDs as raw bytes, so that IDs containing spaces survive intact
+    if (!read_prefixed_string<std::uint16_t>(*handle, samples[i])) {
+      throw std::invalid_argument("bgen file is truncated inside the sample block");
+    }
   }
 }
 

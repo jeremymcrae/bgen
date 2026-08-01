@@ -7,27 +7,21 @@
 
 namespace bgen {
 
-/// read a fixed width value from the bgen, and check the read succeeded
+/// read a fixed width value from the bgen, throwing if the read failed
 ///
-/// A read which runs past the end of the file leaves the target value
-/// indeterminate, so the reads have to be checked before the values get used,
-/// otherwise we end up branching on (or sizing allocations from) uninitialised
-/// memory. Throws out_of_range, so that running off the end of the file during
-/// iteration surfaces in python as StopIteration.
+/// Throws out_of_range, which surfaces in python as IndexError, so that reaching
+/// the end of the file ends iteration.
 template <typename T>
 static void read_checked(std::istream & handle, T & value) {
-  if (!handle.read(reinterpret_cast<char *>(&value), sizeof(T))) {
+  if (!read_value(handle, value)) {
     throw std::out_of_range("reached end of file");
   }
 }
 
 /// read a string which is prefixed by its length, and check the reads succeeded
 template <typename LenType>
-static void read_prefixed_string(std::istream & handle, std::string & value) {
-  LenType len;
-  read_checked(handle, len);
-  value.resize(len);
-  if (len > 0 && !handle.read(&value[0], len)) {
+static void read_checked_string(std::istream & handle, std::string & value) {
+  if (!read_prefixed_string<LenType>(handle, value)) {
     throw std::out_of_range("reached end of file");
   }
 }
@@ -66,9 +60,9 @@ Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t & varoffse
     throw std::invalid_argument("number of samples doesn't match");
   }
   
-  read_prefixed_string<std::uint16_t>(*handle, varid);
-  read_prefixed_string<std::uint16_t>(*handle, rsid);
-  read_prefixed_string<std::uint16_t>(*handle, chrom);
+  read_checked_string<std::uint16_t>(*handle, varid);
+  read_checked_string<std::uint16_t>(*handle, rsid);
+  read_checked_string<std::uint16_t>(*handle, chrom);
   
   read_checked(*handle, pos);
   if (layout == 1) {
@@ -80,7 +74,7 @@ Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t & varoffse
   alleles.reserve(n_alleles);
   for (int x=0; x < n_alleles; x++) {
     std::string allele;
-    read_prefixed_string<std::uint32_t>(*handle, allele);
+    read_checked_string<std::uint32_t>(*handle, allele);
     alleles.push_back(allele);
   }
   

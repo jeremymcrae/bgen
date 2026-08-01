@@ -44,6 +44,36 @@ inline std::shared_ptr<std::istream> borrowed_stream(std::istream * handle) {
   #define BGEN_TARGET_SSE4
 #endif
 
+/// read a fixed width value from a stream, and report whether the read worked
+///
+/// A failed read leaves the value indeterminate, so reads must be checked before
+/// the value gets used, otherwise we branch on (or size allocations from)
+/// uninitialised memory. Reading into the value directly also avoids an
+/// unaligned reinterpret_cast.
+///
+/// Callers throw, since they need different exceptions: a variant throws
+/// out_of_range (IndexError, which ends iteration), whereas a truncated header
+/// or sample block means the file is unusable, so raises ValueError.
+template <typename T>
+inline bool read_value(std::istream & handle, T & value) {
+  return (bool) handle.read(reinterpret_cast<char *>(&value), sizeof(T));
+}
+
+/// read a string prefixed by its length, and report whether the reads worked
+///
+/// Reads exactly len bytes. A std::istream_iterator cannot be used here, as it
+/// does formatted input and so skips whitespace, corrupting any ID containing a
+/// space and misaligning the stream for everything after it.
+template <typename LenType>
+inline bool read_prefixed_string(std::istream & handle, std::string & value) {
+  LenType len;
+  if (!read_value(handle, len)) {
+    return false;
+  }
+  value.resize(len);
+  return (len == 0) || (bool) handle.read(&value[0], len);
+}
+
 struct Range {
     std::uint8_t _min;
     std::uint8_t _max;
