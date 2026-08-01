@@ -131,6 +131,37 @@ class TestExampleBgens(unittest.TestCase):
         with self.assertRaises(ValueError):
             BgenReader(bgen_path, extra_path)
     
+    def test_load_sample_file_delimiters(self):
+        ''' sample files can be tab delimited, or have windows line endings
+        
+        Only a space used to end the first column, so a tab delimited file kept
+        the remaining columns in the ID, and a windows file kept a carriage
+        return on the end of it.
+        '''
+        bgen_path = self.folder / 'temp.bgen'
+        expected = ['sample_0', 'sample_1', 'sample_2', 'sample_3']
+        
+        # build a bgen without internal sample IDs, so the sample file is used
+        orig = BgenReader(self.folder / 'complex.bgen')
+        with BgenWriter(bgen_path, n_samples=len(orig.samples)) as bfile:
+            for var in orig:
+                bfile.add_variant_direct(var)
+        orig.close()
+        
+        rows = ['id', '0'] + expected
+        for label, text in [
+                ('space delimited', ''.join(f'{x} 0\n' for x in rows)),
+                ('tab delimited', ''.join(f'{x}\t0\n' for x in rows)),
+                ('windows line endings', ''.join(f'{x}\r\n' for x in rows)),
+                ('no trailing newline', '\n'.join(rows)),
+                ]:
+            sample_path = self.folder / 'delim.sample'
+            with open(sample_path, 'w', newline='') as handle:
+                handle.write(text)
+            with BgenReader(bgen_path, sample_path) as bfile:
+                self.assertEqual(bfile.samples, expected, label)
+            sample_path.unlink()
+    
     def test_load_missing_file(self):
         ''' check passing in a path to a missing file fails gracefully
         '''

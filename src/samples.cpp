@@ -48,12 +48,24 @@ Samples::Samples(std::string path, std::uint32_t n_samples) {
   std::getline(handle, types, '\n');
   
   // find the file length post header, then read it all in to memory
-  auto pos = handle.tellg();
-  handle.seekg(0, std::ios::end);
-  auto fsize = (std::uint64_t) handle.tellg() - pos;
-  std::string lines(fsize, '\0');
-  handle.seekg(pos);
-  handle.read(&lines[0], fsize);
+  std::string lines;
+  if (handle) {
+    // Only measure and read when the header lines were both there. On a file with
+    // fewer than two lines the stream has already failed, and tellg() then
+    // returns -1, so the size below would be meaningless. Leaving lines empty
+    // lets the sample count check report the problem.
+    auto pos = handle.tellg();
+    handle.seekg(0, std::ios::end);
+    auto end_pos = handle.tellg();
+    if ((pos >= 0) && (end_pos > pos)) {
+      std::uint64_t fsize = (std::uint64_t) (end_pos - pos);
+      lines.resize(fsize);
+      handle.seekg(pos);
+      if (!handle.read(&lines[0], fsize)) {
+        throw std::invalid_argument("error reading sample file: '" + path + "'");
+      }
+    }
+  }
   
   samples.resize(n_samples);
   std::istringstream iss(lines);
@@ -73,7 +85,9 @@ Samples::Samples(std::string path, std::uint32_t n_samples) {
     if (idx >= n_samples) {
       throw std::invalid_argument("inconsistent number of samples");
     }
-    samples[idx] = line.substr(0, line.find(' '));
+    // the .sample format is whitespace delimited, so take the first column, and
+    // drop any carriage return left on the end of a line by a windows file
+    samples[idx] = line.substr(0, line.find_first_of(" \t\r"));
     idx += 1;
   }
   
