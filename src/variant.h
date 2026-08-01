@@ -29,15 +29,15 @@ public:
   std::vector<std::uint8_t> copy_data();
   std::string minor_allele;
   
-  std::uint64_t offset;
-  std::uint32_t n_samples;
+  std::uint64_t offset = 0;
+  std::uint32_t n_samples = 0;
   std::string varid;
   std::string rsid;
   std::string chrom;
-  std::uint32_t pos;
-  std::uint16_t n_alleles;
+  std::uint32_t pos = 0;
+  std::uint16_t n_alleles = 0;
   std::vector<std::string> alleles;
-  std::uint64_t next_variant_offset;
+  std::uint64_t next_variant_offset = 0;
 };
 
 } // namespace bgen

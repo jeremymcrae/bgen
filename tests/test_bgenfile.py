@@ -1,5 +1,6 @@
 
 from pathlib import Path
+import tempfile
 import unittest
 import warnings
 
@@ -176,6 +177,29 @@ class TestBgenReader(unittest.TestCase):
         
         # check that we don't get any variants in a region without any
         self.assertEqual(list(bfile.fetch(chrom, start * 1000, stop * 1000)), [])
+    
+    def test_truncated_bgen_reparse(self):
+        ''' a failed parse must not leave half-parsed variants behind
+        
+        parse_all_variants() used to resize the variants up front, so a failure
+        partway left a full sized vector of empty variants. Its 'already parsed'
+        check then passed, and later calls silently returned empty rsids and
+        uninitialised positions instead of raising.
+        '''
+        data = (self.folder / 'example.16bits.bgen').read_bytes()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / 'truncated.bgen'
+            # keep the header, but cut nearly all of the variant data
+            path.write_bytes(data[:len(data) // 50])
+            
+            bfile = BgenReader(path, delay_parsing=True)
+            # every attempt has to raise, not just the first
+            for _ in range(3):
+                with self.assertRaises(IndexError):
+                    bfile.rsids()
+            with self.assertRaises(IndexError):
+                bfile.positions()
+            bfile.close()
     
     def test_drop_variants_out_of_range(self):
         ''' dropping variants by an out of range index raises an error

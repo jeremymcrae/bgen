@@ -26,10 +26,19 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
     samples = Samples(header.nsamples);
   }
   
-  offset = header.offset + 4;
+  offset = first_variant_offset();
   if (!delay_parsing) {
     parse_all_variants();
   }
+}
+
+/// byte position of the first variant in the bgen
+///
+/// The cast matters, as header.offset is 32-bit, so the addition would wrap
+/// before being widened, and a corrupt offset would then point back inside the
+/// header rather than past the end of the file.
+std::uint64_t CppBgenReader::first_variant_offset() {
+  return (std::uint64_t) header.offset + 4;
 }
 
 Variant CppBgenReader::next_var() {
@@ -46,15 +55,24 @@ void CppBgenReader::parse_all_variants() {
   if (variants.size() == header.nvariants) {
     return;
   }
-  offset = header.offset + 4;
+  offset = first_variant_offset();
   variants.clear();
-  variants.resize(header.nvariants);
-  for (std::uint32_t idx=0; idx < header.nvariants; idx++) {
-    variants[idx] = next_var();
+  variants.reserve(header.nvariants);
+  try {
+    for (std::uint32_t idx=0; idx < header.nvariants; idx++) {
+      variants.push_back(next_var());
+    }
+  } catch (...) {
+    // Drop the partial list, so a later call retries and raises again, rather
+    // than finding a full sized vector and assuming the parse had finished. The
+    // variants are pushed on as they parse for the same reason - resizing up
+    // front would leave empty variants behind on failure.
+    variants.clear();
+    throw;
   }
   // finally reset the offset position to the first variant, so we can iterate
   // over variants more easily in python
-  offset = header.offset + 4;
+  offset = first_variant_offset();
 }
 
 /// drop a subset of variants passed in by indexes
