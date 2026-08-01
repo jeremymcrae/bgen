@@ -16,6 +16,7 @@ class CppBgenWriter {
   std::uint32_t n_variants=0;
   std::uint32_t nvars_offset=8;
   std::uint32_t variant_data_offset=0;
+  bool closed=false;
   // genotype block (length prefixes included) held between encoding and writing
   std::vector<char> pending;
 public:
@@ -29,6 +30,7 @@ public:
                                                   layout(_layout)
   {
     handle.open(path, std::ios::out | std::ios::binary);
+    handle.exceptions(std::ios::badbit | std::ios::failbit);
     write_header(free_data, samples);
     add_samples(samples);
   }
@@ -59,6 +61,7 @@ public:
                             bool phased = 0,
                             std::uint8_t bit_depth = 8);
   std::uint64_t write_genotype_data();
+  void close();
 };
 
 } // namespace bgen

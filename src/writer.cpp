@@ -37,12 +37,26 @@ static void write_nvariants(std::ofstream &handle, std::uint32_t &offset, std::u
   write_at_offset(handle, n_variants, offset);
 }
 
-// when the object is removed, finally write the number of variants, and where 
-// the variant data starts
-CppBgenWriter::~CppBgenWriter() {
+// finish the file off by writing the number of variants, and where the variant
+// data starts
+//
+// This can throw (e.g. if the disk is full), so call it explicitly to have
+// write errors reported, rather than relying on the destructor.
+void CppBgenWriter::close() {
+  if (closed) { return; }
+  closed = true;
   write_variants_offset(handle, variant_data_offset);
   write_nvariants(handle, nvars_offset, n_variants);
   handle.close();
+}
+
+// a destructor must not throw, so any error while finishing the file can only
+// be swallowed here. Call close() directly to have those errors reported.
+CppBgenWriter::~CppBgenWriter() {
+  try {
+    close();
+  } catch (...) {
+  }
 }
 
 void CppBgenWriter::write_header(std::string &free_data,

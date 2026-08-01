@@ -48,6 +48,7 @@ cdef extern from 'writer.h' namespace 'bgen':
                          uint8_t min_ploidy, uint8_t max_ploidy,
                          bool phased, uint8_t bit_depth) except +
         uint64_t write_genotype_data() except +
+        void close() except +
 
 class Indexer:
     ''' class to automatically index bgen files as they are being constructed
@@ -158,7 +159,13 @@ cdef class BgenWriter:
         self.indexer = Indexer(path)
     
     def __dealloc__(self):
-        self.close()
+        # a deallocated writer has nobody left to report errors to, so drop them
+        # rather than emitting 'Exception ignored in __dealloc__' noise. Call
+        # close() directly (or use a with block) to have errors raised.
+        try:
+            self.close()
+        except Exception:
+            pass
     
     def __repr__(self):
         return f'BgenFile("{self.path.decode("utf8")}")'
@@ -321,11 +328,19 @@ cdef class BgenWriter:
         return False
     
     def close(self):
-        if self.is_open:
-            del self.thisptr
-        if self.indexer is not None:
-            self.indexer.close()
-        self.is_open = False
-        self.indexer = None
-        if _IS_WIN32 and time is not None:
-            time.sleep(0.01)
+        try:
+            if self.is_open:
+                self.is_open = False
+                try:
+                    # close explicitly, so that errors while finishing the file
+                    # off (e.g. a full disk) are raised rather than being
+                    # swallowed by the C++ destructor
+                    self.thisptr.close()
+                finally:
+                    del self.thisptr
+        finally:
+            if self.indexer is not None:
+                self.indexer.close()
+            self.indexer = None
+            if _IS_WIN32 and time is not None:
+                time.sleep(0.01)
