@@ -432,7 +432,7 @@ static std::vector<std::uint8_t> encode_layout2(
     max_probs *= max_ploidy;
   }
   if ((geno_len / max_probs) != n_samples) {
-    throw std::invalid_argument("genotypes and ploidy lengths don't match");
+    throw std::invalid_argument("(genotypes / per_person_probs) does not match n_samples");
   }
 
   std::uint32_t probs_len = (n_samples * bit_depth) * (max_probs - 1);
