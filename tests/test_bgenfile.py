@@ -1,5 +1,6 @@
 
 from pathlib import Path
+import struct
 import tempfile
 import unittest
 import warnings
@@ -178,6 +179,58 @@ class TestBgenReader(unittest.TestCase):
         # check that we don't get any variants in a region without any
         self.assertEqual(list(bfile.fetch(chrom, start * 1000, stop * 1000)), [])
     
+    def test_corrupt_sample_count(self):
+        ''' an impossible sample count is rejected rather than sizing an allocation
+        
+        nsamples comes straight from the header, so a corrupt count used to be
+        handed to resize(), which asked for over a hundred GB from a tiny file.
+        '''
+        data = bytearray((self.folder / 'example.16bits.bgen').read_bytes())
+        # nsamples is the 4 byte field at offset 12
+        struct.pack_into('<I', data, 12, 0xFFFFFFFF)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / 'corrupt.bgen'
+            path.write_bytes(bytes(data))
+            with self.assertRaises(ValueError):
+                BgenReader(path, delay_parsing=True)
+    
+    def test_corrupt_variant_count(self):
+        ''' an impossible variant count does not exhaust memory
+        
+        nvariants only bounds how much is reserved up front, so this has to fail
+        by running out of file, not by trying to allocate for every variant.
+        '''
+        data = bytearray((self.folder / 'example.16bits.bgen').read_bytes())
+        # nvariants is the 4 byte field at offset 8
+        struct.pack_into('<I', data, 8, 0xFFFFFFFF)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / 'corrupt.bgen'
+            path.write_bytes(bytes(data))
+            bfile = BgenReader(path, delay_parsing=True)
+            with self.assertRaises(ValueError):
+                bfile.rsids()
+            bfile.close()
+    
+    def test_truncated_bgen_iteration(self):
+        ''' iterating a truncated bgen raises rather than stopping early
+        
+        Iteration used to stop at whatever the file held, so a truncated bgen was
+        indistinguishable from a complete, shorter one.
+        '''
+        data = (self.folder / 'example.16bits.bgen').read_bytes()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / 'truncated.bgen'
+            path.write_bytes(data[:len(data) * 90 // 100])
+            
+            with BgenReader(path, delay_parsing=True) as bfile:
+                with self.assertRaises(ValueError):
+                    for var in bfile:
+                        pass
+        
+        # but a complete file still iterates to the end without complaint
+        with BgenReader(self.folder / 'example.16bits.bgen') as bfile:
+            self.assertEqual(len([x for x in bfile]), len(bfile))
+    
     def test_truncated_bgen_reparse(self):
         ''' a failed parse must not leave half-parsed variants behind
         
@@ -195,9 +248,9 @@ class TestBgenReader(unittest.TestCase):
             bfile = BgenReader(path, delay_parsing=True)
             # every attempt has to raise, not just the first
             for _ in range(3):
-                with self.assertRaises(IndexError):
+                with self.assertRaises(ValueError):
                     bfile.rsids()
-            with self.assertRaises(IndexError):
+            with self.assertRaises(ValueError):
                 bfile.positions()
             bfile.close()
     

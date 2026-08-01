@@ -100,6 +100,16 @@ void CppBgenReader::parse_all_variants() {
     for (std::uint32_t idx=0; idx < header.nvariants; idx++) {
       variants.push_back(next_var());
     }
+  } catch (const std::out_of_range &) {
+    // Running out of file part way through means the bgen holds fewer variants
+    // than its header lists, so say that, rather than reporting the end of the
+    // file for what looked like a perfectly valid variant index.
+    std::uint64_t parsed = variants.size();
+    variants.clear();
+    throw std::invalid_argument("bgen is truncated - the header lists " +
+                                std::to_string(header.nvariants) +
+                                " variants, but only " + std::to_string(parsed) +
+                                " could be read");
   } catch (...) {
     // Drop the partial list, so a later call retries and raises again, rather
     // than finding a full sized vector and assuming the parse had finished. The

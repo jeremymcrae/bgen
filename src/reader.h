@@ -14,6 +14,8 @@ namespace bgen {
 
 class CppBgenReader {
   bool is_stdin = false;
+  // size of the bgen in bytes, or zero if not known (stdin cannot be seeked)
+  std::uint64_t file_size = 0;
 public:
   CppBgenReader(std::string path, std::string sample_path = "", bool delay_parsing = false);
   std::uint64_t first_variant_offset();

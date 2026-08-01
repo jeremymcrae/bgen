@@ -438,6 +438,9 @@ cdef class BgenReader:
     cdef object index
     cdef OpenStatus is_open
     cdef uint64_t offset
+    # variants returned by __next__ so far, to spot a truncated bgen which stops
+    # short of the variant count in the header
+    cdef uint64_t n_iterated
     def __cinit__(self, path, sample_path='', bool delay_parsing=False):
         if isinstance(path, Path):
             path = str(path)
@@ -463,6 +466,7 @@ cdef class BgenReader:
         self.handle = wrap_stream(self.thisptr.handle)
         self.is_open = OpenStatus()
         self.offset = self.thisptr.offset
+        self.n_iterated = 0
     
     def __is_from_stdin(self, bgen_path):
         if bgen_path is sys.stdin:
@@ -499,19 +503,39 @@ cdef class BgenReader:
                 self.thisptr.header.compression, self.thisptr.header.nsamples, self.is_stdin,
                 self.is_open)
             self.offset = var.next_variant_offset
+            self.n_iterated += 1
             return var
         except IndexError:
+            # Running out of file before reaching the header's variant count means
+            # the bgen is truncated. Without this, iteration would just stop early
+            # and a truncated file would look like a complete, shorter one.
+            if self.n_iterated < self.thisptr.header.nvariants:
+                raise ValueError(f'bgen is truncated - the header lists '
+                                 f'{self.thisptr.header.nvariants} variants, but only '
+                                 f'{self.n_iterated} could be read')
             raise StopIteration
     
     def __len__(self):
+      ''' number of variants in the bgen file
+      
+      With delay_parsing this is the count from the bgen header, which is all that
+      is knowable without reading the file. A truncated bgen still names its
+      original number of variants there, so this can be more than can actually be
+      read - iterating, or getting a variant by index, raises in that case.
+      '''
       if not self.is_open == True:
           raise ValueError("bgen file is closed")
       
       length = self.thisptr.variants.size()
       if length > 0:
           return length
-      else:
-          return self.thisptr.header.nvariants
+      
+      if self.index is not None:
+          # variants are looked up through the index, so its count is the one that
+          # matches what indexing this BgenReader can actually reach
+          return len(self.index)
+      
+      return self.thisptr.header.nvariants
     
     def __getitem__(self, Py_ssize_t idx):
         ''' pull out a Variant by index position
@@ -535,9 +559,16 @@ cdef class BgenReader:
         
         cdef long offset
         offset = self.index.offset_by_index(idx) if self.index else self.thisptr.variants[idx].offset
-        return BgenVar(self.handle, offset, self.thisptr.header.layout,
-          self.thisptr.header.compression, self.thisptr.header.nsamples,
-          self.is_stdin, self.is_open)
+        try:
+            return BgenVar(self.handle, offset, self.thisptr.header.layout,
+              self.thisptr.header.compression, self.thisptr.header.nsamples,
+              self.is_stdin, self.is_open)
+        except IndexError:
+            # The index was in range, so running out of file means the bgen does
+            # not hold the variant its index (or header) says it should. Reporting
+            # the end of the file for a valid index just looks like a bug here.
+            raise ValueError(f'bgen is truncated - could not read the variant at '
+                             f'index {orig_idx}')
     
     def _check_for_index(self, bgen_path):
         ''' creates self.index if a bgenix index file is available

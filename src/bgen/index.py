@@ -46,13 +46,23 @@ class Index:
         for row in self.cur.execute(query, params):
             yield row[0]
     
-    def offset_by_index(self, index) -> int:
-        ''' get file offset of bgen variant given a variant index
+    def _load_offsets(self) -> NDArray[np.uint64]:
+        ''' get file offsets of every variant in the bgen, in file order
         '''
         if self._offsets is None:
             query = "SELECT file_start_position FROM Variant ORDER BY file_start_position"
             self._offsets = np.fromiter((x[0] for x in self.cur.execute(query)), dtype=np.uint64)
-        return int(self._offsets[index])
+        return self._offsets
+    
+    def __len__(self) -> int:
+        ''' number of variants listed in the index
+        '''
+        return len(self._load_offsets())
+    
+    def offset_by_index(self, index) -> int:
+        ''' get file offset of bgen variant given a variant index
+        '''
+        return int(self._load_offsets()[index])
         
     def offset_by_rsid(self, rsid) -> list[int]:
         ''' get file offset of bgen variant given a variant index

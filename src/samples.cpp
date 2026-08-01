@@ -7,7 +7,7 @@
 
 namespace bgen {
 
-Samples::Samples(std::istream * handle, int n_samples) {
+Samples::Samples(std::istream * handle, std::uint32_t n_samples) {
   /* initialize sample list if present in the bgen file
   */
   // the sample block length is read only to step over it, the IDs follow it
@@ -20,12 +20,12 @@ Samples::Samples(std::istream * handle, int n_samples) {
   if (!read_value(*handle, sample_n_check)) {
     throw std::invalid_argument("bgen file is truncated inside the sample block");
   }
-  if (n_samples != (int) sample_n_check) {
+  if (n_samples != sample_n_check) {
     throw std::invalid_argument("inconsistent number of samples");
   }
   
   samples.resize(n_samples);
-  for (int i=0; i<n_samples; i++) {
+  for (std::uint32_t i=0; i<n_samples; i++) {
     // read the IDs as raw bytes, so that IDs containing spaces survive intact
     if (!read_prefixed_string<std::uint16_t>(*handle, samples[i])) {
       throw std::invalid_argument("bgen file is truncated inside the sample block");
@@ -33,7 +33,7 @@ Samples::Samples(std::istream * handle, int n_samples) {
   }
 }
 
-Samples::Samples(std::string path, int n_samples) {
+Samples::Samples(std::string path, std::uint32_t n_samples) {
   /* initialize from external sample file
   */
   std::ifstream handle(path, std::ios::in);
@@ -59,7 +59,7 @@ Samples::Samples(std::string path, int n_samples) {
   std::istringstream iss(lines);
   
   // run through all lines and gte the first column as sample_id
-  int idx = 0;
+  std::uint32_t idx = 0;
   std::string line;
   while (std::getline(iss, line, '\n')) {
     // skip empty lines
@@ -81,16 +81,16 @@ Samples::Samples(std::string path, int n_samples) {
     throw std::invalid_argument("inconsistent number of samples");
   }
   
-  if (n_samples != (int)samples.size()) {
+  if (n_samples != samples.size()) {
     throw std::invalid_argument("inconsistent number of samples");
   }
 }
 
-Samples::Samples(int n_samples) {
+Samples::Samples(std::uint32_t n_samples) {
   /* initialize with integer IDs if no sample list available
   */
   samples.resize(n_samples);
-  for (int i=0; i<n_samples; i++) {
+  for (std::uint32_t i=0; i<n_samples; i++) {
     samples[i] = std::to_string(i);
   }
 }
