@@ -3,12 +3,14 @@ import glob
 import io
 import os
 from pathlib import Path
-from setuptools import setup
+from setuptools import setup, Extension
 import subprocess
 import sys
 
-from distutils.core import Extension
-from distutils.ccompiler import new_compiler
+# new_compiler is used to build zstd's C sources to object files. It has no public
+# setuptools equivalent, and the stdlib distutils was removed in python 3.12, so
+# this comes from the copy that setuptools vendors.
+from setuptools._distutils.ccompiler import new_compiler
 from Cython.Build import cythonize
 
 EXTRA_COMPILE_ARGS = []
@@ -50,9 +52,12 @@ def build_zlib():
         '-DBUILD_SHARED_LIBS=OFF',
         '-DCMAKE_C_FLAGS="-fPIC"',
     ]
-    subprocess.run(cmd)
-    subprocess.run(['cmake', '--build', build_dir, '-v', '--config', 'Release'])
-    os.chdir(cur_dir)
+    try:
+        subprocess.run(cmd, check=True)
+        subprocess.run(['cmake', '--build', build_dir, '-v', '--config', 'Release'],
+                       check=True)
+    finally:
+        os.chdir(cur_dir)
     
     objs = [str(build_dir / 'libz.a')]
     if sys.platform == 'win32':
@@ -134,5 +139,4 @@ extensions = [
 setup(
     package_dir={'': 'src'},
     ext_modules=cythonize(extensions),
-    test_loader='unittest:TestLoader',
     )
