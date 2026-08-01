@@ -4,14 +4,15 @@ import io
 import os
 from pathlib import Path
 from setuptools import setup, Extension
+from setuptools.command.build_clib import build_clib
+from setuptools.command.build_ext import build_ext
 import subprocess
 import sys
 
-# new_compiler is used to build zstd's C sources to object files. It has no public
-# setuptools equivalent, and the stdlib distutils was removed in python 3.12, so
-# this comes from the copy that setuptools vendors.
-from setuptools._distutils.ccompiler import new_compiler
 from Cython.Build import cythonize
+
+ROOT = Path(__file__).resolve().parent
+ZLIB_DIR = str(ROOT / 'zlib_build')
 
 EXTRA_COMPILE_ARGS = []
 EXTRA_LINK_ARGS = []
@@ -40,9 +41,9 @@ def build_zlib():
     Returns:
         list of paths to compiled object code
     '''
-    cur_dir = Path.cwd()
-    source_dir = cur_dir / 'src' / 'zlib-ng'
-    build_dir = cur_dir / 'zlib_build'
+    prev_dir = Path.cwd()
+    source_dir = ROOT / 'src' / 'zlib-ng'
+    build_dir = ROOT / 'zlib_build'
     build_dir.mkdir(exist_ok=True)
     os.chdir(build_dir)
     
@@ -57,7 +58,7 @@ def build_zlib():
         subprocess.run(['cmake', '--build', build_dir, '-v', '--config', 'Release'],
                        check=True)
     finally:
-        os.chdir(cur_dir)
+        os.chdir(prev_dir)
     
     objs = [str(build_dir / 'libz.a')]
     if sys.platform == 'win32':
@@ -66,23 +67,24 @@ def build_zlib():
     
     return str(build_dir), objs
 
-def build_zstd():
-    ''' compile zstd code to object files for linking with bgen c++ code
+def zstd_sources():
+    ''' list the zstd sources to compile into a static library
     
-    This needs to be compiles independently of the bgen c++ code, as zstd is in
-    c, so cannot be compiled directly with the bgen code. zstd is compiled to
-    object files, and these are staticly linked in with the bgen code.
+    zstd is in c, whereas the bgen code is c++, but setuptools selects the
+    compiler per source file, so these can be built as a static library and
+    linked in with the bgen code.
     
-    I tried to link to a shared/dynamic zstd library, but couldn't specify a
-    location that would be found by the compiled bgen library after relocating
-    files into to a python package.
+    Newer zstd versions also include an x86-64 assembly implementation of huffman
+    decoding. That is compiled from a .S file, which needs the c preprocessor to
+    resolve its includes, and which compiles to an empty object file on other
+    architectures (it is wrapped in ZSTD_ENABLE_ASM_X86_64_BMI2 checks). MSVC
+    cannot assemble .S files, but zstd only defines that macro for gnu-style
+    compilers, so the c code does not expect the asm symbols there.
     
     Returns:
-        list of paths to compiled object code
+        list of paths to the zstd source files
     '''
-    print('building zstd')
     folder = Path('src/zstd/lib')
-    include_dirs = ['src/zstd/lib/', 'src/zstd/lib/common']
     sources = flatten(
         (folder / 'common').glob('*.c'),
         (folder / 'compress').glob('*.c'),
@@ -91,23 +93,41 @@ def build_zstd():
         (folder / 'deprecated').glob('*.c'),
         (folder / 'legacy').glob('*.c'),  # TODO: drop some legacy versions
     )
-    extra_compile_args = ['-std=gnu11', '-fPIC', '-O2']
+    if sys.platform != 'win32':
+        sources += flatten((folder / 'decompress').glob('*.S'))
     
-    # newer zstd versions have an asm file, which needs to be to compiled and
-    # used as a library for full zstd compilation.
-    cc = new_compiler()
-    # the unix compiler needs to allow files with .S extension
-    cc.src_extensions += ['.S']
-    compiled = cc.compile(sources=flatten((folder / 'decompress').glob('*.S')),)
-    
-    if len(compiled) > 0:
-        extra_compile_args += [f'-L{" ".join(compiled)}']
-    
-    return cc.compile(sources, include_dirs=include_dirs,
-        extra_preargs=extra_compile_args) + compiled
+    return sources
 
-zlib_dir, zlib = build_zlib()
-zstd = build_zstd()
+ZSTD_LIB = ('zstd', {
+    'sources': zstd_sources(),
+    'include_dirs': ['src/zstd/lib', 'src/zstd/lib/common'],
+    })
+
+class build_clib_subclass(build_clib):
+    ''' allow zstd's .S assembly file to be compiled alongside its c code
+    '''
+    def build_libraries(self, libraries):
+        # src_extensions is inherited from the compiler class, and += would add .S
+        # to that shared list, so replace it with a copy that only this command
+        # uses, to avoid affecting the compiler used for the extensions
+        self.compiler.src_extensions = list(self.compiler.src_extensions) + ['.S']
+        super().build_libraries(libraries)
+
+class build_ext_subclass(build_ext):
+    ''' compile the zlib dependency when the extensions are built
+    
+    zlib is only needed to link the extension modules, so compiling it here
+    (rather than at import) keeps metadata-only commands such as egg_info and
+    sdist from invoking cmake.
+    '''
+    def run(self):
+        # build_ext links against the static libraries built by build_clib, but
+        # does not run that command itself, so build zstd before the extensions
+        self.run_command('build_clib')
+        _, zlib = build_zlib()
+        for ext in self.extensions:
+            ext.extra_objects = zlib
+        super().run()
 
 extensions = [
     Extension('bgen.reader',
@@ -120,8 +140,7 @@ extensions = [
             'src/samples.cpp',
             'src/utils.cpp',
             'src/variant.cpp'],
-        extra_objects=zstd + zlib,
-        include_dirs=['src', 'src/zstd/lib', zlib_dir],
+        include_dirs=['src', 'src/zstd/lib', ZLIB_DIR],
         language='c++'),
     Extension('bgen.writer',
         extra_compile_args=EXTRA_COMPILE_ARGS,
@@ -131,12 +150,14 @@ extensions = [
             'src/genotypes.cpp',
             'src/utils.cpp',
             ],
-        extra_objects=zstd + zlib,
-        include_dirs=['src', 'src/zstd/lib', zlib_dir],
+        include_dirs=['src', 'src/zstd/lib', ZLIB_DIR],
         language='c++'),
     ]
 
 setup(
     package_dir={'': 'src'},
+    libraries=[ZSTD_LIB],
     ext_modules=cythonize(extensions),
+    cmdclass={'build_clib': build_clib_subclass,
+              'build_ext': build_ext_subclass},
     )
