@@ -24,7 +24,7 @@ cdef extern from "<iostream>" namespace "std::ios_base":
     cdef open_mode binary
     cdef cppclass iostate:
         pass
-    cdef iostate failbit
+    cdef iostate badbit
 
 cdef extern from "<iostream>" namespace "std":
     cdef cppclass istream:
@@ -293,15 +293,20 @@ cdef class BgenVar:
         We prevent this by checking a shared pointer held by all the BgenVars 
         which were opened by a given BgenReader. This shared pointer will have
         been set to false when the bgen file closed, so we can check that
-        shared status, and set the istream iostate to fail. Later cpp calls which
-        would read from the stale file handle will raise ValuErrors instead due
-        to checking the failbit before attempting to read from the istream.
+        shared status, and set the istream badbit. Later cpp calls which would
+        read from the stale file handle will raise ValueErrors instead due to
+        checking the badbit before attempting to read from the istream.
+        
+        The badbit is used rather than the failbit, since the failbit is also
+        set by ordinary reads which run past the end of the file (e.g. when
+        iteration reaches the last variant), and those are recoverable, whereas
+        a closed bgen must stay unreadable.
         
         However, this does not work for pickled BgenVars, since we cannot know
         whether the istream object exists or not.
         '''
         if not deref(self.is_open.ptr):
-            self.thisptr.handle.get().setstate(failbit)
+            self.thisptr.handle.get().setstate(badbit)
     @property
     def is_phased(self):
         return self.thisptr.phased()

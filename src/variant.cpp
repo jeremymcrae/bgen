@@ -145,9 +145,12 @@ void Variant::minor_allele_dosage(float * dose) {
 }
 
 std::vector<std::uint8_t> Variant::copy_data() {
-  if (handle->fail()) {
+  // as in Genotypes::decompress, the badbit marks a closed bgen, while other
+  // error states are recoverable and just need clearing before the seek
+  if (handle->bad()) {
     throw std::invalid_argument("cannot read from closed bgen file");
   }
+  handle->clear();
   std::uint32_t length = next_variant_offset - offset;
   std::vector<std::uint8_t> data(length);
   handle->seekg(offset);

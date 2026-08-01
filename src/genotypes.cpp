@@ -146,9 +146,13 @@ void Genotypes::decompress() {
     return;
   }
   
-  if (handle->fail()) {
+  // a closed bgen is marked with the badbit, so refuse to read from it. Any
+  // other error state (e.g. the failbit and eofbit left by a read which ran to
+  // the end of the file) is recoverable, so clear it before seeking.
+  if (handle->bad()) {
     throw std::invalid_argument("cannot read from closed bgen file");
   }
+  handle->clear();
   
   if (!is_stdin) {
     handle->seekg(file_offset);  // about 1 microsecond
