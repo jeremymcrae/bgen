@@ -16,6 +16,8 @@ class CppBgenWriter {
   std::uint32_t n_variants=0;
   std::uint32_t nvars_offset=8;
   std::uint32_t variant_data_offset=0;
+  // genotype block (length prefixes included) held between encoding and writing
+  std::vector<char> pending;
 public:
   CppBgenWriter(std::string &path,
              std::uint32_t _n_samples,
@@ -42,20 +44,21 @@ public:
                                      std::vector<std::string> &alleles,
                                      std::uint32_t _n_samples);
   std::uint64_t write_variant_direct(std::vector<std::uint8_t> & data);
-  std::uint64_t add_genotype_data(std::uint16_t n_alleles,
-                                  double *genotypes,
-                                  std::uint32_t geno_len,
-                                  std::uint8_t ploidy = 2,
-                                  bool phased = 0,
-                                  std::uint8_t bit_depth = 8);
-  std::uint64_t add_genotype_data(std::uint16_t n_alleles,
-                                  double *genotypes,
-                                  std::uint32_t geno_len,
-                                  uint8_t *ploidy,
-                                  std::uint8_t min_ploidy = 2,
-                                  std::uint8_t max_ploidy = 2,
-                                  bool phased = 0,
-                                  std::uint8_t bit_depth = 8);
+  void encode_genotype_data(std::uint16_t n_alleles,
+                            double *genotypes,
+                            std::uint32_t geno_len,
+                            std::uint8_t ploidy = 2,
+                            bool phased = 0,
+                            std::uint8_t bit_depth = 8);
+  void encode_genotype_data(std::uint16_t n_alleles,
+                            double *genotypes,
+                            std::uint32_t geno_len,
+                            uint8_t *ploidy,
+                            std::uint8_t min_ploidy = 2,
+                            std::uint8_t max_ploidy = 2,
+                            bool phased = 0,
+                            std::uint8_t bit_depth = 8);
+  std::uint64_t write_genotype_data();
 };
 
 } // namespace bgen

@@ -40,13 +40,14 @@ cdef extern from 'writer.h' namespace 'bgen':
         uint64_t write_variant_header(string &varid, string &rsid, string &chrom, 
                         uint32_t &pos, vector[string] &alleles, uint32_t _n_samples) except +
         uint64_t write_variant_direct(vector[uint8_t] & data) except +
-        uint64_t add_genotype_data(uint16_t n_alleles,
+        void encode_genotype_data(uint16_t n_alleles,
                          double *genotypes, uint32_t geno_len, uint8_t ploidy,
                          bool phased, uint8_t bit_depth) except +
-        uint64_t add_genotype_data(uint16_t n_alleles,
+        void encode_genotype_data(uint16_t n_alleles,
                          double *genotypes, uint32_t geno_len, uint8_t *ploidy,
                          uint8_t min_ploidy, uint8_t max_ploidy,
                          bool phased, uint8_t bit_depth) except +
+        uint64_t write_genotype_data() except +
 
 class Indexer:
     ''' class to automatically index bgen files as they are being constructed
@@ -280,16 +281,19 @@ cdef class BgenWriter:
         
         self._validate_layout1_data(_alleles, n_samples, n_genos, phased)
         
-        var_offset = self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles, n_samples)
-
+        # encode the genotypes before writing anything, so that a variant with
+        # invalid genotypes cannot leave a partial variant in the bgen file
         cdef uint32_t geno_len = n_samples * n_genos
         if min_ploidy == max_ploidy:
-            end_offset = self.thisptr.add_genotype_data(_alleles.size(), &geno_c[0, 0],
+            self.thisptr.encode_genotype_data(_alleles.size(), &geno_c[0, 0],
                                            geno_len, min_ploidy, phased, bit_depth)
         else:
-            end_offset = self.thisptr.add_genotype_data(_alleles.size(), &geno_c[0, 0],
+            self.thisptr.encode_genotype_data(_alleles.size(), &geno_c[0, 0],
                                            geno_len, &ploidy_arr[0], min_ploidy, 
                                            max_ploidy, phased, bit_depth)
+        
+        var_offset = self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles, n_samples)
+        end_offset = self.thisptr.write_genotype_data()
         
         self.indexer.add_variant(chrom, int(pos), rsid, alleles, var_offset, 
                                  end_offset - var_offset)

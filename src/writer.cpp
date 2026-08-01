@@ -15,6 +15,12 @@
 
 namespace bgen {
 
+// append raw bytes to a buffer destined for the file handle
+static void append_bytes(std::vector<char> &buf, const void *data, std::size_t size) {
+  const char * bytes = reinterpret_cast<const char *>(data);
+  buf.insert(buf.end(), bytes, bytes + size);
+}
+
 // write a 32-bit value at a given file offset
 static void write_at_offset(std::ofstream &handle, std::uint32_t &val, std::uint32_t offset=0) {
   std::uint64_t orig_pos = handle.tellp();
@@ -108,6 +114,9 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
   if (_n_samples != n_samples) {
     throw std::invalid_argument("number of samples doesn't match sample count in file");
   }
+  if ((layout == 1) && alleles.size() != 2) {
+    throw std::invalid_argument("layout 1 requires exactly two alleles.");
+  }
   n_variants += 1;
   if (layout == 1) {
     handle.write(reinterpret_cast<char *>(&_n_samples), 4);
@@ -128,10 +137,6 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
   if (layout != 1) {
     std::uint16_t n_alleles = alleles.size();
     handle.write(reinterpret_cast<char *>(&n_alleles), 2);
-  }
-
-  if ((layout == 1) && alleles.size() != 2) {
-    throw std::invalid_argument("layout 1 requires exactly two alleles.");
   }
 
   std::uint32_t allele_size;
@@ -478,26 +483,33 @@ static std::vector<std::uint8_t> encode_layout2(
 }
 
 // convenience function for constant ploidy
-std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
-                                               double *genotypes,
-                                               std::uint32_t geno_len,
-                                               std::uint8_t ploidy,
-                                               bool phased,
-                                               std::uint8_t bit_depth)
+void CppBgenWriter::encode_genotype_data(std::uint16_t n_alleles,
+                                         double *genotypes,
+                                         std::uint32_t geno_len,
+                                         std::uint8_t ploidy,
+                                         bool phased,
+                                         std::uint8_t bit_depth)
 {
   std::uint8_t *ploidy_vector = {};
-  return add_genotype_data(n_alleles, genotypes, geno_len, ploidy_vector, ploidy, ploidy, phased, bit_depth);
+  encode_genotype_data(n_alleles, genotypes, geno_len, ploidy_vector, ploidy, ploidy, phased, bit_depth);
 }
 
-std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
-                                               double *genotypes,
-                                               std::uint32_t geno_len,
-                                               uint8_t *ploidy,
-                                               std::uint8_t min_ploidy,
-                                               std::uint8_t max_ploidy,
-                                               bool phased,
-                                               std::uint8_t bit_depth)
+// encode (and compress) a genotype block, ready for write_genotype_data()
+//
+// This never touches the file handle, so any error it raises (e.g. mismatched
+// genotype lengths, or inconsistent missingness) leaves the bgen unchanged.
+void CppBgenWriter::encode_genotype_data(std::uint16_t n_alleles,
+                                         double *genotypes,
+                                         std::uint32_t geno_len,
+                                         uint8_t *ploidy,
+                                         std::uint8_t min_ploidy,
+                                         std::uint8_t max_ploidy,
+                                         bool phased,
+                                         std::uint8_t bit_depth)
 {
+  if ((layout != 1) && (layout != 2)) {
+    throw std::invalid_argument("layout must be 1 or 2");
+  }
   if ((layout == 1) && (compression == 2)) {
     throw std::invalid_argument("you cannot use zstd compression with layout 1");
   }
@@ -514,32 +526,39 @@ std::uint64_t CppBgenWriter::add_genotype_data(std::uint16_t n_alleles,
   if (compression != 0) {
     compressed = compress(encoded, compression);
   }
-  std::uint64_t compressed_len = compressed.size();
+  std::uint32_t compressed_len = compressed.size();
 
-  std::uint64_t size;
+  // assemble the block exactly as it needs to appear on disk, so that writing
+  // it later is a single copy which cannot fail partway on bad input
+  pending.clear();
+  std::uint32_t size;
   if (layout == 1) {
-    if (compression == 0) {
-      handle.write(reinterpret_cast<char *>(encoded.data()), encoded.size());
-    } else {
-      handle.write(reinterpret_cast<char *>(&compressed_len), 4);
-      handle.write(reinterpret_cast<char *>(compressed.data()), compressed.size());
-    }
-  } else if (layout == 2) {
-    // layout 2
-    if (compression == 0) {
-      size = encoded.size();
-      handle.write(reinterpret_cast<char *>(&size), 4);
-      handle.write(reinterpret_cast<char *>(encoded.data()), encoded.size());
-    } else {
-      size = compressed_len + 4;
-      handle.write(reinterpret_cast<char *>(&size), 4);
-      size = encoded.size();
-      handle.write(reinterpret_cast<char *>(&size), 4);
-      handle.write(reinterpret_cast<char *>(compressed.data()), compressed.size());
+    if (compression != 0) {
+      append_bytes(pending, &compressed_len, 4);
     }
   } else {
-    throw std::invalid_argument("layout must be 1 or 2");
+    if (compression == 0) {
+      size = encoded.size();
+      append_bytes(pending, &size, 4);
+    } else {
+      size = compressed_len + 4;
+      append_bytes(pending, &size, 4);
+      size = encoded.size();
+      append_bytes(pending, &size, 4);
+    }
   }
+
+  if (compression == 0) {
+    append_bytes(pending, encoded.data(), encoded.size());
+  } else {
+    append_bytes(pending, compressed.data(), compressed.size());
+  }
+}
+
+// write the block prepared by encode_genotype_data()
+std::uint64_t CppBgenWriter::write_genotype_data() {
+  handle.write(pending.data(), pending.size());
+  pending.clear();
   return handle.tellp();
 }
 
