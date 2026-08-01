@@ -10,6 +10,7 @@ tests/data/temp.bgen.bgi
 tests/data/empty.sample
 tests/data/extra.sample
 benchmark.py
+.tmp.bgen*
 *.egg
 *.egg-info/
 *.DS_Store
