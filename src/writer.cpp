@@ -445,8 +445,8 @@ static std::vector<std::uint8_t> encode_layout2(
   if (phased) {
     max_probs *= max_ploidy;
   }
-  if ((geno_len / max_probs) != n_samples) {
-    throw std::invalid_argument("(genotypes / per_person_probs) does not match n_samples");
+  if ((std::uint64_t) geno_len != (std::uint64_t) max_probs * n_samples) {
+    throw std::invalid_argument("genotypes does not match n_samples * per_person_probs");
   }
 
   std::uint32_t probs_len = (n_samples * bit_depth) * (max_probs - 1);
