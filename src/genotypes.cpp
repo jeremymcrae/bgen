@@ -165,6 +165,12 @@ void Genotypes::decompress() {
       decompressed_len = n_samples * 6;
     } else if (layout == 2) {
       decompressed_field = true;
+      if (length < sizeof(std::uint32_t)) {
+        // the field is part of the block, so a block this short would both read
+        // into the next variant and underflow the compressed length below
+        throw std::invalid_argument("bgen genotype data is too short to hold a "
+                                    "decompressed length");
+      }
       if (! handle->read(reinterpret_cast<char*>(&decompressed_len), sizeof(std::uint32_t))) {
         throw std::invalid_argument("couldn't read the compressed length");
       }
@@ -172,6 +178,14 @@ void Genotypes::decompress() {
   }
   
   std::uint32_t compressed_len = length - decompressed_field * 4;
+  // the decompressed length is read from the bgen, so guard the buffer size
+  // against wrapping. Without this a length near the 32-bit limit allocates a
+  // few bytes and the padding memset below writes way past the end.
+  if (decompressed_len > (UINT32_MAX - PROBS_READ_PAD)) {
+    throw std::invalid_argument("bgen genotype data claims an implausible "
+                                "decompressed length: " +
+                                std::to_string(decompressed_len));
+  }
   // hold the buffers in unique_ptrs, so the reads and decompression below can
   // throw on a malformed bgen without leaking them
   std::unique_ptr<char[]> compressed(new char[compressed_len]);
@@ -194,6 +208,7 @@ void Genotypes::decompress() {
   // only take ownership once the data has decompressed cleanly, so a failed
   // parse leaves no half filled buffer behind for a later call to read from
   uncompressed = std::move(buffer);
+  uncompressed_len = decompressed_len;
   is_decompressed = true;
 }
 
@@ -213,6 +228,79 @@ std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
   return max_probs;
 }
 
+/// @brief number of bytes the packed probability data needs for this variant
+///
+/// Every sample stores all but one probability per group, at bit_depth bits
+/// each, so the total is a bit count rounded up to whole bytes. Phased data
+/// stores a group per haplotype, so the count scales with each sample's ploidy.
+///
+/// This is computed in 64-bit, since the per sample counts come from the file
+/// and so can be large enough to overflow a 32-bit total.
+std::uint64_t Genotypes::probability_bytes() {
+  if (layout == 1) {
+    // layout 1 is a fixed three 16-bit probabilities per sample, with nothing
+    // omitted, and decompress() already sized the buffer as n_samples * 6
+    return (std::uint64_t) n_samples * 6;
+  }
+  
+  std::uint64_t values = 0;
+  if (constant_ploidy) {
+    std::uint64_t groups = phased ? (std::uint64_t) max_ploidy : 1;
+    std::uint64_t per_group = phased ? (std::uint64_t) n_alleles : max_probs;
+    if (per_group < 1) {
+      throw std::invalid_argument("bgen variant stores no probabilities per sample");
+    }
+    values = (std::uint64_t) n_samples * groups * (per_group - 1);
+  } else if (phased || (n_alleles == 2)) {
+    // Both of these come to one stored value per (haplotype x allele), so the
+    // total only needs the sum of the ploidy values, which vectorises. For
+    // phased data each haplotype stores n_alleles - 1 values. For an unphased
+    // biallelic sample the count is ploidy + 1 genotypes less the omitted one,
+    // which is just the ploidy.
+    std::uint64_t total_ploidy = fast_ploidy_sum(ploidy.get(), n_samples);
+    values = phased ? total_ploidy * ((std::uint64_t) n_alleles - 1) : total_ploidy;
+  } else {
+    // Unphased and multi-allelic with a ploidy which varies per sample, so each
+    // sample stores a different number of genotypes. parse_ploidy masks the
+    // ploidy to its low 6 bits, so the count for each of the 64 possible values
+    // can be worked out once rather than once per sample.
+    std::uint32_t counts[64];
+    for (int ploid=0; ploid < 64; ploid++) {
+      int p = ploid;
+      std::uint32_t n_probs = get_max_probs(p, n_alleles, phased);
+      if (n_probs < 1) {
+        throw std::invalid_argument("bgen variant stores no probabilities per sample");
+      }
+      counts[ploid] = n_probs - 1;
+    }
+    for (std::uint32_t n=0; n < n_samples; n++) {
+      values += counts[ploidy[n]];
+    }
+  }
+  std::uint64_t bits = values * bit_depth;
+  return (bits / 8) + ((bits % 8) > 0);
+}
+
+/// @brief check the genotype block is big enough for the variant it describes
+///
+/// The block length is stored in the bgen, and it sizes the buffer, but the
+/// fields which say how much data the variant needs (sample count, ploidy,
+/// allele count and bit depth) are stored separately. A truncated or malformed
+/// bgen can therefore describe far more probability data than it holds, and the
+/// parsing below indexes on those fields rather than on the buffer length, so
+/// without this it reads past the end of the buffer - which segfaults outright
+/// on a variant with many samples.
+void Genotypes::check_block_size() {
+  std::uint64_t required = (std::uint64_t) idx + probability_bytes();
+  if (required > (std::uint64_t) uncompressed_len) {
+    throw std::invalid_argument("bgen variant is truncated - its genotype data "
+                                "is " + std::to_string(uncompressed_len) +
+                                " bytes, but the variant needs " +
+                                std::to_string(required));
+  }
+  block_checked = true;
+}
+
 /// parse the initial data that defines the ploidy and phased status.
 ///
 /// Layout 1 doesn't store any information before the genotype probabilities,
@@ -220,6 +308,11 @@ std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
 void Genotypes::load_data_and_parse_header() {
   decompress();
   if (has_ploidy) {
+    if (!block_checked) {
+      // the header was parsed on an earlier call which then failed the size
+      // check, so fail the same way rather than fall through to the reads
+      check_block_size();
+    }
     return;
   }
   idx = 0;
@@ -229,6 +322,24 @@ void Genotypes::load_data_and_parse_header() {
     max_ploidy = 2;
     bit_depth = 16;
   } else if (layout == 2) {
+    // The preamble is 10 bytes (sample count, allele count, the two ploidy
+    // bounds, the phased flag and the bit depth) plus a ploidy byte per sample.
+    // Check that much is present before reading any of it, since the reads below
+    // and in parse_ploidy are sized from the bgen header rather than from the
+    // block, and a short block would otherwise be read straight past.
+    const std::uint64_t preamble = 10 + (std::uint64_t) n_samples;
+    if (preamble > (std::uint64_t) uncompressed_len) {
+      throw std::invalid_argument("bgen variant is truncated - its genotype data "
+                                  "is " + std::to_string(uncompressed_len) +
+                                  " bytes, but " + std::to_string(preamble) +
+                                  " are needed for the ploidy of " +
+                                  std::to_string(n_samples) + " samples");
+    }
+    if (n_alleles < 1) {
+      // n_choose_k below loops on n_alleles - 1, so zero alleles would run it
+      // about four billion times before returning a meaningless count
+      throw std::invalid_argument("bgen variant has no alleles");
+    }
     std::uint32_t nn_samples = *reinterpret_cast<const std::uint32_t*>(&uncompressed[idx]);
     idx += sizeof(std::uint32_t);
     std::uint16_t allele_check = *reinterpret_cast<const std::uint16_t*>(&uncompressed[idx]);
@@ -259,6 +370,7 @@ void Genotypes::load_data_and_parse_header() {
     idx += sizeof(std::uint8_t);
   }
   max_probs = get_max_probs(max_ploidy, n_alleles, phased);
+  check_block_size();
 }
 
 /// get ploidy state for all samples (and missingness for layout2).

@@ -61,6 +61,8 @@ public:
 private:
   void decompress();
   void parse_ploidy();
+  std::uint64_t probability_bytes();
+  void check_block_size();
   void probabilities_layout1(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows);
   void probabilities_layout2(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows);
   void fast_haplotype_probs(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows);
@@ -81,6 +83,16 @@ private:
   std::uint32_t bit_depth=0;
   std::uint32_t idx=0;
   std::unique_ptr<char[]> uncompressed;
+  // size of the decompressed genotype block, so that the reads below can be
+  // bounded by the data which is actually present. The block length comes from
+  // the bgen itself, so it cannot be assumed to match what the other header
+  // fields say the variant needs.
+  std::uint32_t uncompressed_len = 0;
+  // whether the block has been checked as big enough for the variant. The check
+  // has to be remembered, since the header is only parsed once, so a caller
+  // which catches the error and asks for the probabilities again would otherwise
+  // skip straight past it to the reads which the check exists to prevent.
+  bool block_checked = false;
   bool is_decompressed = false;
   bool constant_ploidy=true;
   bool has_ploidy = false;
