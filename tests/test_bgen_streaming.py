@@ -1,6 +1,7 @@
 
 from pathlib import Path
 import os
+import subprocess
 import unittest
 import sys
 
@@ -22,6 +23,33 @@ class TestBgenStream(unittest.TestCase):
         # can't write > 2 ** 16 bytes to linux write_fd pipe before something stalls
         self.max_buff = 65536
         self.folder = Path(__file__).parent /  "data"
+    
+    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
+    def test_bgen_streaming_parse_all_variants(self):
+        ''' check we can parse all variants of a bgen from stdin
+        
+        Anything which needs every variant at once (rsids, varids, chroms,
+        positions, indexing, drop_variants) parses them all up front, which
+        collects the variants into a list. A streamed bgen loads its genotypes
+        as each variant is constructed, so this used to hand the same genotype
+        buffers to two variants, and freeing them twice aborted the process.
+        
+        This runs in a subprocess, so that the whole bgen can be piped in without
+        the parent's stdin being redirected, and so an abort shows up as a signal
+        rather than taking the test run down with it.
+        '''
+        path = self.folder / 'example.16bits.zstd.bgen'
+        code = ('from bgen import BgenReader\n'
+                'b = BgenReader("/dev/stdin")\n'
+                'assert len(b.rsids()) == 199\n'
+                'assert len(b.positions()) == 199\n'
+                'print("ok")\n')
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
+        proc = subprocess.run([sys.executable, '-c', code], input=path.read_bytes(),
+                              capture_output=True, env=env)
+        # a double free aborts, which shows up as a negative (signal) returncode
+        self.assertEqual(proc.returncode, 0, msg=proc.stderr.decode('utf8', 'replace'))
+        self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
     
     @unittest.skipIf(sys.platform == "win32", "haven't figured out file handle " \
                                               "duplication and writing on windows " \

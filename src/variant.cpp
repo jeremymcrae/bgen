@@ -110,7 +110,7 @@ std::uint8_t * Variant::ploidy() {
   if (geno.max_probs == 0) {
     geno.load_data_and_parse_header();
   }
-  return geno.ploidy;
+  return geno.ploidy.get();
 }
 
 /// get genotype probabilities for the variant as a 1-dimensional vector

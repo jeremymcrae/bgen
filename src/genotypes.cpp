@@ -172,25 +172,29 @@ void Genotypes::decompress() {
   }
   
   std::uint32_t compressed_len = length - decompressed_field * 4;
-  char * compressed = new char[compressed_len];
+  // hold the buffers in unique_ptrs, so the reads and decompression below can
+  // throw on a malformed bgen without leaking them
+  std::unique_ptr<char[]> compressed(new char[compressed_len]);
   // pad the buffer, since probabilities_layout2 reads 8 bytes at a time and the
   // read for the final probability would otherwise run off the end of the
   // genotype data. Zero the padding so those trailing bits are deterministic.
-  uncompressed = new char[decompressed_len + PROBS_READ_PAD];
-  std::memset(uncompressed + decompressed_len, 0, PROBS_READ_PAD);
+  std::unique_ptr<char[]> buffer(new char[decompressed_len + PROBS_READ_PAD]);
+  std::memset(buffer.get() + decompressed_len, 0, PROBS_READ_PAD);
   if (! handle->read(&compressed[0], compressed_len)) {
     throw std::invalid_argument("couldn't read the compressed data");
   }
 
   if (compression == 0) { //no compression
-    std::memcpy(&uncompressed[0], &compressed[0], compressed_len);
+    std::memcpy(&buffer[0], &compressed[0], compressed_len);
   } else if (compression == 1) { // zlib
-    zlib_uncompress(compressed, (int) compressed_len, uncompressed, (int) decompressed_len);  // about 2 milliseconds
+    zlib_uncompress(compressed.get(), (int) compressed_len, buffer.get(), (int) decompressed_len);  // about 2 milliseconds
   } else if (compression == 2) { // zstd
-    zstd_uncompress(compressed, (int) compressed_len, uncompressed, (int) decompressed_len);
+    zstd_uncompress(compressed.get(), (int) compressed_len, buffer.get(), (int) decompressed_len);
   }
+  // only take ownership once the data has decompressed cleanly, so a failed
+  // parse leaves no half filled buffer behind for a later call to read from
+  uncompressed = std::move(buffer);
   is_decompressed = true;
-  delete[] compressed;
 }
 
 /// figure out the maximum number of probabilities across the individuals
@@ -268,9 +272,9 @@ void Genotypes::parse_ploidy() {
   }
   
   has_ploidy = true;
-  ploidy = new std::uint8_t[n_samples];
+  ploidy.reset(new std::uint8_t[n_samples]);
   if (layout == 1) {
-    std::memset(ploidy, max_ploidy, n_samples);
+    std::memset(ploidy.get(), max_ploidy, n_samples);
     return;
   }
   
@@ -279,7 +283,7 @@ void Genotypes::parse_ploidy() {
   std::uint8_t mask = 63;
   std::uint64_t mask_8 = std::uint64_t(0x8080808080808080);
   if (constant_ploidy) {
-    std::memset(ploidy, max_ploidy, n_samples);
+    std::memset(ploidy.get(), max_ploidy, n_samples);
     for (std::uint32_t x=0; x < (n_samples - (n_samples % 8)); x += 8) {
       // Simultaneously check if any of the next 8 samples are missing by casting
       // the data for the next 8 samples to an int64, and masking out all but
@@ -527,14 +531,14 @@ void Genotypes::probabilities(float * probs) {
     if (constant_ploidy) {
       nrows = n_samples * max_ploidy;
     } else {
-      nrows = fast_ploidy_sum(ploidy, n_samples);
+      nrows = fast_ploidy_sum(ploidy.get(), n_samples);
     }
   }
   
   if (layout == 1) {
-    probabilities_layout1(uncompressed, idx, probs, nrows);
+    probabilities_layout1(uncompressed.get(), idx, probs, nrows);
   } else if (layout == 2) {
-    probabilities_layout2(uncompressed, idx, probs, nrows); // about 3 milliseconds
+    probabilities_layout2(uncompressed.get(), idx, probs, nrows); // about 3 milliseconds
   }
 }
 
@@ -886,12 +890,12 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
   if (constant_ploidy & (max_probs == 3) & (bit_depth == 8) & (!phased)) {
     // A fast path when we know the ploidy is constant and the bit depth is 8,
     // this avoids the bit shifts/masks used in the variable bit_depth path.
-    ref_dosage_fast(uncompressed, idx, dose, n_samples);
+    ref_dosage_fast(uncompressed.get(), idx, dose, n_samples);
   } else {
     if (!phased) {
-      ref_dosage_slow_unphased(uncompressed, idx, dose, n_samples);
+      ref_dosage_slow_unphased(uncompressed.get(), idx, dose, n_samples);
     } else {
-      ref_dosage_slow_phased(uncompressed, idx, dose, n_samples);
+      ref_dosage_slow_phased(uncompressed.get(), idx, dose, n_samples);
     }
   }
   
@@ -907,15 +911,6 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
   // for samples with missing data, just set values to NA
   for (auto n: missing) {
     dose[n] = std::nanf("1");
-  }
-}
-
-void Genotypes::clear_probs() {
-  if (uncompressed != nullptr) {
-    delete[] uncompressed;
-  }
-  if (ploidy != nullptr) {
-    delete[] ploidy;
   }
 }
 

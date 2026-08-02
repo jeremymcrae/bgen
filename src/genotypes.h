@@ -19,10 +19,16 @@ namespace bgen {
 /// run past the end of the buffer.
 const std::uint32_t PROBS_READ_PAD = 8;
 
+/// genotype data for one variant, which owns its decompressed buffers
+///
+/// The buffers are held in unique_ptrs, so a Genotypes can be moved but not
+/// copied. That matters because a Variant holds one of these by value, and
+/// parse_all_variants moves Variants into a vector. Owning the buffers through
+/// raw pointers instead would let a copy duplicate them, and both copies would
+/// then free the same memory.
 class Genotypes {
 public:
   Genotypes() {}
-  ~Genotypes() { clear_probs(); }
   void initialize(std::shared_ptr<std::istream> _handle,
            int lay,
            int compr,
@@ -51,7 +57,7 @@ public:
   int min_ploidy=0;
   int max_ploidy=0;
   int minor_idx=0;
-  std::uint8_t * ploidy={};
+  std::unique_ptr<std::uint8_t[]> ploidy;
 private:
   void decompress();
   void parse_ploidy();
@@ -64,7 +70,6 @@ private:
   void swap_allele_dosage_simple(float * dose);
   void swap_allele_dosage_complex(float * dose);
   int find_minor_allele(float * dose);
-  void clear_probs();
   std::shared_ptr<std::istream> handle;
   int layout = 0;
   int compression = 0;
@@ -75,7 +80,7 @@ private:
   bool is_stdin = false;
   std::uint32_t bit_depth=0;
   std::uint32_t idx=0;
-  char * uncompressed={};
+  std::unique_ptr<char[]> uncompressed;
   bool is_decompressed = false;
   bool constant_ploidy=true;
   bool has_ploidy = false;
