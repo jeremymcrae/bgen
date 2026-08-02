@@ -659,7 +659,9 @@ cdef class BgenReader:
         
         Args:
             chrom: chromosome that variants must be on
-            start: start nucleotide of region. If None, gets all variants on chromosome
+            start: start nucleotide of region. If None, gets variants with
+                positions up to stop, or all variants on the chromosome if stop
+                is also None
             stop: end nucleotide of region. If None, gets variants with positions after start
         
         Yields:

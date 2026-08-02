@@ -61,4 +61,47 @@ class TestBgenIndex(unittest.TestCase):
         self.assertTrue(len(chrom_offsets) != len(after_pos_offsets))
         self.assertTrue(len(chrom_offsets) != len(in_region_offsets))
         self.assertTrue(len(after_pos_offsets) != len(in_region_offsets))
+    
+    def test_index_fetch_stop_without_start(self):
+        ''' fetches file offsets for variants up to a position
+        
+        This is the one combination the test above misses. It used to compare the
+        position against a null start, which is never true in sqlite, so it
+        quietly returned nothing rather than erroring.
+        '''
+        chrom = '01'
+        stop = 50000
+        
+        index = Index(self.folder / 'example.16bits.bgen.bgi')
+        before_pos_offsets = list(index.fetch(chrom, stop=stop))
+        expected = [x for x in self.gen_data if x.pos <= stop]
+        self.assertTrue(len(before_pos_offsets) > 0)
+        self.assertEqual(len(before_pos_offsets), len(expected))
+        
+        # the offsets have to be the ones the full scan gives for those variants
+        in_region_offsets = list(index.fetch(chrom, 0, stop))
+        self.assertEqual(sorted(before_pos_offsets), sorted(in_region_offsets))
+        
+        # a stop below every variant gives nothing, and one above gives them all
+        positions = [x.pos for x in self.gen_data]
+        self.assertEqual(list(index.fetch(chrom, stop=min(positions) - 1)), [])
+        self.assertEqual(len(list(index.fetch(chrom, stop=max(positions)))),
+                         len(self.gen_data))
+        
+        # and it still has to respect the chromosome
+        self.assertEqual(list(index.fetch('02', stop=stop)), [])
+    
+    def test_reader_fetch_stop_without_start(self):
+        ''' BgenReader.fetch yields the variants up to a position
+        '''
+        chrom = '01'
+        stop = 50000
+        
+        with BgenReader(self.folder / 'example.16bits.bgen') as bfile:
+            variants = list(bfile.fetch(chrom, stop=stop))
+            expected = [x for x in self.gen_data if x.pos <= stop]
+            self.assertEqual(len(variants), len(expected))
+            self.assertTrue(all(x.pos <= stop for x in variants))
+            self.assertEqual(sorted(x.rsid for x in variants),
+                             sorted(x.rsid for x in expected))
         
