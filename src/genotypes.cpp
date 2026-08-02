@@ -291,8 +291,19 @@ std::uint64_t Genotypes::probability_bytes() {
 /// without this it reads past the end of the buffer - which segfaults outright
 /// on a variant with many samples.
 void Genotypes::check_block_size() {
-  std::uint64_t required = (std::uint64_t) idx + probability_bytes();
+  // the accessors in variant.cpp only parse the header when max_probs is zero,
+  // so clear it if this check fails. Otherwise a rejected variant is left with a
+  // non-zero max_probs, and those accessors skip the parse and hand back data
+  // for a variant which just failed the check.
+  std::uint64_t required;
+  try {
+    required = (std::uint64_t) idx + probability_bytes();
+  } catch (...) {
+    max_probs = 0;
+    throw;
+  }
   if (required > (std::uint64_t) uncompressed_len) {
+    max_probs = 0;
     throw std::invalid_argument("bgen variant is truncated - its genotype data "
                                 "is " + std::to_string(uncompressed_len) +
                                 " bytes, but the variant needs " +

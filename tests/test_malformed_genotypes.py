@@ -190,18 +190,27 @@ class TestMalformedGenotypes(unittest.TestCase):
         ''' the other genotype accessors reject a short block too
 
         They all parse the same genotype header, so none of them should be able
-        to reach the reads.
+        to reach the reads. The order matters, since the accessors only parse the
+        header when max_probs is unset, and the size check runs after max_probs
+        has been assigned - so a rejection has to clear it again, or these return
+        data for a variant which just failed the check.
         '''
         n = 500
-        path = write_bgen(self.tmpdir / 'a.bgen', n)
-        offset = block_offset(path)
-        patched(path, [(offset, '<I', 10 + n)])
+        accessors = ['probabilities', 'minor_allele_dosage', 'alt_dosage',
+                     'ploidy', 'is_phased']
+        for first in accessors:
+            path = write_bgen(self.tmpdir / 'a.bgen', n)
+            offset = block_offset(path)
+            patched(path, [(offset, '<I', 10 + n)])
 
-        with BgenReader(path) as bfile:
-            var = next(iter(bfile))
-            for name in ['probabilities', 'minor_allele_dosage', 'alt_dosage']:
+            with BgenReader(path) as bfile:
+                var = next(iter(bfile))
+                # whichever is asked for first, it and every other must raise
                 with self.assertRaises(ValueError):
-                    getattr(var, name)
+                    getattr(var, first)
+                for name in accessors:
+                    with self.assertRaises(ValueError):
+                        getattr(var, name)
 
     def test_implausible_decompressed_length(self):
         ''' a decompressed length near the 32-bit limit is rejected
