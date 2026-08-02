@@ -220,6 +220,61 @@ static std::vector<char> compress(std::vector<std::uint8_t> &uncompressed, std::
   return compressed;
 }
 
+/// tolerance for genotype probabilities which sit just outside the legal range.
+///
+/// Probabilities frequently arrive after a round trip through float32, since
+/// that is what the reader hands back, and that can shift a value by a few
+/// multiples of the float32 epsilon of 1.2e-07. The error also accumulates when
+/// summing the probabilities for a sample. Values within this much of the limit
+/// are treated as legal (and are clamped when encoded), anything further out is
+/// reported as a mistake.
+const double PROB_TOLERANCE = 1e-6;
+
+/// @brief report an unusable genotype probability
+///
+/// Kept out of line so that the checks below stay small enough to inline into
+/// the encoding loops, since they run once per probability written.
+static void raise_probability_error(double g) {
+  if (std::isnan(g)) {
+    throw std::invalid_argument("samples with any missing genotype must encode all "
+                                "as missing (i.e. float(nan))");
+  }
+  throw std::invalid_argument("genotype probability must be between 0 and 1, not " +
+                              std::to_string(g));
+}
+
+static void raise_cumulative_error(double cumulative) {
+  throw std::invalid_argument("genotype probabilities for a sample sum to more "
+                              "than 1: " + std::to_string(cumulative));
+}
+
+/// @brief check a genotype probability is in the range that layout 1 and 2 can encode
+///
+/// The comparison is written as a single negated range test so that nan fails it
+/// too, rather than slipping through as it would with a plain
+/// 'g < -PROB_TOLERANCE' test. A nan here means only part of a sample is
+/// missing, since fully missing samples are spotted before this and encoded as
+/// zeroes.
+static inline void check_probability(double g) {
+  if (!((g >= -PROB_TOLERANCE) && (g <= 1.0 + PROB_TOLERANCE))) {
+    raise_probability_error(g);
+  }
+}
+
+/// @brief check the probabilities stored for a sample do not sum above one
+///
+/// Layout 2 leaves the last probability of each group out of the file, and the
+/// reader infers it as one minus the sum of the stored values, so a group
+/// summing above one has no valid encoding. Note this only bounds the stored
+/// values from above: probabilities which sum to less than one are still
+/// written, since the caller may legitimately be storing a partial
+/// distribution.
+static inline void check_cumulative(double cumulative) {
+  if (cumulative > 1.0 + PROB_TOLERANCE) {
+    raise_cumulative_error(cumulative);
+  }
+}
+
 static bool missing_genotypes(double *genotypes, std::uint32_t size) {
   std::uint16_t nan_count = 0;
   for (std::uint32_t i=0; i<size; i++) {
@@ -242,13 +297,21 @@ static std::vector<std::uint8_t> encode_layout1(
   std::uint16_t scaled;
   bool missing;
   double g;
+  double cumulative;
   for (std::uint32_t j=0; j < geno_len; j+=3) {
     missing = missing_genotypes(&genotypes[j], 3);
+    cumulative = 0.0;
     for (std::uint32_t k=0; k<3; k++) {
       g = genotypes[j + k];
       if (missing) {
         g = 0;
       }
+      // layout 1 scales by 32768 and stores 16-bit values, so the field itself
+      // would hold values up to 2.0. Hold it to the same range as layout 2, so
+      // that the two layouts accept the same genotypes
+      check_probability(g);
+      cumulative += g;
+      check_cumulative(cumulative);
       scaled32 = (std::int32_t)std::round(g * 32768);
       // check the value is in bounds
       if ((scaled32 < 0) || (scaled32 > 65535)) {
@@ -360,7 +423,9 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
       if (missing) {
         g = 0;
       }
+      check_probability(g);
       cumulative += g;
+      check_cumulative(cumulative);
       previous = running;
       running = scale_cumulative(cumulative, factor, previous);
       value = running - previous;
@@ -374,6 +439,17 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
         std::memcpy(&encoded[byte_idx], &window, 8);
       }
       bit_idx += bit_depth;
+    }
+    // the last probability is inferred by the reader as one minus the stored
+    // values, rather than being stored itself, so check it as part of the total.
+    // Otherwise a sample whose stored values are individually fine but whose
+    // total runs over one would be written with a different final probability
+    // than the caller passed in.
+    if (!missing) {
+      g = genotypes[i + n_probs - 1];
+      check_probability(g);
+      cumulative += g;
+      check_cumulative(cumulative);
     }
   }
   return genotype_offset + (bit_idx / 8) + (std::uint32_t)((bit_idx % 8) > 0);
@@ -430,7 +506,9 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
         if (missing) {
           g = 0;
         }
+        check_probability(g);
         cumulative += g;
+        check_cumulative(cumulative);
         previous = running;
         running = scale_cumulative(cumulative, factor, previous);
         value = running - previous;
@@ -440,6 +518,13 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
         std::memcpy(&encoded[byte_idx], &window, 8);
         bit_idx += bit_depth;
         i += 1;
+      }
+      // as above, the final probability of the haplotype is inferred, not stored
+      if (!missing) {
+        g = genotypes[i];
+        check_probability(g);
+        cumulative += g;
+        check_cumulative(cumulative);
       }
       i += 1;
     }

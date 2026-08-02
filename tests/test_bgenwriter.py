@@ -364,6 +364,106 @@ class TestBgenWriter(unittest.TestCase):
                 self.assertTrue(np.all((dose >= 0) & (dose <= 2)),
                                 f'dosages out of range: {dose}')
 
+    def test_probabilities_out_of_range(self):
+        ''' check we reject genotype probabilities outside 0-1
+
+        Layout 1 always checked this, but layout 2 used to cast whatever it was
+        given into an unsigned integer, so a negative or too-large probability
+        wrapped around into an unrelated value.
+        '''
+        for layout, compression in [(1, 'zlib'), (2, 'zstd')]:
+            for label, geno in [
+                    ('negative', np.array([[-0.5, 0.7, 0.8]] * 3)),
+                    ('above one', np.array([[2.0, 0.0, -1.0]] * 3)),
+                    ('infinite', np.array([[np.inf, 0.0, 0.0]] * 3)),
+                    ]:
+                path = self.tmpdir / f'oob_{layout}_{label.replace(" ", "")}.bgen'
+                with BgenWriter(path, 3, samples=['a', 'b', 'c'], layout=layout,
+                                compression=compression) as bfile:
+                    with self.assertRaisesRegex(ValueError, 'between 0 and 1'):
+                        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'],
+                                          geno)
+
+    def test_probabilities_sum_above_one(self):
+        ''' check we reject genotype probabilities which sum above one
+
+        Only the first probabilities are stored, and the reader infers the last
+        as one minus their sum, so a sample summing above one cannot be encoded.
+        '''
+        for layout, compression in [(1, 'zlib'), (2, 'zstd')]:
+            path = self.tmpdir / f'sum_{layout}.bgen'
+            geno = np.array([[0.5, 0.9, 0.1]] * 3)
+            with BgenWriter(path, 3, samples=['a', 'b', 'c'], layout=layout,
+                            compression=compression) as bfile:
+                with self.assertRaisesRegex(ValueError, 'sum to more than 1'):
+                    bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+
+    def test_phased_probabilities_out_of_range(self):
+        ''' check phased probabilities are checked within each haplotype
+        '''
+        path = self.tmpdir / 'temp.bgen'
+        with BgenWriter(path, 3, samples=['a', 'b', 'c']) as bfile:
+            # the second haplotype of each sample sums above one
+            geno = np.array([[0.3, 0.7, 0.8, 0.8]] * 3)
+            with self.assertRaisesRegex(ValueError, 'sum to more than 1'):
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                                  phased=True)
+
+            geno = np.array([[0.3, 0.7, -0.2, 1.2]] * 3)
+            with self.assertRaisesRegex(ValueError, 'between 0 and 1'):
+                bfile.add_variant('var2', 'rs2', 'chr1', 11, ['A', 'C'], geno,
+                                  phased=True)
+
+    def test_partly_missing_phased_sample(self):
+        ''' check a sample with only some haplotypes missing is rejected
+
+        A fully missing sample is stored with a missingness flag, but there is
+        nowhere to record that just one haplotype of a sample is missing.
+        '''
+        path = self.tmpdir / 'temp.bgen'
+        with BgenWriter(path, 2, samples=['a', 'b']) as bfile:
+            geno = np.array([[0.5, 0.5, float('nan'), float('nan')],
+                             [0.2, 0.8, 0.5, 0.5]])
+            with self.assertRaisesRegex(ValueError, 'must encode all as missing'):
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                                  phased=True)
+
+    def test_probabilities_within_rounding_tolerance(self):
+        ''' check probabilities just outside 0-1 are still accepted
+
+        The reader hands back float32, so probabilities which have been through
+        a read/write round trip can sit a few float32 epsilons outside the legal
+        range, and those must not be rejected.
+        '''
+        path = self.tmpdir / 'temp.bgen'
+        geno = np.array([[-8.940697e-08, 0.5, 0.5],
+                         [0.5, 0.5, 2.98023e-08],
+                         [1 + 5.96046e-08, 0.0, 0.0],
+                         ])
+        with BgenWriter(path, 3, samples=['a', 'b', 'c']) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+
+        with BgenReader(path, delay_parsing=True) as bfile:
+            probs = bfile[0].probabilities
+            self.assertTrue(np.all((probs >= -1e-7) & (probs <= 1 + 1e-7)))
+
+    def test_probabilities_summing_below_one(self):
+        ''' check probabilities summing to less than one are still written
+
+        The bgen spec only requires the stored values to sum to at most the
+        maximum, so a caller storing a partial distribution is legal.
+        '''
+        path = self.tmpdir / 'temp.bgen'
+        geno = np.array([[0.1, 0.4, 0.05], [0.2, 0.1, 0.1], [0.0, 0.0, 0.0]])
+        with BgenWriter(path, 3, samples=['a', 'b', 'c']) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                              bit_depth=16)
+
+        with BgenReader(path, delay_parsing=True) as bfile:
+            probs = bfile[0].probabilities
+            # the first two probabilities are stored, so they round trip
+            self.assertTrue(np.allclose(probs[:, :2], geno[:, :2], atol=1e-4))
+
     def test_more_alleles(self):
         ''' check writing to different bit depths works
         '''
