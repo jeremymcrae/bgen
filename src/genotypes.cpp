@@ -434,6 +434,28 @@ void Genotypes::parse_ploidy() {
         missing.push_back(x);
       }
     }
+    // The per-sample ploidy sizes the probability reads and writes, but the
+    // arrays those go into are sized from max_ploidy, so a sample outside the
+    // declared bounds would write past the end of its row - and past the end of
+    // the array for the last sample. fast_range is vectorised, so this is
+    // cheaper than tracking the range in the loop above.
+    Range range = fast_range(ploidy.get(), n_samples);
+    if ((range._max > (std::uint8_t) max_ploidy) ||
+        (range._min < (std::uint8_t) min_ploidy)) {
+      // this throws partway through the header parse, so idx and bit_depth are
+      // not yet set for this variant. Clear has_ploidy so a later call redoes
+      // the whole parse and fails here again, rather than taking the shortcut in
+      // load_data_and_parse_header and carrying on with a half parsed header.
+      // The missing list has to be emptied too, or that reparse doubles it up.
+      has_ploidy = false;
+      missing.clear();
+      throw std::invalid_argument("bgen variant has sample ploidies from " +
+                                  std::to_string((int) range._min) + " to " +
+                                  std::to_string((int) range._max) +
+                                  ", outside the " + std::to_string(min_ploidy) +
+                                  " to " + std::to_string(max_ploidy) +
+                                  " range the variant declares");
+    }
   }
   idx += n_samples;
 }

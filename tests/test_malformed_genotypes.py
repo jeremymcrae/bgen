@@ -31,6 +31,39 @@ def write_bgen(path, n_samples, compression=None, layout=2, bit_depth=8,
     return path
 
 
+def write_variable_ploidy(path, n_samples, ploidy, n_alleles=2, phased=False,
+                          bit_depth=8, missing=()):
+    ''' write a bgen whose samples do not all share the same ploidy
+
+    Variable ploidy is stored as a byte per sample, which is what the ploidy
+    range check works on, so these files are the ones to patch for it.
+    '''
+    ploidy = np.asarray(ploidy, dtype=np.uint8)
+    widest = int(ploidy.max())
+    if phased:
+        probs = np.full((n_samples, n_alleles * widest), np.nan)
+        for i, ploid in enumerate(ploidy):
+            for hap in range(int(ploid)):
+                cols = slice(hap * n_alleles, (hap + 1) * n_alleles)
+                probs[i, cols] = 1 / n_alleles
+    else:
+        widest_probs = math.comb(widest + n_alleles - 1, n_alleles - 1)
+        probs = np.full((n_samples, widest_probs), np.nan)
+        for i, ploid in enumerate(ploidy):
+            k = math.comb(int(ploid) + n_alleles - 1, n_alleles - 1)
+            probs[i, :k] = 1 / k
+    for i in missing:
+        probs[i] = np.nan
+    with BgenWriter(path, n_samples,
+                    samples=[f's{i}' for i in range(n_samples)], layout=2,
+                    compression=None) as bfile:
+        bfile.add_variant(varid='v', rsid='rs', chrom='01', pos=1,
+                          alleles=[f'A{i}' for i in range(n_alleles)],
+                          genotypes=probs, ploidy=ploidy, phased=phased,
+                          bit_depth=bit_depth)
+    return path
+
+
 def block_offset(path, index=0):
     ''' byte offset of a variant's genotype block length field
 
@@ -256,6 +289,132 @@ class TestMalformedGenotypes(unittest.TestCase):
                     var = next(iter(bfile))
                     with self.assertRaisesRegex(ValueError, 'too short'):
                         var.probabilities
+
+    def test_sample_ploidy_above_declared_max(self):
+        ''' a sample ploidy above the variant's max_ploidy is rejected
+
+        The probabilities are written into rows sized from the declared
+        max_ploidy, but how many values go into each row is worked out from that
+        sample's own ploidy byte. A byte above max_ploidy therefore wrote past
+        the end of its row, and past the end of the numpy array on the last
+        sample - which corrupted the heap.
+        '''
+        n = 100
+        for target in [3, 7, 20, 63]:
+            path = write_variable_ploidy(self.tmpdir / 'a.bgen', n,
+                                         [1] + [2] * (n - 1))
+            offset = block_offset(path)
+            data = bytearray(path.read_bytes())
+            first = offset + 4 + 8
+            # raise the last sample, and lower others to hold the total ploidy
+            # steady, so this is not caught by the block size check instead
+            data[first + n - 1] = target
+            need = target - 2
+            i = 1
+            while need > 0 and i < n - 1:
+                if data[first + i] == 2:
+                    data[first + i] = 1
+                    need -= 1
+                i += 1
+            path.write_bytes(bytes(data))
+
+            with BgenReader(path) as bfile:
+                var = next(iter(bfile))
+                with self.assertRaisesRegex(ValueError, 'ploidies'):
+                    var.probabilities
+
+    def test_sample_ploidy_below_declared_min(self):
+        ''' a sample ploidy below the variant's min_ploidy is rejected
+
+        This gave a probabilities array of the wrong shape rather than reading
+        out of bounds, but it is the same disagreement between the declared
+        bounds and the per-sample values.
+        '''
+        n = 100
+        path = write_variable_ploidy(self.tmpdir / 'a.bgen', n,
+                                     [3] + [2] * (n - 1))
+        offset = block_offset(path)
+        data = bytearray(path.read_bytes())
+        data[offset + 4 + 8 + n - 1] = 1
+        path.write_bytes(bytes(data))
+
+        with BgenReader(path) as bfile:
+            var = next(iter(bfile))
+            with self.assertRaisesRegex(ValueError, 'ploidies'):
+                var.probabilities
+
+    def test_out_of_range_ploidy_rejected_by_all_accessors(self):
+        ''' every accessor rejects an out of range ploidy, however often asked
+
+        parse_ploidy throws partway through the header parse, so it has to undo
+        its own state or a later call takes the already-parsed shortcut and
+        carries on with a half parsed header.
+        '''
+        n = 100
+        accessors = ['probabilities', 'ploidy', 'minor_allele_dosage',
+                     'alt_dosage', 'is_phased']
+        for first in accessors:
+            path = write_variable_ploidy(self.tmpdir / 'a.bgen', n,
+                                         [1] + [2] * (n - 1))
+            offset = block_offset(path)
+            data = bytearray(path.read_bytes())
+            fst = offset + 4 + 8
+            # hold the ploidy total steady, so this is rejected for its ploidy
+            # range rather than by the block size check
+            data[fst + n - 1] = 20
+            need = 20 - 2
+            i = 1
+            while need > 0 and i < n - 1:
+                if data[fst + i] == 2:
+                    data[fst + i] = 1
+                    need -= 1
+                i += 1
+            path.write_bytes(bytes(data))
+
+            with BgenReader(path) as bfile:
+                var = next(iter(bfile))
+                with self.assertRaisesRegex(ValueError, 'ploidies'):
+                    getattr(var, first)
+                for _ in range(2):
+                    for name in accessors:
+                        with self.assertRaisesRegex(ValueError, 'ploidies'):
+                            getattr(var, name)
+
+    def test_valid_ploidy_range_still_reads(self):
+        ''' ploidies which match the declared bounds must not be rejected
+
+        Including the repeat read, since the check has to leave the missing
+        sample list alone on the way through.
+        '''
+        n = 30
+        cases = [[1, 2] * (n // 2), [1, 2, 3] * (n // 3), [2] * n, [1] * n,
+                 [3, 1, 2] * (n // 3)]
+        for ploidy in cases:
+            for phased in [False, True]:
+                path = write_variable_ploidy(self.tmpdir / 'a.bgen', n, ploidy,
+                                             phased=phased)
+                with BgenReader(path) as bfile:
+                    var = next(iter(bfile))
+                    first = var.probabilities
+                    second = var.probabilities
+                    self.assertEqual(len(var.ploidy), n)
+                    self.assertTrue(np.array_equal(np.nan_to_num(first, nan=-9),
+                                                   np.nan_to_num(second, nan=-9)))
+
+    def test_valid_ploidy_with_missing_samples_still_reads(self):
+        ''' the check must not disturb the missing sample list on a reparse
+        '''
+        n = 30
+        ploidy = [1, 2] * (n // 2)
+        path = write_variable_ploidy(self.tmpdir / 'a.bgen', n, ploidy,
+                                     missing=[5, 11])
+        with BgenReader(path) as bfile:
+            var = next(iter(bfile))
+            first = var.probabilities
+            second = var.probabilities
+            # the two missing samples are all-nan rows, on both reads
+            self.assertEqual(int(np.isnan(first).all(axis=1).sum()), 2)
+            self.assertEqual(int(np.isnan(second).all(axis=1).sum()), 2)
 
     def test_valid_blocks_still_read(self):
         ''' the checks must not reject any of the blocks the writer produces
