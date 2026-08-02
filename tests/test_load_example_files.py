@@ -98,9 +98,12 @@ class TestExampleBgens(unittest.TestCase):
         orig_samples = orig.samples
         
         # construct a bgen file without any sample IDs inside (otherwise 
-        # the internal IDs take priority).
+        # the internal IDs take priority). The variant data is copied across as
+        # raw bytes, so the layout and compression have to match the source
         bgen_path = self.folder / 'temp.bgen'
-        with BgenWriter(bgen_path, n_samples=len(orig.samples)) as bfile:
+        with BgenWriter(bgen_path, n_samples=len(orig.samples),
+                        layout=orig.header.layout,
+                        compression=orig.header.compression) as bfile:
             for var in orig:
                 bfile.add_variant_direct(var)
         
@@ -143,7 +146,9 @@ class TestExampleBgens(unittest.TestCase):
         
         # build a bgen without internal sample IDs, so the sample file is used
         orig = BgenReader(self.folder / 'complex.bgen')
-        with BgenWriter(bgen_path, n_samples=len(orig.samples)) as bfile:
+        with BgenWriter(bgen_path, n_samples=len(orig.samples),
+                        layout=orig.header.layout,
+                        compression=orig.header.compression) as bfile:
             for var in orig:
                 bfile.add_variant_direct(var)
         orig.close()

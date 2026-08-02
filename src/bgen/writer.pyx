@@ -123,6 +123,7 @@ cdef class BgenWriter:
     cdef bool is_open
     cdef object indexer
     cdef int layout
+    cdef object compression
     cdef uint32_t n_samples
     def __cinit__(self, path, uint32_t n_samples, samples=None, compression='zstd',
                   int layout=2, metadata=None):
@@ -146,6 +147,7 @@ cdef class BgenWriter:
         
         self.n_samples = n_samples
         self.layout = layout
+        self.compression = compression
 
         # re-define variables into cpp objects
         cdef string _metadata = metadata.encode('utf8') if metadata is not None else b''
@@ -306,9 +308,21 @@ cdef class BgenWriter:
 
     def add_variant_direct(self, variant):
         ''' insert a BgenVar directly into the bgen file
+
+        This copies the variant's genotype data across as raw bytes, without
+        decoding it, so the destination bgen has to be able to hold that data
+        unchanged. That means the sample count, layout and compression scheme all
+        have to match the bgen the variant came from, otherwise the copied bytes
+        would be misinterpreted when read back.
+
+        Args:
+            variant: a BgenVar from a bgen file with the same samples, layout and
+                compression as this file
         '''
         if not self.is_open:
             raise ValueError("bgen file is closed")
+
+        self._check_compatible(variant)
 
         chrom = variant.chrom
         pos = int(variant.pos)
@@ -319,6 +333,31 @@ cdef class BgenWriter:
         end_offset = var_offset + len(data)
 
         self.indexer.add_variant(chrom, pos, rsid, alleles, var_offset, end_offset - var_offset)
+
+    def _check_compatible(self, variant):
+        ''' check a variant's data can be copied into this file unchanged
+
+        Without this the mismatch is only noticed when the resulting bgen is
+        read, which reports a confusing error against the new file rather than
+        the copy that caused it.
+        '''
+        n_samples = getattr(variant, 'n_samples', None)
+        layout = getattr(variant, 'layout', None)
+        compression = getattr(variant, 'compression', None)
+        if n_samples is None or layout is None:
+            # not a BgenVar, so let copy_data() report the problem
+            return
+
+        if n_samples != self.n_samples:
+            raise ValueError(f'cannot copy variant data directly: the variant has '
+                             f'{n_samples} samples, but this bgen has {self.n_samples}')
+        if layout != self.layout:
+            raise ValueError(f'cannot copy variant data directly: the variant uses '
+                             f'layout {layout}, but this bgen uses layout {self.layout}')
+        if compression != self.compression:
+            raise ValueError(f'cannot copy variant data directly: the variant uses '
+                             f'{compression} compression, but this bgen uses '
+                             f'{self.compression}')
 
     def __enter__(self):
         return self

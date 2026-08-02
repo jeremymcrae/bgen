@@ -164,6 +164,11 @@ cdef class OpenStatus:
     def __reduce__(self):
         return (self.__class__, ())
 
+# compression flags as stored in the bgen header, mapped to the names the
+# BgenWriter accepts, so a variant copied between files can be checked. this is
+# cdef so it stays private to the module, and shared by BgenHeader and BgenVar
+cdef dict COMPRESSION_FORMATS = {0: None, 1: 'zlib', 2: 'zstd'}
+
 cdef class BgenHeader:
     ''' holds information about the Bgen file, obtained from the intial header.
     '''
@@ -174,7 +179,6 @@ cdef class BgenHeader:
     cdef int _layout
     cdef bool _has_sample_ids
     cdef string _metadata
-    cdef object compress_formats
     def __cinit__(self, uint32_t offset, uint32_t nvariants, uint32_t nsamples,
             int compression, int layout, bool has_sample_ids, string metadata):
         self._offset = offset
@@ -184,7 +188,6 @@ cdef class BgenHeader:
         self._layout = layout
         self._has_sample_ids = has_sample_ids
         self._metadata = metadata
-        self.compress_formats = {0: None, 1: 'zlib', 2: 'zstd'}
     
     def __repr__(self):
         return f'BgenHeader(offset={self.offset}, nvariants={self.nvariants}, ' \
@@ -198,7 +201,7 @@ cdef class BgenHeader:
     @property
     def nvariants(self): return self._nvariants
     @property
-    def compression(self): return self.compress_formats[self._compression]
+    def compression(self): return COMPRESSION_FORMATS[self._compression]
     @property
     def layout(self): return self._layout
     @property
@@ -223,7 +226,7 @@ cdef class BgenVar:
     cdef Variant * thisptr
     cdef IStream handle
     cdef uint64_t offset
-    cdef int layout, compression, expected_n
+    cdef int _layout, _compression, expected_n
     cdef bool is_stdin
     cdef OpenStatus is_open
     def __cinit__(self,
@@ -237,8 +240,8 @@ cdef class BgenVar:
                   ):
         self.handle = handle
         self.offset = offset
-        self.layout = layout
-        self.compression = compression
+        self._layout = layout
+        self._compression = compression
         self.expected_n = expected_n
         self.is_stdin = is_stdin
         self.is_open = is_open
@@ -252,10 +255,28 @@ cdef class BgenVar:
     def __str__(self):
        return f'{self.rsid} - {self.chrom}:{self.pos} {self.alleles}'
     
+    @property
+    def layout(self):
+        ''' bgen layout the variant data is encoded with (1 or 2)
+        '''
+        return self._layout
+    
+    @property
+    def compression(self):
+        ''' compression scheme of the variant data (None, 'zlib' or 'zstd')
+        '''
+        return COMPRESSION_FORMATS[self._compression]
+    
+    @property
+    def n_samples(self):
+        ''' number of samples the variant holds genotypes for
+        '''
+        return self.expected_n
+    
     cdef tuple _init_args(self):
         ''' the arguments needed to rebuild an equivalent BgenVar
         '''
-        return (self.handle, self.thisptr.offset, self.layout, self.compression,
+        return (self.handle, self.thisptr.offset, self._layout, self._compression,
                 self.expected_n, self.is_stdin, self.is_open)
     
     def __reduce__(self):

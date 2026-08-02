@@ -635,6 +635,83 @@ class TestBgenWriter(unittest.TestCase):
                 mask = np.isfinite(var1.probabilities)
                 self.assertTrue((var1.probabilities[mask] == var2.probabilities[mask]).all())
 
+    def test_add_variant_direct_mismatched_file(self):
+        ''' check we reject copying variant data into an incompatible bgen
+
+        add_variant_direct copies the genotype block across as raw bytes, so the
+        destination has to interpret those bytes the same way as the source. If
+        the sample count, layout or compression differ, the copy used to be
+        written anyway, and only failed later when the new bgen was read.
+        '''
+        source = self.tmpdir / 'source.bgen'
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25], [0.1, 0.2, 0.7]])
+        with BgenWriter(source, 3, samples=['a', 'b', 'c'], layout=2,
+                        compression='zstd') as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+
+        mismatches = [
+            ('samples', dict(n_samples=5, layout=2, compression='zstd'), 'samples'),
+            ('layout', dict(n_samples=3, layout=1, compression='zlib'), 'layout'),
+            ('compression', dict(n_samples=3, layout=2, compression='zlib'),
+             'compression'),
+            ('uncompressed', dict(n_samples=3, layout=2, compression=None),
+             'compression'),
+            ]
+        with BgenReader(source) as bfile:
+            var = bfile[0]
+            for label, kwargs, message in mismatches:
+                dest = self.tmpdir / f'dest_{label}.bgen'
+                n = kwargs.pop('n_samples')
+                with BgenWriter(dest, n, samples=[f'{i}' for i in range(n)],
+                                **kwargs) as output:
+                    with self.assertRaisesRegex(ValueError, message):
+                        output.add_variant_direct(var)
+
+    def test_add_variant_direct_all_layouts(self):
+        ''' check copying variant data works for each layout and compression
+        '''
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25], [0.1, 0.2, 0.7]])
+        for layout, compression in [(1, None), (1, 'zlib'), (2, None),
+                                    (2, 'zlib'), (2, 'zstd')]:
+            source = self.tmpdir / f'src_{layout}_{compression}.bgen'
+            with BgenWriter(source, 3, samples=['a', 'b', 'c'], layout=layout,
+                            compression=compression) as bfile:
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+
+            dest = self.tmpdir / f'dst_{layout}_{compression}.bgen'
+            with BgenReader(source) as bfile:
+                with BgenWriter(dest, 3, samples=['a', 'b', 'c'], layout=layout,
+                                compression=compression) as output:
+                    for var in bfile:
+                        output.add_variant_direct(var)
+
+            # the copy has to hold the same genotypes as the source
+            with BgenReader(source) as first, BgenReader(dest) as second:
+                for var1, var2 in zip(first, second):
+                    self.assertTrue((var1.probabilities == var2.probabilities).all(),
+                                    f'layout={layout} compression={compression}')
+
+    def test_variant_file_properties(self):
+        ''' check a BgenVar reports the layout and compression it was read with
+        '''
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25], [0.1, 0.2, 0.7]])
+        for layout, compression in [(1, None), (1, 'zlib'), (2, None),
+                                    (2, 'zlib'), (2, 'zstd')]:
+            path = self.tmpdir / f'props_{layout}_{compression}.bgen'
+            with BgenWriter(path, 3, samples=['a', 'b', 'c'], layout=layout,
+                            compression=compression) as bfile:
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+
+            with BgenReader(path) as bfile:
+                var = bfile[0]
+                self.assertEqual(var.layout, layout)
+                self.assertEqual(var.compression, compression)
+                self.assertEqual(var.n_samples, 3)
+                # and these have to agree with the file header
+                self.assertEqual(var.layout, bfile.header.layout)
+                self.assertEqual(var.compression, bfile.header.compression)
+                self.assertEqual(var.n_samples, bfile.header.nsamples)
+
     def test_multiple_read_writes(self):
         ''' check values pass correctly through multiple rounds of read/writes
         '''

@@ -83,6 +83,21 @@ class BgenVar:
     @property
     def alleles(self) -> list[str]: ...
     @property
+    def layout(self) -> int:
+        ''' bgen layout the variant data is encoded with (1 or 2)
+        '''
+        ...
+    @property
+    def compression(self) -> str | None:
+        ''' compression scheme of the variant data (None, 'zlib' or 'zstd')
+        '''
+        ...
+    @property
+    def n_samples(self) -> int:
+        ''' number of samples the variant holds genotypes for
+        '''
+        ...
+    @property
     def is_phased(self) -> bool: ...
     @property
     def ploidy(self) -> NDArray[np.uint8]:
