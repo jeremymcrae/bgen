@@ -1,6 +1,4 @@
 
-import glob
-import io
 import os
 from pathlib import Path
 from setuptools import setup, Extension
