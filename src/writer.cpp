@@ -263,22 +263,48 @@ static std::vector<std::uint8_t> encode_layout1(
   return encoded;
 }
 
-/// @brief figure out the 64-bit pattern to insert a encoded genotype probability
-/// @param geno_prob probability for genotype state
+/// @brief scale a running total of probabilities into the encoded integer range
+///
+/// Layout 2 stores all but the last probability for a sample (or for a
+/// haplotype, if phased), and the reader infers the last one as
+/// max - sum(stored), so the stored values have to sum to at most max. Scaling
+/// each probability on its own breaks that: at a bit depth of 8, two
+/// probabilities of 0.5 each round to 128, which sums to 256 when the maximum
+/// is 255, and the reader then infers a negative final probability. Scaling the
+/// running total instead means the stored values sum to round(total * max), so
+/// the constraint holds for any probabilities that sum to 1.0.
+///
+/// @param cumulative running total of the probabilities so far, including this one
+/// @param factor scaling factor, the maximum encoded value for the bit depth
+/// @param previous value this returned for the preceding probability, so that
+///        clamping cannot make the current probability encode as negative
+/// @return the running total scaled to the encoded integer range
+static std::uint64_t scale_cumulative(double cumulative,
+                                      double &factor,
+                                      std::uint64_t previous)
+{
+  double scaled = std::round(cumulative * factor);
+  // the comparison order also catches nan, which must not reach the cast below
+  if (!(scaled >= (double) previous)) {
+    return previous;
+  }
+  if (scaled > factor) {
+    return (std::uint64_t) factor;
+  }
+  return (std::uint64_t) scaled;
+}
+
+/// @brief figure out the 64-bit pattern to insert an encoded genotype probability
+/// @param value encoded genotype probability, already scaled to the bit depth
 /// @param encoded vector of proabilties, set up as 8-bit. We pull a 64-bit slice
 ///        of this at the pointer position, in order to swap in the bits for the
 ///        encoded genotype at the correct offset
 /// @param bit_remainder bit offset to place the encoded genotype at
-/// @param factor scaling factor for the genotype, to convert genotype to integer
-//         in the appropriate range
 /// @return data with probability inserted
-static std::uint64_t emplace_probability(double &geno_prob,
+static std::uint64_t emplace_probability(std::uint64_t value,
                                   std::uint8_t *encoded,
-                                  std::uint32_t &bit_remainder,
-                                  double &factor)
+                                  std::uint32_t &bit_remainder)
 {
-  double multiplied;
-  std::uint64_t converted;
   std::uint64_t window;
 
   // read the full 64 bits that the caller writes back, so that the bits already
@@ -286,9 +312,7 @@ static std::uint64_t emplace_probability(double &geno_prob,
   // 39 bits, so a narrower read would drop the top of it, and would blank
   // whatever the window covers beyond the bytes it read.
   std::memcpy(&window, encoded, sizeof(window));
-  multiplied = geno_prob * factor;
-  converted = std::round(multiplied);
-  window |= (converted << bit_remainder);
+  window |= (value << bit_remainder);
   return window;
 }
 
@@ -315,6 +339,8 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
   std::uint32_t bit_remainder;
   std::uint64_t window;
   double g;
+  double cumulative;
+  std::uint64_t running, previous, value;
   for (std::uint32_t i=0; i<(n_samples*max_probs); i+= max_probs) {
     if (!constant_ploidy) {
       _ploid = (int)(encoded[ploidy_offset + (i / max_probs)] &= 63);
@@ -326,18 +352,25 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
     if (missing) {
       encoded[ploidy_offset + (i / max_probs)] |= 0x80;
     }
+    // the probabilities for a sample sum to 1.0, so scale their running total
+    cumulative = 0.0;
+    running = 0;
     for (std::uint32_t j = 0; j < (n_probs - 1); j++) {
       g = genotypes[i + j];
       if (missing) {
         g = 0;
       }
+      cumulative += g;
+      previous = running;
+      running = scale_cumulative(cumulative, factor, previous);
+      value = running - previous;
       byte_idx = genotype_offset + (bit_idx / 8);
       if (bit_depth == 8) {
         // fast path for 8-bit genotype data
-        encoded[byte_idx] = (std::uint8_t) std::round(g * factor);
+        encoded[byte_idx] = (std::uint8_t) value;
       } else {
         bit_remainder = bit_idx % 8;
-        window = emplace_probability(g, &encoded[byte_idx], bit_remainder, factor);
+        window = emplace_probability(value, &encoded[byte_idx], bit_remainder);
         std::memcpy(&encoded[byte_idx], &window, 8);
       }
       bit_idx += bit_depth;
@@ -368,6 +401,8 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
   std::uint32_t byte_idx, bit_remainder;
   std::uint64_t window;
   double g;
+  double cumulative;
+  std::uint64_t running, previous, value;
   std::uint32_t i = 0;
   std::uint32_t sample_idx=0;
   while (i < (n_samples * max_probs * max_ploidy)) {
@@ -385,16 +420,23 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
     // phased data is received in n_alleles * n_ploidy values, but is stored in
     // n_alleles * (n_ploidy - 1) values, where n_ploidy can differ per person.
     for (std::uint32_t k = 0; k < (std::uint32_t)_ploid; k++) {
-      // repeat for each haplotype
+      // repeat for each haplotype. The allele probabilities sum to 1.0 within a
+      // haplotype, so the running total restarts for each one
+      cumulative = 0.0;
+      running = 0;
       for (std::uint32_t j = 0; j < (n_probs - 1); j++) {
         // repeat for each allele
         g = genotypes[i];
         if (missing) {
           g = 0;
         }
+        cumulative += g;
+        previous = running;
+        running = scale_cumulative(cumulative, factor, previous);
+        value = running - previous;
         byte_idx = genotype_offset + (bit_idx / 8);
         bit_remainder = bit_idx % 8;
-        window = emplace_probability(g, &encoded[byte_idx], bit_remainder, factor);
+        window = emplace_probability(value, &encoded[byte_idx], bit_remainder);
         std::memcpy(&encoded[byte_idx], &window, 8);
         bit_idx += bit_depth;
         i += 1;

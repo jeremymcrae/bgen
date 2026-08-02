@@ -259,6 +259,111 @@ class TestBgenWriter(unittest.TestCase):
                     probs = x.probabilities
                     self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth))
     
+    def test_probabilities_stay_in_range(self):
+        ''' check the inferred final probability is never out of range
+
+        Layout 2 only stores all but the last probability per sample, and the
+        reader infers the last as max - sum(stored). Rounding each probability
+        independently let the stored values sum to more than max (e.g. 0.5 and
+        0.5 both round to 128 at a bit depth of 8, but the max is 255), which
+        made the reader infer a negative probability.
+        '''
+        geno = np.array([[0.5, 0.5, 0.0],
+                         [0.0, 0.5, 0.5],
+                         [0.25, 0.5, 0.25],
+                         ])
+
+        for bit_depth in range(1, 33):
+            path = self.tmpdir / f'range_{bit_depth}.bgen'
+            with BgenWriter(path, 3, samples=['a', 'b', 'c']) as bfile:
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                                  bit_depth=bit_depth)
+
+            with BgenReader(path, delay_parsing=True) as bfile:
+                for x in bfile:
+                    probs = x.probabilities
+                    # allow for float32 error in the reader's remainder
+                    self.assertGreaterEqual(probs.min(), -1e-7,
+                                            f'negative probability at bit_depth={bit_depth}')
+                    self.assertLessEqual(probs.max(), 1 + 1e-7,
+                                         f'probability above one at bit_depth={bit_depth}')
+                    self.assertTrue(np.allclose(probs.sum(axis=1), 1.0, atol=1e-6),
+                                    f'probabilities do not sum to one at bit_depth={bit_depth}')
+
+    def test_probabilities_match_across_read_paths(self):
+        ''' check the constant-ploidy fast path agrees with the generic path
+
+        Reading 8-bit unphased diploid data uses a lookup table keyed on
+        255 - first - second, which read outside the table when the stored
+        values summed above 255, and so disagreed with the generic path.
+        '''
+        geno = np.array([[0.5, 0.5, 0.0],
+                         [0.0, 0.5, 0.5],
+                         [0.25, 0.5, 0.25],
+                         ])
+
+        fast_path = self.tmpdir / 'fast.bgen'
+        with BgenWriter(fast_path, 3, samples=['a', 'b', 'c']) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                              ploidy=2, bit_depth=8)
+
+        # a varying ploidy skips the fast path, but sample 0 and 1 stay diploid
+        generic_path = self.tmpdir / 'generic.bgen'
+        with BgenWriter(generic_path, 3, samples=['a', 'b', 'c']) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                              ploidy=np.array([2, 2, 1], dtype=np.uint8),
+                              bit_depth=8)
+
+        with BgenReader(fast_path, delay_parsing=True) as bfile:
+            fast = bfile[0].probabilities
+        with BgenReader(generic_path, delay_parsing=True) as bfile:
+            generic = bfile[0].probabilities
+
+        for i in range(2):
+            self.assertTrue(np.allclose(fast[i], generic[i, :3], atol=1e-7),
+                            f'sample {i}: {fast[i]} != {generic[i, :3]}')
+
+    def test_reading_probabilities_above_maximum(self):
+        ''' check a bgen storing probabilities summing above the maximum is safe
+
+        Older versions of this package wrote such files, and nothing stops a
+        third party from doing so. The reader used to index outside its lookup
+        table for these, which read whatever was adjacent in memory.
+        '''
+        path = self.tmpdir / 'temp.bgen'
+        geno = np.array([[1.0, 0.0, 0.0],
+                         [1.0, 0.0, 0.0],
+                         [1.0, 0.0, 0.0],
+                         ])
+        with BgenWriter(path, 3, samples=['a', 'b', 'c'],
+                        compression=None) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                              bit_depth=8)
+
+        # each sample stores (255, 0), so rewrite them to (255, 255), which sums
+        # to 510 and makes the inferred final probability 255 - 510 = -255
+        raw = bytearray(path.read_bytes())
+        patched = 0
+        for i in range(len(raw) - 1):
+            if raw[i] == 255 and raw[i + 1] == 0:
+                raw[i + 1] = 255
+                patched += 1
+        self.assertEqual(patched, 3)
+        path.write_bytes(bytes(raw))
+
+        with BgenReader(path, delay_parsing=True) as bfile:
+            for x in bfile:
+                probs = x.probabilities
+                self.assertTrue(np.all((probs >= 0) & (probs <= 1)),
+                                f'probabilities out of range: {probs}')
+                # the inferred probability is clamped to zero rather than read
+                # from outside the lookup table, which returned adjacent memory
+                self.assertTrue(np.all(probs[:, 2] == 0),
+                                f'expected zeroed final probability: {probs}')
+                dose = x.alt_dosage
+                self.assertTrue(np.all((dose >= 0) & (dose <= 2)),
+                                f'dosages out of range: {dose}')
+
     def test_more_alleles(self):
         ''' check writing to different bit depths works
         '''

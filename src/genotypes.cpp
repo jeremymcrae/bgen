@@ -406,6 +406,30 @@ static void haplotype_probs_avx2(char * uncompressed, std::uint32_t & idx,
 }
 #endif
 
+/// @brief look up the final probability of an unphased biallelic diploid sample
+///
+/// The final probability is inferred as the remainder, max - first - second, but
+/// nothing stops a bgen from storing values which sum to more than the maximum,
+/// which would index before the start of the table. Files written by older
+/// versions of this package can do so, since each probability used to be rounded
+/// independently. Clamping keeps the read inside the table, and reports the
+/// nearest representable probability of zero.
+static inline float remainder_lut8(std::uint8_t first, std::uint8_t second) {
+  int idx = 255 - (int) first - (int) second;
+  return lut8[(idx > 0) ? idx : 0];
+}
+
+/// @brief look up the alt dosage of an unphased biallelic diploid sample
+///
+/// The dosage index is first * 2 + second, which stays within the table while
+/// first + second <= 255, as the bgen spec requires. Malformed or older files can
+/// break that and index up to 765, so clamp to the last entry, which is the
+/// maximum possible dosage of 2.0.
+static inline float dosage_lut8(std::uint8_t first, std::uint8_t second) {
+  int idx = (int) first * 2 + (int) second;
+  return lut8[(idx < 511) ? idx : 510];
+}
+
 /// fast path for phased data with ploidy=2, and 8 bits per probability
 void Genotypes::fast_haplotype_probs(char * uncompressed, std::uint32_t idx, float * probs,  std::uint32_t & nrows) {
   std::uint32_t n = 0;
@@ -460,7 +484,7 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
       second = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + idx2 + 1]);
       probs[offset] = lut8[first];
       probs[offset + 1] = lut8[second];
-      probs[offset + 2] = lut8[255 - first - second];
+      probs[offset + 2] = remainder_lut8(first, second);
       idx2 += 2;
     }
   } else if (constant_ploidy & (max_probs == 2) & (bit_depth == 8)) {
@@ -714,16 +738,16 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
   // Also handles if we can't use the code above (not aarch64, x86_64 or lacks avx2)
   for (; n < (nrows - (nrows % 2)); n += 2) {
     // speed up throughput by calculating two samples at a time
-    dose[n] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]) * 2 +
-                   *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1])];
-    dose[n + 1] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 2]) * 2 +
-                       *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 3])];
+    dose[n] = dosage_lut8(*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]),
+                          *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1]));
+    dose[n + 1] = dosage_lut8(*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 2]),
+                              *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 3]));
     idx += 4;
   }
   // and finish off the final sample/s
   if (nrows % 2) {
-    dose[nrows - 1] = lut8[*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]) * 2 +
-                               *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1])];
+    dose[nrows - 1] = dosage_lut8(*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]),
+                                  *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1]));
   }
 }
 
