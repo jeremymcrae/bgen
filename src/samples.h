@@ -13,11 +13,19 @@ public:
   // the sample count is unsigned to match the bgen header field. Taking it as an
   // int would turn counts above INT_MAX negative, which then becomes a huge
   // size_t when it reaches resize(), and silently skips the loops below.
-  Samples(std::istream * handle, std::uint32_t n_samples);
+  // file_size bounds the sample block, and is zero when the size is unknown
+  Samples(std::istream * handle, std::uint32_t n_samples,
+          std::uint64_t file_size=0);
   Samples(std::string path, std::uint32_t n_samples);
   Samples(std::uint32_t n_samples);
   Samples() {}
+  const std::vector<std::string> & get_samples();
+private:
   std::vector<std::string> samples;
+  // number of placeholder IDs left to build, which is only non-zero for a bgen
+  // with no IDs of its own. Those are generated on request rather than up front,
+  // so the sample count cannot size an allocation before anything has checked it
+  std::uint32_t n_placeholders = 0;
 };
 
 } // namespace bgen

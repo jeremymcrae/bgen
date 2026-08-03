@@ -1,7 +1,10 @@
 
 from pathlib import Path
 import struct
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 import warnings
 
@@ -10,6 +13,32 @@ import numpy as np
 from bgen import BgenReader
 
 from tests.utils import load_gen_data
+
+try:
+    import resource
+    HAS_RLIMIT = hasattr(resource, 'RLIMIT_AS')
+except ImportError:
+    # windows has no resource module, so the memory capped tests are skipped there
+    HAS_RLIMIT = False
+
+# ceiling for the memory capped tests. Comfortably fits the interpreter, numpy and a
+# sub-megabyte bgen, but not one string per sample for a corrupt sample count
+MEMORY_CAP = 2 * 1024 ** 3
+
+def run_capped(code):
+    ''' run code in a subprocess under a memory cap
+    
+    The cap has to apply to the whole process, so this cannot run in-process. The
+    child inherits this process' sys.path, so it imports the same build under test
+    rather than any installed copy.
+    '''
+    preamble = textwrap.dedent(f'''
+        import resource, sys
+        sys.path[:] = {sys.path!r}
+        resource.setrlimit(resource.RLIMIT_AS, ({MEMORY_CAP}, {MEMORY_CAP}))
+        ''')
+    return subprocess.run([sys.executable, '-c', preamble + textwrap.dedent(code)],
+                          capture_output=True, text=True)
 
 class TestBgenReader(unittest.TestCase):
     ''' class to make sure BgenReader works correctly
@@ -23,6 +52,9 @@ class TestBgenReader(unittest.TestCase):
         ''' set path to folder with test data
         '''
         self.folder = Path(__file__).parent /  "data"
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.tmpdir = self._tempdir.name
+        self.addCleanup(self._tempdir.cleanup)
     
     def test_context_handler_closed_bgen_samples(self):
         ''' no samples available from exited BgenReader
@@ -193,6 +225,213 @@ class TestBgenReader(unittest.TestCase):
             path.write_bytes(bytes(data))
             with self.assertRaises(ValueError):
                 BgenReader(path, delay_parsing=True)
+    
+    def test_corrupt_sample_count_without_sample_ids(self):
+        ''' a corrupt sample count does not allocate when the IDs are not in the bgen
+        
+        The file size check only applies to the sample block, so with the sample ID
+        flag cleared there is nothing in the bgen to bound the count. Opening used
+        to build one string per claimed sample, so a tiny file cost gigabytes.
+        Reading genotypes is what detects the bad count.
+        '''
+        path = self._corrupt_count_bgen(self.tmpdir, 100_000_000)
+        bfile = BgenReader(path, delay_parsing=True)
+        self.assertEqual(bfile.header.nsamples, 100_000_000)
+        var = next(iter(bfile))
+        with self.assertRaises(ValueError):
+            var.probabilities
+        bfile.close()
+    
+    @unittest.skipUnless(HAS_RLIMIT, 'needs RLIMIT_AS to cap memory')
+    def test_opening_bgen_without_sample_ids_does_not_allocate(self):
+        ''' opening must not allocate memory proportional to the sample count
+        
+        Runs under a memory cap in a subprocess, since the point is the size of the
+        allocation rather than the result. Building 100 million IDs needs several GB,
+        so the cap fails the old behaviour while leaving ample room for the file
+        itself, which is under a megabyte.
+        '''
+        path = self._corrupt_count_bgen(self.tmpdir, 100_000_000)
+        out = run_capped(f'''
+            from bgen import BgenReader
+            bfile = BgenReader({str(path)!r}, delay_parsing=True)
+            assert bfile.header.nsamples == 100_000_000
+            bfile.close()
+            print('opened')
+            ''')
+        self.assertEqual(out.returncode, 0, msg=out.stderr[-2000:])
+        self.assertIn('opened', out.stdout)
+    
+    def _corrupt_count_bgen(self, folder, nsamples):
+        ''' copy a bgen, overstate its sample count and clear its sample ID flag
+        '''
+        data = bytearray((self.folder / 'example.16bits.bgen').read_bytes())
+        # nsamples is the 4 byte field at offset 12
+        struct.pack_into('<I', data, 12, nsamples)
+        # clear the has_sample_ids flag, the top bit of the flags field that ends
+        # the header
+        header_length = struct.unpack_from('<I', data, 4)[0]
+        flags = struct.unpack_from('<I', data, header_length)[0]
+        struct.pack_into('<I', data, header_length, flags & ~(1 << 31))
+        path = Path(folder) / f'corrupt.{nsamples}.bgen'
+        path.write_bytes(bytes(data))
+        return path
+    
+    def test_corrupt_sample_count_with_sample_file(self):
+        ''' a corrupt sample count does not allocate for an external sample file
+        
+        The IDs come from the .sample file, so the bgen cannot bound the count. The
+        list used to be sized from the count before reading, so it allocated for
+        every claimed sample before finding the file only held a few.
+        '''
+        path = self._corrupt_count_bgen(self.tmpdir, 100_000_000)
+        sample_path = Path(self.tmpdir) / 'few.sample'
+        sample_path.write_text('ID_1 ID_2 missing\n0 0 0\nsample_1 sample_1 0\n')
+        with self.assertRaises(ValueError):
+            BgenReader(path, sample_path=str(sample_path), delay_parsing=True)
+    
+    @unittest.skipUnless(HAS_RLIMIT, 'needs RLIMIT_AS to cap memory')
+    def test_sample_file_mismatch_does_not_allocate(self):
+        ''' a sample file shorter than the claimed count must not allocate first
+        '''
+        path = self._corrupt_count_bgen(self.tmpdir, 100_000_000)
+        sample_path = Path(self.tmpdir) / 'few2.sample'
+        sample_path.write_text('ID_1 ID_2 missing\n0 0 0\nsample_1 sample_1 0\n')
+        code = f'''
+            from bgen import BgenReader
+            try:
+                BgenReader({str(path)!r}, sample_path={str(sample_path)!r},
+                           delay_parsing=True)
+            except ValueError:
+                print('rejected')
+            '''
+        out = run_capped(code)
+        self.assertEqual(out.returncode, 0, msg=out.stderr[-2000:])
+        self.assertIn('rejected', out.stdout)
+    
+    def test_generated_sample_ids(self):
+        ''' a bgen without sample IDs still gets sequential placeholder IDs
+        
+        These are built on demand now, so check they are unchanged, and that asking
+        twice gives the same answer.
+        '''
+        path = self.folder / 'example.v11.bgen'
+        bfile = BgenReader(path, delay_parsing=True)
+        samples = bfile.samples
+        self.assertEqual(len(samples), 500)
+        self.assertEqual(samples[:3], ['0', '1', '2'])
+        self.assertEqual(samples[-1], '499')
+        self.assertEqual(bfile.samples, samples)
+        bfile.close()
+    
+    def test_sample_ids_from_sample_file(self):
+        ''' IDs from an external sample file are read in order
+        '''
+        data = bytearray((self.folder / 'example.16bits.bgen').read_bytes())
+        header_length = struct.unpack_from('<I', data, 4)[0]
+        flags = struct.unpack_from('<I', data, header_length)[0]
+        struct.pack_into('<I', data, header_length, flags & ~(1 << 31))
+        struct.pack_into('<I', data, 12, 3)
+        path = Path(self.tmpdir) / 'nosamples.bgen'
+        path.write_bytes(bytes(data))
+        sample_path = Path(self.tmpdir) / 'three.sample'
+        sample_path.write_text('ID_1 ID_2 missing\n0 0 0\n'
+                               'first first 0\nsecond second 0\nthird third 0\n')
+        bfile = BgenReader(path, sample_path=str(sample_path), delay_parsing=True)
+        self.assertEqual(bfile.samples, ['first', 'second', 'third'])
+        bfile.close()
+    
+    def test_sample_block_length_mismatch(self):
+        ''' a sample block whose length disagrees with its IDs is rejected
+        
+        The variants are found through the header offset, not by walking the sample
+        block, so a wrong block length used to pass unnoticed even though the file is
+        internally inconsistent.
+        '''
+        for delta in [100, -100, 2, -2]:
+            with self.subTest(delta=delta):
+                data = bytearray((self.folder / 'example.16bits.bgen').read_bytes())
+                # the sample block starts after the header, and opens with its own
+                # length
+                header_length = struct.unpack_from('<I', data, 4)[0]
+                pos = 4 + header_length
+                block_length = struct.unpack_from('<I', data, pos)[0]
+                struct.pack_into('<I', data, pos, block_length + delta)
+                path = Path(self.tmpdir) / f'block{delta}.bgen'
+                path.write_bytes(bytes(data))
+                with self.assertRaises(ValueError):
+                    BgenReader(path, delay_parsing=True)
+    
+    def test_sample_count_beyond_block_capacity(self):
+        ''' a count larger than the sample block could hold is rejected up front
+        
+        The block length caps how many IDs can follow it, since each carries a two
+        byte length prefix. A count above that cannot be satisfied whatever the block
+        contains, so it is rejected without reading the IDs.
+        '''
+        data = bytearray((self.folder / 'example.16bits.bgen').read_bytes())
+        header_length = struct.unpack_from('<I', data, 4)[0]
+        block_at = 4 + header_length
+        block_length = struct.unpack_from('<I', data, block_at)[0]
+        capacity = (block_length - 8) // 2
+        # keep the count in the block matching the header, so the mismatch under test
+        # is the capacity rather than the two counts disagreeing
+        for claimed in [capacity + 1, capacity * 2, 0xFFFFFFFF]:
+            with self.subTest(claimed=claimed):
+                struct.pack_into('<I', data, 12, claimed)
+                struct.pack_into('<I', data, block_at + 4, claimed)
+                path = Path(self.tmpdir) / f'cap{claimed}.bgen'
+                path.write_bytes(bytes(data))
+                with self.assertRaises(ValueError):
+                    BgenReader(path, delay_parsing=True)
+    
+    def test_sample_block_length_counts_ids_exactly(self):
+        ''' the block length must match the IDs to the byte
+        
+        The check adds two bytes of length prefix per ID to a running total, so it has
+        to cope with IDs that are empty, long, or contain spaces, and be off by one in
+        neither direction.
+        '''
+        cases = {'plain': [b'a', b'bb', b'ccc'],
+                 'empty id': [b'a', b'', b'c'],
+                 'spaces': [b'first last', b'x'],
+                 'long id': [b'z' * 1000, b'y'],
+                 'single': [b'only']}
+        for label, ids in cases.items():
+            for delta in [0, 1, -1]:
+                with self.subTest(ids=label, delta=delta):
+                    path = self._bgen_with_ids(ids, block_delta=delta)
+                    if delta == 0:
+                        bfile = BgenReader(path, delay_parsing=True)
+                        self.assertEqual(bfile.samples,
+                                         [x.decode('utf8') for x in ids])
+                        bfile.close()
+                    else:
+                        with self.assertRaises(ValueError):
+                            BgenReader(path, delay_parsing=True)
+    
+    def _bgen_with_ids(self, ids, block_delta=0):
+        ''' write a bgen holding exactly these sample IDs and no variants
+        '''
+        blob = b''.join(struct.pack('<H', len(x)) + x for x in ids)
+        block = struct.pack('<II', 8 + len(blob) + block_delta, len(ids)) + blob
+        header_length = 20
+        flags = (2 << 2) | (1 << 31)
+        data = struct.pack('<IIII', header_length + len(block), header_length, 0,
+                           len(ids))
+        data += b'bgen' + struct.pack('<I', flags) + block
+        path = Path(self.tmpdir) / f'ids{len(ids)}_{block_delta}_{len(blob)}.bgen'
+        path.write_bytes(data)
+        return path
+    
+    def test_valid_sample_block_still_accepted(self):
+        ''' the block length check must not reject an untouched file
+        '''
+        path = self.folder / 'example.16bits.bgen'
+        bfile = BgenReader(path, delay_parsing=True)
+        self.assertEqual(len(bfile.samples), 500)
+        self.assertEqual(bfile.samples[0], 'sample_001')
+        bfile.close()
     
     def test_corrupt_variant_count(self):
         ''' an impossible variant count does not exhaust memory

@@ -1,6 +1,7 @@
 
 from pathlib import Path
 import os
+import struct
 import subprocess
 import unittest
 import sys
@@ -8,6 +9,13 @@ import sys
 from bgen import BgenReader
 
 from tests.utils import load_gen_data, arrays_equal
+
+try:
+    import resource
+    HAS_RLIMIT = hasattr(resource, 'RLIMIT_AS')
+except ImportError:
+    # windows has no resource module, so the memory capped test is skipped there
+    HAS_RLIMIT = False
 
 class TestBgenStream(unittest.TestCase):
     ''' class to make sure BgenReader works correctly
@@ -49,6 +57,101 @@ class TestBgenStream(unittest.TestCase):
                               capture_output=True, env=env)
         # a double free aborts, which shows up as a negative (signal) returncode
         self.assertEqual(proc.returncode, 0, msg=proc.stderr.decode('utf8', 'replace'))
+        self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
+    
+    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
+    @unittest.skipUnless(HAS_RLIMIT, 'needs RLIMIT_AS to cap memory')
+    def test_streamed_bgen_corrupt_sample_count(self):
+        ''' a corrupt sample count on stdin must not size an allocation
+        
+        The file size check in the reader needs to seek to the end, so it is skipped
+        for a stream. That left the sample block, whose length and count both come
+        from the file, as the only thing sizing the sample list, so a stream that
+        claims millions of samples used to allocate for them all before running out
+        of data.
+        '''
+        n = 50_000_000
+        # a header claiming n samples, and a sample block sized to match, but with
+        # no ID data at all behind it
+        block = struct.pack('<II', 8 + n * 2, n)
+        header_length = 20
+        flags = (2 << 2) | (1 << 31)
+        data = struct.pack('<IIII', header_length + len(block), header_length, 0, n)
+        data += b'bgen' + struct.pack('<I', flags) + block
+        cap = 1024 ** 3
+        code = ('import resource\n'
+                f'resource.setrlimit(resource.RLIMIT_AS, ({cap}, {cap}))\n'
+                'from bgen import BgenReader\n'
+                'try:\n'
+                '    BgenReader("/dev/stdin")\n'
+                'except ValueError:\n'
+                '    print("ok")\n')
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
+        proc = subprocess.run([sys.executable, '-c', code], input=data,
+                              capture_output=True, env=env)
+        self.assertEqual(proc.returncode, 0,
+                         msg=proc.stderr.decode('utf8', 'replace'))
+        self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
+    
+    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
+    def test_streamed_bgen_sample_block_length_mismatch(self):
+        ''' a bad sample block length is caught on a stream as well as a file
+        
+        The check counts the bytes the IDs occupy rather than asking the stream for its
+        position, since tellg() returns -1 on a pipe. Reading the same bytes from a
+        pipe must therefore reach the same verdict as reading them from a file.
+        '''
+        path = self.folder / 'example.16bits.bgen'
+        for delta in [10, -10]:
+            with self.subTest(delta=delta):
+                data = bytearray(path.read_bytes())
+                header_length = struct.unpack_from('<I', data, 4)[0]
+                at = 4 + header_length
+                block_length = struct.unpack_from('<I', data, at)[0]
+                struct.pack_into('<I', data, at, block_length + delta)
+                code = ('from bgen import BgenReader\n'
+                        'try:\n'
+                        '    BgenReader("/dev/stdin", delay_parsing=True)\n'
+                        '    print("accepted")\n'
+                        'except ValueError:\n'
+                        '    print("rejected")\n')
+                env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
+                proc = subprocess.run([sys.executable, '-c', code],
+                                      input=bytes(data), capture_output=True,
+                                      env=env)
+                self.assertEqual(proc.returncode, 0,
+                                 msg=proc.stderr.decode('utf8', 'replace'))
+                self.assertEqual(proc.stdout.decode('utf8').strip(), 'rejected')
+    
+    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
+    def test_streamed_bgen_with_many_samples(self):
+        ''' a streamed bgen with more samples than the reserve cap still reads
+        
+        A stream cannot be seeked, so its size is unknown and the sample count cannot
+        be checked against it. The IDs are therefore read into a list that grows past
+        a fixed reserve, and this makes sure that growth is not mistaken for
+        corruption.
+        '''
+        n = (1 << 20) + 5
+        ids = b''.join(struct.pack('<H', len(s)) + s
+                       for s in (b'sample_%d' % i for i in range(n)))
+        block = struct.pack('<II', 8 + len(ids), n) + ids
+        header_length = 20
+        flags = (2 << 2) | (1 << 31)
+        data = struct.pack('<IIII', header_length + len(block), header_length, 0, n)
+        data += b'bgen' + struct.pack('<I', flags) + block
+        code = ('from bgen import BgenReader\n'
+                'b = BgenReader("/dev/stdin")\n'
+                's = b.samples\n'
+                f'assert len(s) == {n}, len(s)\n'
+                'assert s[0] == "sample_0"\n'
+                f'assert s[-1] == "sample_{n - 1}"\n'
+                'print("ok")\n')
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
+        proc = subprocess.run([sys.executable, '-c', code], input=data,
+                              capture_output=True, env=env)
+        self.assertEqual(proc.returncode, 0,
+                         msg=proc.stderr.decode('utf8', 'replace'))
         self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
     
     @unittest.skipIf(sys.platform == "win32", "haven't figured out file handle " \

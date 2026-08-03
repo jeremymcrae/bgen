@@ -63,13 +63,13 @@ cdef extern from 'variant.h' namespace 'bgen':
 
 cdef extern from 'samples.h' namespace 'bgen':
     cdef cppclass Samples:
-        Samples(istream * handle, int n_samples) except +
+        Samples(istream * handle, int n_samples, uint64_t file_size) except +
         Samples(string path, int n_samples) except +
         Samples(int n_samples) except +
         Samples() except +
         
-        # declare public attributes
-        vector[string] samples
+        # declare public methods
+        const vector[string]& get_samples() except +
 
 cdef extern from 'header.h' namespace 'bgen':
     cdef cppclass Header:
@@ -617,7 +617,7 @@ cdef class BgenReader:
       if not self.is_open == True:
           raise ValueError("bgen file is closed")
       
-      samples = self.thisptr.samples.samples
+      samples = self.thisptr.samples.get_samples()
       return [x.decode('utf8') for x in samples]
     
     def drop_variants(self, list indices):

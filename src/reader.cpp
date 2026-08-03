@@ -38,19 +38,20 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
   }
   header = Header(handle.get());
   if (header.has_sample_ids) {
-    // Check the sample count against the file before it sizes any allocation, as
-    // a corrupt count would otherwise ask for an allocation of any size. Each ID
-    // in the sample block carries at least a two byte length prefix, so the file
-    // size is a generous upper bound. This only holds when the IDs really are in
-    // the bgen - when they are generated, or come from an external .sample file,
-    // there is no per sample data here to bound it by.
+    // Reject a wildly wrong count before the sample block is even read. Samples()
+    // applies a tighter check of its own, so this is not load bearing, but it keeps
+    // the coarse failure separate from a block that merely disagrees with its IDs.
     if ((file_size > 0) && (header.nsamples > file_size / 2)) {
       throw std::invalid_argument("bgen has more samples than the file can hold");
     }
-    samples = Samples(handle.get(), header.nsamples);
+    samples = Samples(handle.get(), header.nsamples, file_size);
   } else if (sample_path.size() > 0) {
+    // the IDs come from outside the bgen, so the bgen cannot bound the count.
+    // Samples() grows the list as it reads instead, and rejects a mismatch
     samples = Samples(sample_path, header.nsamples);
   } else {
+    // no IDs anywhere, so nothing can bound the count here. Samples() defers
+    // building the placeholder IDs until they are asked for
     samples = Samples(header.nsamples);
   }
   
