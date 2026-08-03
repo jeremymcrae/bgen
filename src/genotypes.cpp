@@ -953,6 +953,22 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
       curr_ploidy = this->ploidy[n];
       half_ploidy = curr_ploidy / 2;
     }
+    // Check the ploidy before reading anything, since the reads below are sized
+    // from it. This used to happen after the first probability had been read, so
+    // a rejected sample had already read at whatever offset it was up to.
+    if (curr_ploidy > 2) {
+      throw std::invalid_argument("cannot compute dosage with ploidy > 2");
+    }
+    if (curr_ploidy == 0) {
+      // A sample with no alleles has just one possible genotype, the empty one,
+      // and since the final probability of a group is never stored it occupies no
+      // bytes at all. Reading one anyway would take the next sample's data, shift
+      // every later sample along, and read past the end of the block. There are no
+      // alleles to count, so the dosage is zero - which is what the probabilities
+      // say too, since they report the empty genotype with probability 1.
+      dose[n] = 0.0f;
+      continue;
+    }
     hom = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
     bit_idx += bit_depth;
     
@@ -960,8 +976,6 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
     if (curr_ploidy == 2) {
       het = ((*reinterpret_cast<const std::uint64_t* >(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
       bit_idx += bit_depth;
-    } else if (curr_ploidy > 2) {
-      throw std::invalid_argument("cannot compute dosage with ploidy > 2");
     }
     
     dose[n] = ((hom * curr_ploidy) + het * half_ploidy) * factor;
