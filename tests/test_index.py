@@ -104,4 +104,73 @@ class TestBgenIndex(unittest.TestCase):
             self.assertTrue(all(x.pos <= stop for x in variants))
             self.assertEqual(sorted(x.rsid for x in variants),
                              sorted(x.rsid for x in expected))
+    
+    def test_index_queries_do_not_disturb_a_live_fetch(self):
+        ''' another query must not cut short a fetch which is part way through
         
+        fetch is a generator, so it hands out rows as it steps through them. Every
+        query used to share one cursor, and re-executing a cursor abandons the rows
+        it had not yet yielded, so any interleaved query ended the fetch early.
+        '''
+        index = Index(self.folder / 'example.16bits.bgen.bgi')
+        expected = list(index.fetch('01'))
+        self.assertGreater(len(expected), 1)
+        
+        interleave = {
+            'offset_by_rsid': lambda: index.offset_by_rsid('RSID_5'),
+            'offset_by_pos': lambda: index.offset_by_pos(5000),
+            'offset_by_index': lambda: index.offset_by_index(0),
+            'rsids': lambda: index.rsids,
+            'chroms': lambda: index.chroms,
+            'positions': lambda: index.positions,
+            'len': lambda: len(index),
+            'nested fetch': lambda: list(index.fetch('01', 5000, 6000)),
+        }
+        for label, query in interleave.items():
+            with self.subTest(query=label):
+                got = []
+                for offset in index.fetch('01'):
+                    got.append(offset)
+                    query()
+                self.assertEqual(got, expected)
+    
+    def test_index_supports_concurrent_fetches(self):
+        ''' several fetches can be part way through at once '''
+        index = Index(self.folder / 'example.16bits.bgen.bgi')
+        expected = list(index.fetch('01'))
+        
+        generators = [index.fetch('01') for _ in range(4)]
+        # start them all before draining any, so they overlap
+        firsts = [next(x) for x in generators]
+        self.assertEqual(firsts, [expected[0]] * len(generators))
+        for gen in generators:
+            self.assertEqual([expected[0]] + list(gen), expected)
+    
+    def test_reader_fetch_survives_other_reader_calls(self):
+        ''' the same holds through the public BgenReader interface '''
+        path = self.folder / 'example.16bits.bgen'
+        with BgenReader(path) as bfile:
+            expected = [x.rsid for x in bfile.fetch('01')]
+        self.assertGreater(len(expected), 1)
+        
+        with BgenReader(path) as bfile:
+            rsids = []
+            for var in bfile.fetch('01'):
+                rsids.append(var.rsid)
+                # each of these goes through the index too
+                bfile.with_rsid('RSID_5')
+                bfile.at_position(5000)
+                bfile.rsids()
+            self.assertEqual(rsids, expected)
+    
+    def test_index_rejects_queries_once_closed(self):
+        ''' a closed index must not be usable '''
+        index = Index(self.folder / 'example.16bits.bgen.bgi')
+        list(index.fetch('01'))
+        index.close()
+        with self.assertRaises(ValueError):
+            list(index.fetch('01'))
+        with self.assertRaises(ValueError):
+            index.offset_by_rsid('RSID_5')
+        # closing twice must stay harmless
+        index.close()

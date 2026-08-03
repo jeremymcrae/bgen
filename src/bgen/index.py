@@ -11,12 +11,26 @@ class Index:
         logging.debug(f'opening bgen index: {path}')
         self.path = str(path)
         self.conn = sqlite3.connect(self.path)
-        self.cur = self.conn.cursor()
         
         self._offsets: NDArray[np.uint64] | None = None
         self._rsids: list[str] | None = None
         self._chroms: list[str] | None = None
         self._positions: list[int] | None = None
+    
+    def _query(self, query, params=()):
+        ''' run a query on a cursor of its own
+        
+        Each query needs its own cursor, since re-executing one abandons the rows
+        it had not yet handed out. fetch() yields as it steps through its results,
+        so sharing a cursor let any other query cut a fetch short partway.
+        '''
+        if self.conn is None:
+            raise ValueError('bgen index is closed')
+        cur = self.conn.cursor()
+        try:
+            yield from cur.execute(query, params)
+        finally:
+            cur.close()
     
     def fetch(self, chrom, start=None, stop=None):
         ''' get file offsets for variants within a genome region in a bgen file
@@ -51,7 +65,7 @@ class Index:
                         WHERE chromosome=? AND position >= ? AND position <= ?'
             params = (chrom, start, stop)
 
-        for row in self.cur.execute(query, params):
+        for row in self._query(query, params):
             yield row[0]
     
     def _load_offsets(self) -> NDArray[np.uint64]:
@@ -59,7 +73,7 @@ class Index:
         '''
         if self._offsets is None:
             query = "SELECT file_start_position FROM Variant ORDER BY file_start_position"
-            self._offsets = np.fromiter((x[0] for x in self.cur.execute(query)), dtype=np.uint64)
+            self._offsets = np.fromiter((x[0] for x in self._query(query)), dtype=np.uint64)
         return self._offsets
     
     def __len__(self) -> int:
@@ -77,14 +91,14 @@ class Index:
         '''
         query = "SELECT file_start_position FROM Variant WHERE rsid = ?"
         params = (rsid, )
-        return [x[0] for x in self.cur.execute(query, params)]
+        return [x[0] for x in self._query(query, params)]
     
     def offset_by_pos(self, pos) -> list[int]:
         ''' get file offset of bgen variant given a variant index
         '''
         query = "SELECT file_start_position FROM Variant WHERE position = ?"
         params = (pos, )
-        return [x[0] for x in self.cur.execute(query, params)]
+        return [x[0] for x in self._query(query, params)]
     
     @property
     def rsids(self):
@@ -92,7 +106,7 @@ class Index:
         '''
         if self._rsids is None:
             query = "SELECT rsid FROM Variant ORDER BY file_start_position"
-            self._rsids = [x[0] for x in self.cur.execute(query)]
+            self._rsids = [x[0] for x in self._query(query)]
         return self._rsids
     
     @property
@@ -101,7 +115,7 @@ class Index:
         '''
         if self._chroms is None:
             query = "SELECT chromosome FROM Variant ORDER BY file_start_position"
-            self._chroms = [x[0] for x in self.cur.execute(query)]
+            self._chroms = [x[0] for x in self._query(query)]
         return self._chroms
     
     @property
@@ -110,18 +124,14 @@ class Index:
         '''
         if self._positions is None:
             query = "SELECT position FROM Variant ORDER BY file_start_position"
-            self._positions = [x[0] for x in self.cur.execute(query)]
+            self._positions = [x[0] for x in self._query(query)]
         return self._positions
 
     def close(self):
         if sqlite3 is None:
             # interpreter shutting down, nothing to clean up
-            self.cur = None
             self.conn = None
             return
-        if self.cur is not None:
-            self.cur.close()
-        self.cur = None
         if self.conn is not None:
             self.conn.close()
         self.conn = None
