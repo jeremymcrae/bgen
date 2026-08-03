@@ -721,13 +721,11 @@ void Genotypes::probabilities(float * probs) {
 /// full cohort. This can be 600X faster than checking the full cohort in larger
 /// populations.
 ///
-/// The frequency has to be divided by the number of alleles actually summed,
-/// rather than by a fixed batch size times two. The stride below covers a
-/// different number of samples depending on how the cohort size divides by the
-/// batch size, samples carry their own ploidy rather than always being diploid,
-/// and missing samples contribute no alleles at all. Assuming a full batch of
-/// diploid samples every time understates the frequency, which flips the
-/// comparison against 0.5 below and reports the wrong minor allele.
+/// The frequency has to be divided by the alleles actually summed, rather than by
+/// a fixed batch size times two, since the stride covers a varying number of
+/// samples, samples carry their own ploidy, and missing samples contribute no
+/// alleles. Any of those understates the frequency and flips the comparison
+/// against 0.5 below, reporting the wrong minor allele.
 ///
 /// @param dose float array of dosages for the reference (first) allele, with
 ///     missing samples already set to nan
@@ -737,8 +735,8 @@ int Genotypes::find_minor_allele(float * dose) {
   std::uint32_t increment = std::max(n_samples / batchsize, (std::uint32_t) 1);
   double total = 0;
   double freq = 0;
-  // the alleles counted, which is the ploidy summed over the samples visited,
-  // and the samples they came from, which is what bounds the interval below
+  // the ploidy summed over the samples visited, and the count of those samples,
+  // which is what bounds the interval below
   std::uint64_t n_alleles_seen = 0;
   std::uint64_t n_checked = 0;
   
@@ -747,9 +745,9 @@ int Genotypes::find_minor_allele(float * dose) {
   // step size.
   for (std::uint32_t idx2=0; idx2<increment; idx2++) {
     for (std::uint32_t n=idx2; n<n_samples; n += increment) {
-      // a missing sample has no called alleles, so it cannot count towards
-      // either the dosage total or the alleles it is divided by. Skipping it
-      // here relies on get_allele_dosage having marked it before this runs
+      // a missing sample has no called alleles, so counts towards neither the
+      // total nor the alleles it is divided by. This relies on get_allele_dosage
+      // having marked it before this runs
       if (std::isnan(dose[n])) {
         continue;
       }
@@ -758,8 +756,7 @@ int Genotypes::find_minor_allele(float * dose) {
       n_checked += 1;
     }
     if (n_alleles_seen == 0) {
-      // nothing callable in the samples seen so far, so there is no frequency to
-      // take yet. A later stride may still reach samples which have alleles
+      // nothing callable yet, but a later stride may reach samples with alleles
       continue;
     }
     freq = total / (double) n_alleles_seen;
@@ -943,8 +940,12 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
 
   std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
   float factor = (layout == 2) ? 1.0f / (float) maxval : 1.0f / 32768;
-  std::uint32_t het;
-  std::uint32_t hom;
+  // 64-bit, since a probability fills all 32 bits at the maximum bit depth, so
+  // doubling it for the two copies a diploid carries used to overflow, turning a
+  // dosage of 2.0 into 1.0. Signed keeps the conversion to a float a single
+  // instruction, and these only hold a masked probability, so are never negative.
+  std::int64_t het;
+  std::int64_t hom;
   std::uint32_t hom_alt;
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
   std::uint32_t bit_idx = 0;  // index position in bits
@@ -953,19 +954,15 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
       curr_ploidy = this->ploidy[n];
       half_ploidy = curr_ploidy / 2;
     }
-    // Check the ploidy before reading anything, since the reads below are sized
-    // from it. This used to happen after the first probability had been read, so
-    // a rejected sample had already read at whatever offset it was up to.
+    // check the ploidy before reading, since the reads below are sized from it
     if (curr_ploidy > 2) {
       throw std::invalid_argument("cannot compute dosage with ploidy > 2");
     }
     if (curr_ploidy == 0) {
-      // A sample with no alleles has just one possible genotype, the empty one,
-      // and since the final probability of a group is never stored it occupies no
-      // bytes at all. Reading one anyway would take the next sample's data, shift
-      // every later sample along, and read past the end of the block. There are no
-      // alleles to count, so the dosage is zero - which is what the probabilities
-      // say too, since they report the empty genotype with probability 1.
+      // a sample with no alleles has only the empty genotype, and as the final
+      // probability of a group is never stored it occupies no bytes at all.
+      // Reading one anyway would shift every later sample along, and run off the
+      // end of the block. No alleles means no dosage either.
       dose[n] = 0.0f;
       continue;
     }
@@ -1108,10 +1105,9 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
     }
   }
   
-  // Mark the missing samples before working out which allele is minor, so that
-  // they are left out of the frequency. They have no called alleles, so counting
-  // their zeroed dosages would pull the frequency towards zero and can flip which
-  // allele looks like the minor one. The swaps below carry the nans through
+  // Mark the missing samples before finding the minor allele, so they are left out
+  // of the frequency - their zeroed dosages would otherwise pull it towards zero
+  // and can flip which allele looks minor. The swaps below carry nans through
   // unchanged, since both subtract the dosage from a number.
   for (auto n: missing) {
     dose[n] = std::nanf("1");

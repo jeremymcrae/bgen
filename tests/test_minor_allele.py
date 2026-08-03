@@ -9,9 +9,8 @@ rather than by the alleles it had actually summed, so it was wrong whenever:
   - the samples were not diploid
   - some samples were missing, and so contributed no alleles
 
-Each of those understates the frequency, which flips the comparison against 0.5
-and reports the wrong allele as minor - and hands back the major allele's dosage
-from minor_allele_dosage.
+Each understates the frequency, which flips the comparison and hands back the major
+allele's dosage from minor_allele_dosage.
 '''
 
 from pathlib import Path
@@ -60,11 +59,9 @@ def haploid_genotypes(n_samples, af0):
 def expected(geno, ploidy):
     ''' work out the minor allele and its mean dosage from the genotypes
 
-    This deliberately checks every sample, rather than the sampled estimate the
-    library uses, so it is independent of the code under test.
-
-    Returns (None, None) when both alleles are exactly equally frequent, since
-    neither is then the minor one and either answer is defensible.
+    Checks every sample rather than the sampled estimate the library uses, so it is
+    independent of the code under test. Returns (None, None) when both alleles are
+    exactly equally frequent, since either answer is then defensible.
     '''
     present = ~np.isnan(geno[:, 0])
     if ploidy == 2:
@@ -105,8 +102,8 @@ class TestMinorAllele(unittest.TestCase):
     def check(self, path, geno, ploidy=2, tolerance=0.01):
         ''' check the reported minor allele and dosage against the genotypes
 
-        Returns False without checking anything when the two alleles are exactly
-        equally frequent, since either one is then a defensible answer.
+        Returns False without checking when the alleles are exactly equally
+        frequent, since either one is then a defensible answer.
         '''
         want_allele, want_dose = expected(geno, ploidy)
         if want_allele is None:
@@ -123,9 +120,8 @@ class TestMinorAllele(unittest.TestCase):
     def test_cohort_smaller_than_the_batch_size(self):
         ''' check the minor allele is right for cohorts under 100 samples
 
-        The estimate used to divide by a fixed 100 samples however many it had
-        summed, so a small cohort had its frequency understated - by tenfold at
-        ten samples - and the first allele was always called minor.
+        The estimate divided by a fixed 100 samples however many it summed, so a
+        small cohort's frequency was understated tenfold at ten samples.
         '''
         checked = 0
         for n_samples in [3, 10, 37, 50, 99]:
@@ -141,9 +137,8 @@ class TestMinorAllele(unittest.TestCase):
     def test_cohort_not_a_multiple_of_the_batch_size(self):
         ''' check cohorts which don't divide evenly by the batch size
 
-        The number of samples the sampling stride covers only matches the batch
-        size when the cohort divides evenly by it, so these were also scaled by
-        the wrong divisor.
+        The stride only covers exactly a batch of samples when the cohort divides
+        evenly by it, so these were scaled by the wrong divisor too.
         '''
         checked = 0
         for n_samples in [101, 150, 199, 250, 299]:
@@ -159,7 +154,7 @@ class TestMinorAllele(unittest.TestCase):
         ''' check the minor allele is right for haploid data
 
         The frequency assumed every sample was diploid, so haploid data read as
-        half its true frequency, and anything above 0.5 was called as minor.
+        half its true frequency.
         '''
         checked = 0
         for n_samples in [10, 100, 199, 500]:
@@ -174,9 +169,8 @@ class TestMinorAllele(unittest.TestCase):
     def test_missing_samples(self):
         ''' check missing samples are left out of the frequency
 
-        A missing sample has no called alleles, but its dosage was zero at the
-        point the frequency was taken, so it pulled the frequency of the first
-        allele down and could make it look like the minor one.
+        A missing sample has no called alleles, but its dosage was still zero when
+        the frequency was taken, so it pulled the first allele's frequency down.
         '''
         checked = 0
         for n_samples in [100, 199, 500]:
@@ -196,8 +190,8 @@ class TestMinorAllele(unittest.TestCase):
     def test_missing_samples_are_still_nan(self):
         ''' check missing samples come back as nan, and only those samples
 
-        The missing samples are marked before the minor allele is chosen now, so
-        check that reordering did not lose the nans, or spread them any further.
+        They are marked before the minor allele is chosen now, so check that
+        reordering did not lose the nans, or spread them any further.
         '''
         n_samples = 200
         missing = [0, 5, 17, 100, 199]
@@ -216,8 +210,8 @@ class TestMinorAllele(unittest.TestCase):
     def test_every_sample_missing(self):
         ''' check a variant with no called samples at all doesn't raise
 
-        There are no alleles to take a frequency from, so this only has to come
-        back as all nan rather than divide by zero.
+        There are no alleles to take a frequency from, so this only has to come back
+        as all nan rather than divide by zero.
         '''
         n_samples = 150
         geno = np.full((n_samples, 3), nan)
@@ -254,8 +248,8 @@ class TestMinorAllele(unittest.TestCase):
     def test_alt_dosage_is_unaffected(self):
         ''' check alt_dosage still reports the second allele, not the minor one
 
-        alt_dosage doesn't depend on which allele is minor, so it must give the
-        same answer whichever way the frequency falls.
+        alt_dosage doesn't depend on which allele is minor, so it must give the same
+        answer whichever way the frequency falls.
         '''
         for n_samples in [10, 199, 500]:
             for af0 in [0.2, 0.8]:

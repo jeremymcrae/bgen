@@ -1,14 +1,12 @@
 ''' tests for dosage of samples which have no alleles
 
-A sample with a ploidy of zero has exactly one possible genotype, the empty one.
-Since the final probability of each group is never stored in the file, that sample
-occupies no bytes at all in the genotype data.
+A ploidy zero sample has just one possible genotype, the empty one, and since the
+final probability of each group is never stored it occupies no bytes at all.
 
-The dosage reader used to read one probability for every sample regardless. For a
-ploidy zero sample that consumed the next sample's data, which shifted every later
-sample's bit offset along, gave those samples the wrong dosage, and ran off the end
-of the genotype block. The probability reader always handled it correctly, so the
-two disagreed.
+The dosage reader used to read one probability per sample regardless, so for these
+it consumed the next sample's data, shifted every later sample's bit offset along,
+and ran off the end of the block. The probability reader handled them correctly, so
+the two disagreed.
 '''
 
 from pathlib import Path
@@ -25,14 +23,12 @@ nan = float('nan')
 def genotypes(ploidy):
     ''' genotype probabilities matching a per sample ploidy array
 
-    Every sample of the same ploidy gets the same probabilities, so any sample
-    whose dosage is read at a shifted offset stands out against its peers. A
-    sample stores one probability fewer than it has genotypes, so the columns
-    beyond that are left as nan.
+    Every sample of the same ploidy gets the same probabilities, so any sample read
+    at a shifted offset stands out against its peers. A sample stores one
+    probability fewer than it has genotypes, so later columns are left as nan.
 
-    The single genotype of a ploidy zero sample is the empty one, which it holds
-    with certainty. That has to be spelled out rather than left as nan, since an
-    all nan row means the sample is missing instead.
+    A ploidy zero sample holds the empty genotype with certainty. That has to be
+    spelled out, since an all nan row means the sample is missing instead.
     '''
     geno = np.full((len(ploidy), 3), nan)
     geno[ploidy == 2, :3] = [0.2, 0.5, 0.3]
@@ -76,8 +72,8 @@ class TestZeroPloidy(unittest.TestCase):
     def test_other_samples_keep_their_dosage(self):
         ''' zero ploidy samples must not shift the samples after them
 
-        Every diploid sample here has identical probabilities, so they must all
-        get an identical dosage no matter where the zero ploidy samples sit.
+        Every diploid here has identical probabilities, so all must get the same
+        dosage no matter where the zero ploidy samples sit.
         '''
         for pattern in [[0, 2], [2, 0], [0, 0, 2], [2, 2, 0], [0, 1, 2]]:
             for reps in [1, 3, 50]:
@@ -107,8 +103,8 @@ class TestZeroPloidy(unittest.TestCase):
     def test_zero_ploidy_at_the_end_of_the_cohort(self):
         ''' the final sample having no alleles used to read past the block
 
-        There is no later sample to misalign here, so the dosages come out right
-        either way - but the read itself still ran off the end of the buffer.
+        Nothing follows it to misalign, so the dosages come out right either way,
+        but the read still ran off the end of the buffer.
         '''
         ploidy = np.array([2] * 19 + [0], dtype=np.uint8)
         self.write(ploidy)
@@ -140,10 +136,9 @@ class TestZeroPloidy(unittest.TestCase):
     def test_missing_zero_ploidy_sample(self):
         ''' a zero ploidy sample can also be missing rather than empty
 
-        The writer takes an all nan row to mean the sample is missing, and a
-        missing sample stores the same number of probabilities as a called one -
-        so a missing zero ploidy sample stores none either, and used to shift the
-        samples after it in exactly the same way.
+        The writer takes an all nan row to mean missing, and a missing sample stores
+        as many probabilities as a called one - so this stores none either, and used
+        to shift the samples after it in the same way.
         '''
         ploidy = np.array([0, 2, 0, 2], dtype=np.uint8)
         geno = np.full((4, 3), nan)
@@ -156,8 +151,8 @@ class TestZeroPloidy(unittest.TestCase):
     def test_phased_zero_ploidy(self):
         ''' phased data reads one probability per haplotype, so zero means none
 
-        A phased zero ploidy sample has no haplotypes, hence no cells at all, so
-        an all nan row is the only way to write it - which makes it missing.
+        A phased zero ploidy sample has no cells at all, so an all nan row is the
+        only way to write it - which makes it missing.
         '''
         ploidy = np.array([0, 2, 0, 2], dtype=np.uint8)
         geno = np.full((4, 4), nan)
