@@ -721,23 +721,49 @@ void Genotypes::probabilities(float * probs) {
 /// full cohort. This can be 600X faster than checking the full cohort in larger
 /// populations.
 ///
-/// @param dose float array of dosages for the reference (first) allele
+/// The frequency has to be divided by the number of alleles actually summed,
+/// rather than by a fixed batch size times two. The stride below covers a
+/// different number of samples depending on how the cohort size divides by the
+/// batch size, samples carry their own ploidy rather than always being diploid,
+/// and missing samples contribute no alleles at all. Assuming a full batch of
+/// diploid samples every time understates the frequency, which flips the
+/// comparison against 0.5 below and reports the wrong minor allele.
+///
+/// @param dose float array of dosages for the reference (first) allele, with
+///     missing samples already set to nan
 /// @return index for minor allele (0 or 1)
 int Genotypes::find_minor_allele(float * dose) {
   std::uint32_t batchsize = 100;
   std::uint32_t increment = std::max(n_samples / batchsize, (std::uint32_t) 1);
   double total = 0;
   double freq = 0;
+  // the alleles counted, which is the ploidy summed over the samples visited,
+  // and the samples they came from, which is what bounds the interval below
+  std::uint64_t n_alleles_seen = 0;
+  std::uint64_t n_checked = 0;
   
   // To make sure we don't hit weird groupings of alleles in individuals, this
   // picks samples uniformly thoughout the population, by using an appropriate
   // step size.
   for (std::uint32_t idx2=0; idx2<increment; idx2++) {
     for (std::uint32_t n=idx2; n<n_samples; n += increment) {
+      // a missing sample has no called alleles, so it cannot count towards
+      // either the dosage total or the alleles it is divided by. Skipping it
+      // here relies on get_allele_dosage having marked it before this runs
+      if (std::isnan(dose[n])) {
+        continue;
+      }
       total += dose[n];
+      n_alleles_seen += ploidy[n];
+      n_checked += 1;
     }
-    freq = total / (batchsize * (idx2 + 1) * 2);
-    if (minor_certain(freq, batchsize * (idx2 + 1), 5.0)) {
+    if (n_alleles_seen == 0) {
+      // nothing callable in the samples seen so far, so there is no frequency to
+      // take yet. A later stride may still reach samples which have alleles
+      continue;
+    }
+    freq = total / (double) n_alleles_seen;
+    if (minor_certain(freq, (int) n_checked, 5.0)) {
       break;
     }
   }
@@ -1068,6 +1094,15 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
     }
   }
   
+  // Mark the missing samples before working out which allele is minor, so that
+  // they are left out of the frequency. They have no called alleles, so counting
+  // their zeroed dosages would pull the frequency towards zero and can flip which
+  // allele looks like the minor one. The swaps below carry the nans through
+  // unchanged, since both subtract the dosage from a number.
+  for (auto n: missing) {
+    dose[n] = std::nanf("1");
+  }
+  
   minor_idx = find_minor_allele(dose);
   if (use_alt | (use_minor & (minor_idx != 0))) {
     if (constant_ploidy & (max_ploidy == 2)) {
@@ -1076,11 +1111,6 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
       swap_allele_dosage_complex(dose);
     }
   } 
-
-  // for samples with missing data, just set values to NA
-  for (auto n: missing) {
-    dose[n] = std::nanf("1");
-  }
 }
 
 } //namespace bgen
