@@ -790,3 +790,93 @@ class TestBgenWriter(unittest.TestCase):
                     as_integers = (probs * max_val).round()
                     self.assertTrue(probs_close(geno, probs, bit_depth=bit_depth))
                     self.assertTrue((integer_values == as_integers).all())
+
+    def test_long_sample_id(self):
+        ''' check we reject a sample ID too long for the bgen length field
+
+        Sample IDs are stored behind a two byte length, so a longer ID used to
+        wrap that field to a small value while still writing every character.
+        The sample block length stayed self-consistent, so the file looked fine,
+        but each later ID was read from the wrong offset and the whole bgen
+        became unreadable.
+        '''
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
+
+        # the longest ID which still fits must be written and read back intact
+        path = self.tmpdir / 'longest.bgen'
+        longest = 'x' * 65535
+        with BgenWriter(path, 2, samples=[longest, 'b']) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+        with BgenReader(path) as bfile:
+            self.assertEqual(bfile.samples, [longest, 'b'])
+
+        for length in [65536, 100000]:
+            path = self.tmpdir / f'long_{length}.bgen'
+            with self.assertRaisesRegex(ValueError, 'sample ID is too long'):
+                BgenWriter(path, 2, samples=['x' * length, 'b'])
+
+    def test_long_variant_identifiers(self):
+        ''' check we reject variant IDs, rsIDs and chromosomes which are too long
+
+        These are all stored behind a two byte length, so anything longer used to
+        wrap the length field and leave a file which could not be read back.
+        '''
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
+        fields = {'varid': 'variant ID', 'rsid': 'rsID', 'chrom': 'chromosome'}
+
+        for field, message in fields.items():
+            # the longest value which still fits must round trip
+            path = self.tmpdir / f'longest_{field}.bgen'
+            longest = 'x' * 65535
+            args = {'varid': 'var1', 'rsid': 'rs1', 'chrom': 'chr1'}
+            args[field] = longest
+            with BgenWriter(path, 2, samples=['a', 'b']) as bfile:
+                bfile.add_variant(pos=10, alleles=['A', 'C'], genotypes=geno,
+                                  **args)
+            with BgenReader(path) as bfile:
+                self.assertEqual(getattr(next(iter(bfile)), field), longest)
+
+            for length in [65536, 100000]:
+                path = self.tmpdir / f'long_{field}_{length}.bgen'
+                args[field] = 'x' * length
+                with BgenWriter(path, 2, samples=['a', 'b']) as bfile:
+                    with self.assertRaisesRegex(ValueError, f'{message} is too long'):
+                        bfile.add_variant(pos=10, alleles=['A', 'C'],
+                                          genotypes=geno, **args)
+
+    def test_long_identifier_leaves_file_usable(self):
+        ''' check rejecting an over-long identifier doesn't corrupt the file
+
+        The identifiers are checked before anything is written, so the rejected
+        variant must not appear in the file, must not be counted in the header,
+        and must not disturb the variants written either side of it.
+        '''
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
+        path = self.tmpdir / 'temp.bgen'
+        with BgenWriter(path, 2, samples=['a', 'b']) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+            with self.assertRaisesRegex(ValueError, 'variant ID is too long'):
+                bfile.add_variant('x' * 70000, 'rs2', 'chr1', 20, ['A', 'C'],
+                                  geno)
+            bfile.add_variant('var3', 'rs3', 'chr1', 30, ['A', 'C'], geno)
+
+        with BgenReader(path) as bfile:
+            self.assertEqual(len(bfile), 2)
+            self.assertEqual([x.varid for x in bfile], ['var1', 'var3'])
+            for var in bfile:
+                self.assertTrue(probs_close(geno, var.probabilities,
+                                            bit_depth=8))
+
+    def test_duplicate_and_empty_sample_ids(self):
+        ''' check duplicate and empty sample IDs are still accepted
+
+        The bgen spec doesn't require sample IDs to be unique or non-empty, so
+        these are written as given rather than rejected.
+        '''
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
+        for samples in [['a', 'a'], ['', ''], ['', 'b']]:
+            path = self.tmpdir / f'dup_{"_".join(samples)}.bgen'
+            with BgenWriter(path, 2, samples=samples) as bfile:
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+            with BgenReader(path) as bfile:
+                self.assertEqual(bfile.samples, samples)

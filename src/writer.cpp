@@ -90,6 +90,23 @@ void CppBgenWriter::write_header(std::string &free_data,
   handle.write(reinterpret_cast<char *>(&flags), 4);
   }
 
+/// @brief check a string fits the 16-bit length field the bgen stores it behind
+///
+/// varids, rsids, chromosomes and sample IDs are all written as a two byte
+/// length followed by the characters, so anything longer than 65535 has no valid
+/// encoding. Without this the length silently wraps while the full string is
+/// still written, which leaves a file whose block lengths are self-consistent but
+/// whose fields are all read from the wrong offsets - so the bgen looks fine
+/// until something tries to read it back.
+static void check_length_fits(const std::string &value, const char *field) {
+  if (value.size() > UINT16_MAX) {
+    throw std::invalid_argument(std::string(field) + " is too long for a bgen - "
+                                "it is " + std::to_string(value.size()) +
+                                " characters, but the maximum is " +
+                                std::to_string(UINT16_MAX));
+  }
+}
+
 void CppBgenWriter::add_samples(std::vector<std::string> &samples) {
   if (samples.size() == 0) { return; }
 
@@ -98,11 +115,22 @@ void CppBgenWriter::add_samples(std::vector<std::string> &samples) {
   }
 
   // count the number of characters across all sample IDs
-  std::uint32_t nchars = 0;
-  for (auto &x : samples) { nchars += x.size(); }
+  std::uint64_t nchars = 0;
+  for (auto &x : samples) {
+    check_length_fits(x, "sample ID");
+    nchars += x.size();
+  }
 
   // write the length of the sample ID block, and number of sample IDs
-  std::uint32_t samples_len = 8 + 2 * samples.size() + nchars;
+  std::uint64_t block_len = 8 + 2 * (std::uint64_t) samples.size() + nchars;
+  if (block_len > UINT32_MAX) {
+    // the block length is a four byte field, so a block this big would wrap and
+    // leave the variants starting at the wrong offset
+    throw std::invalid_argument("sample IDs need " + std::to_string(block_len) +
+                                " bytes, which overflows the bgen sample block "
+                                "length field");
+  }
+  std::uint32_t samples_len = (std::uint32_t) block_len;
   handle.write(reinterpret_cast<char *>(&samples_len), 4);
   std::uint32_t size = samples.size();
   handle.write(reinterpret_cast<char *>(&size), 4);
@@ -130,6 +158,18 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
   }
   if ((layout == 1) && alleles.size() != 2) {
     throw std::invalid_argument("layout 1 requires exactly two alleles.");
+  }
+  // check these before anything is written, so a rejected variant leaves the
+  // file as it was rather than partly extended by a variant we then refuse
+  check_length_fits(varid, "variant ID");
+  check_length_fits(rsid, "rsID");
+  check_length_fits(chrom, "chromosome");
+  if (alleles.size() > UINT16_MAX) {
+    // the allele count is a two byte field, so more than this would wrap and
+    // leave the reader looking for the wrong number of alleles
+    throw std::invalid_argument("variant has " + std::to_string(alleles.size()) +
+                                " alleles, but the maximum is " +
+                                std::to_string(UINT16_MAX));
   }
   n_variants += 1;
   if (layout == 1) {
