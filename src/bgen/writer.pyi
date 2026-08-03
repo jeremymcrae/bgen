@@ -55,7 +55,7 @@ class BgenWriter:
             rsid: reference SNP ID
             chrom: chromosome the variant is on
             pos: nucleotide position of the variant
-            alleles: list of allele strings
+            alleles: list of allele strings. Duplicates are allowed, but warned about
             genotypes: numpy array of genotype proabilities, ordered as per the
                 bgen samples.
             ploidy: integer for constant ploidy, or numpy array of ploidy values per

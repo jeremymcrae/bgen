@@ -251,7 +251,8 @@ cdef class BgenWriter:
             rsid: reference SNP ID
             chrom: chromosome the variant is on
             pos: nucleotide position of the variant
-            alleles: list of allele strings
+            alleles: list of allele strings. Duplicates are allowed, but warn, since
+                the minor allele cannot then say which one it means.
             genotypes: numpy array of genotype proabilities, ordered as per the
                 bgen samples.
             ploidy: integer for constant ploidy, or numpy array of ploidy values per 
@@ -271,6 +272,9 @@ cdef class BgenWriter:
         alleles = list(alleles)
         if len(alleles) == 0:
             raise ValueError('alleles must be a non-empty list')
+        if len(set(alleles)) != len(alleles):
+            # bgen spec allows this, and genotypes will be fine, but probably a bad input
+            logging.warning(f'variant {rsid}/{varid} has duplicate alleles {alleles}')
         cdef vector[string] _alleles = [x.encode('utf8') for x in alleles]
 
         if bit_depth < 1 or bit_depth > 32:

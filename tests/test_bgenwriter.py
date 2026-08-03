@@ -3,6 +3,7 @@
 from pathlib import Path
 import unittest
 import tempfile
+import logging
 import os
 import time
 import sys
@@ -880,3 +881,108 @@ class TestBgenWriter(unittest.TestCase):
                 bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
             with BgenReader(path) as bfile:
                 self.assertEqual(bfile.samples, samples)
+
+    def test_empty_alleles_are_written_as_given(self):
+        ''' an empty allele is stored and read back unchanged
+
+        The bgen spec doesn't require alleles to be non-empty, so these are written as
+        given, as sample IDs are. The minor allele is worked out when it is asked for,
+        so an empty string coming back means the empty allele is the minor one, rather
+        than the allele being unavailable.
+        '''
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
+        for i, alleles in enumerate([['A', ''], ['', 'A'], ['', '']]):
+            with self.subTest(alleles=alleles):
+                path = self.tmpdir / f'empty_{i}.bgen'
+                with BgenWriter(path, 2, samples=['a', 'b']) as bfile:
+                    bfile.add_variant('var1', 'rs1', 'chr1', 10, alleles, geno)
+                with BgenReader(path) as bfile:
+                    var = next(iter(bfile))
+                    self.assertEqual(list(var.alleles), alleles)
+                    # whichever allele is the minor one, it is one of the two given
+                    self.assertIn(var.minor_allele, alleles)
+
+    def test_empty_allele_reported_only_when_it_is_the_minor_one(self):
+        ''' an empty minor allele tracks the frequencies, so it is a real answer
+
+        The empty string has to be reported when the empty allele is the less common
+        one, and the other allele when it is not. That is what separates a truthful
+        answer from a value that just means nothing was worked out.
+        '''
+        n_samples = 100
+        # 4 hom ref and 32 het gives the first allele a frequency of 0.2
+        geno = np.zeros((n_samples, 3))
+        geno[:4] = [1, 0, 0]
+        geno[4:36] = [0, 1, 0]
+        geno[36:] = [0, 0, 1]
+
+        for alleles, expected in [(['', 'A'], ''), (['A', ''], 'A')]:
+            with self.subTest(alleles=alleles):
+                path = self.tmpdir / f'emptyminor_{alleles[0]}.bgen'
+                with BgenWriter(path, n_samples,
+                                samples=[f's{i}' for i in range(n_samples)]) as bfile:
+                    bfile.add_variant('var1', 'rs1', 'chr1', 10, alleles, geno)
+                with BgenReader(path) as bfile:
+                    var = next(iter(bfile))
+                    # the first allele is the rarer one, so it is the minor allele
+                    self.assertEqual(var.minor_allele, expected)
+                    self.assertAlmostEqual(np.nanmean(var.minor_allele_dosage),
+                                           0.4, delta=0.02)
+
+    def test_duplicate_alleles_warn_but_are_written(self):
+        ''' duplicate alleles are allowed, with a warning
+
+        The spec permits them and the genotype data is still coherent, so the variant
+        is written. The minor allele just cannot say which of the two it means.
+        '''
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
+        path = self.tmpdir / 'dupalleles.bgen'
+        with BgenWriter(path, 2, samples=['a', 'b']) as bfile:
+            with self.assertLogs(level='WARNING') as logs:
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'A'], geno)
+        self.assertTrue(any('duplicate alleles' in x for x in logs.output))
+
+        with BgenReader(path) as bfile:
+            var = next(iter(bfile))
+            self.assertEqual(list(var.alleles), ['A', 'A'])
+            # the variant still reads back, and names one of its alleles
+            self.assertEqual(var.minor_allele, 'A')
+
+    def test_distinct_alleles_do_not_warn(self):
+        ''' the warning must not fire for ordinary variants
+
+        Alleles differing only by case are distinct, so they are not duplicates.
+        '''
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
+        for alleles in [['A', 'C'], ['a', 'A'], ['GT', 'GA']]:
+            with self.subTest(alleles=alleles):
+                path = self.tmpdir / 'distinct.bgen'
+                # assertNoLogs needs python 3.10, so collect the records directly
+                messages = []
+
+                class Collect(logging.Handler):
+                    def emit(self, record):
+                        messages.append(record.getMessage())
+
+                handler = Collect()
+                logger = logging.getLogger()
+                logger.addHandler(handler)
+                try:
+                    with BgenWriter(path, 2, samples=['a', 'b']) as bfile:
+                        bfile.add_variant('var1', 'rs1', 'chr1', 10, alleles, geno)
+                finally:
+                    logger.removeHandler(handler)
+                self.assertEqual([x for x in messages if 'duplicate' in x], [])
+                with BgenReader(path) as bfile:
+                    self.assertEqual(list(next(iter(bfile)).alleles), alleles)
+
+    def test_long_alleles_are_still_accepted(self):
+        ''' indels can be long, so length is not what makes an allele invalid
+        '''
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
+        alleles = ['A', 'ACGT' * 50]
+        path = self.tmpdir / 'longallele.bgen'
+        with BgenWriter(path, 2, samples=['a', 'b']) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, alleles, geno)
+        with BgenReader(path) as bfile:
+            self.assertEqual(list(next(iter(bfile)).alleles), alleles)
