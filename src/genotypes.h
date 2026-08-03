@@ -52,6 +52,7 @@ public:
   void load_data_and_parse_header();
   void probabilities(float * probs);
   void get_allele_dosage(float * dose, bool use_alt=true, bool use_minor=false);
+  int get_minor_idx();
   bool phased=false;
   std::uint32_t max_probs=0;
   int min_ploidy=0;
@@ -96,6 +97,11 @@ private:
   bool is_decompressed = false;
   bool constant_ploidy=true;
   bool has_ploidy = false;
+  // whether minor_idx has been worked out for this variant. Finding it needs the
+  // dosages of the whole cohort, so the answer is kept once known, both to save
+  // repeating that and because the layout 1 dosage path appends to the missing
+  // list as it goes.
+  bool minor_known = false;
   std::vector<std::uint32_t> missing;
 };
 

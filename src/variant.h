@@ -22,6 +22,7 @@ public:
   int probs_per_sample();
   void alt_dosage(float * dosage);
   void minor_allele_dosage(float * dosage);
+  std::string get_minor_allele();
   void probs_1d(float * probs);
   bool phased();
   std::shared_ptr<std::istream> handle;

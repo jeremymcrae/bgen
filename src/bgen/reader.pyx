@@ -47,6 +47,7 @@ cdef extern from 'variant.h' namespace 'bgen':
         Variant() except +
         void minor_allele_dosage(float * dosage) except +
         void alt_dosage(float * dosage) except +
+        string get_minor_allele() except +
         void probs_1d(float * dosage) except +
         int probs_per_sample() except +
         bool phased() except +
@@ -54,7 +55,7 @@ cdef extern from 'variant.h' namespace 'bgen':
         vector[uint8_t] copy_data() except +
         
         # declare public attributes
-        string varid, rsid, chrom, minor_allele
+        string varid, rsid, chrom
         int pos
         long offset
         uint64_t next_variant_offset
@@ -366,7 +367,8 @@ cdef class BgenVar:
     def minor_allele(self):
         ''' get the minor allele of a biallelic variant
         '''
-        return self.thisptr.minor_allele.decode('utf8')
+        self.__check_closed()
+        return self.thisptr.get_minor_allele().decode('utf8')
     @property
     def minor_allele_dosage(self):
         ''' dosage for the minor allele for a biallelic variant

@@ -133,6 +133,24 @@ void Variant::minor_allele_dosage(float * dose) {
   minor_allele = alleles[geno.minor_idx];
 }
 
+/// the least common of a biallelic variant's alleles
+///
+/// Which allele is the minor one depends on the genotypes, so this reads them,
+/// rather than reporting whatever a previous dosage call happened to leave behind.
+///
+/// @return the minor allele
+std::string Variant::get_minor_allele() {
+  int idx2 = geno.get_minor_idx();
+  if ((idx2 < 0) || ((std::size_t) idx2 >= alleles.size())) {
+    // get_minor_idx only returns 0 or 1, and it throws for anything other than a
+    // biallelic variant, so this is unreachable. It is here so that a future
+    // change to either cannot turn into a read past the end of the alleles.
+    throw std::invalid_argument("bgen variant has no allele for the minor index");
+  }
+  minor_allele = alleles[idx2];
+  return minor_allele;
+}
+
 std::vector<std::uint8_t> Variant::copy_data() {
   // as in Genotypes::decompress, the badbit marks a closed bgen, while other
   // error states are recoverable and just need clearing before the seek

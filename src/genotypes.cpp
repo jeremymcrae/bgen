@@ -1082,6 +1082,23 @@ void Genotypes::swap_allele_dosage_complex(float * dose) {
   }
 }
 
+/// which of a biallelic variant's two alleles is the minor one
+///
+/// Finding this needs the dosages of the whole cohort, which get_allele_dosage
+/// works out as a side effect. Callers which only want the allele would otherwise
+/// have to ask for dosages they have no use for, so compute them into a scratch
+/// buffer here and keep the answer.
+///
+/// @return index into alleles of the minor allele (0 or 1)
+int Genotypes::get_minor_idx() {
+  if (!minor_known) {
+    std::unique_ptr<float[]> dose(new float[n_samples]);
+    // this sets minor_idx, and the dosages themselves are not needed
+    get_allele_dosage(dose.get(), true, false);
+  }
+  return minor_idx;
+}
+
 /// calculate allele dosage from the genotype probabilities
 ///
 /// This either computes the alternate allele dosage, or the minor allele dosage
@@ -1097,6 +1114,13 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
   
   if (n_alleles != 2) {
     throw std::invalid_argument("can't get allele dosages for non-biallelic var.");
+  }
+  
+  // The layout 1 dosage path spots missing samples from their probabilities and
+  // adds them to the list, so clear it first, or a second dosage read on the same
+  // variant would hold every missing sample twice over.
+  if (layout == 1) {
+    missing.clear();
   }
   
   // calculate the dosage for the first allele for all samples
@@ -1121,6 +1145,7 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
   }
   
   minor_idx = find_minor_allele(dose);
+  minor_known = true;
   if (use_alt | (use_minor & (minor_idx != 0))) {
     if (constant_ploidy & (max_ploidy == 2)) {
       swap_allele_dosage_simple(dose);
