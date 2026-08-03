@@ -664,6 +664,13 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
   
   std::uint32_t offset;
   std::uint32_t k = (phased) ? max_ploidy : 1;  // phased data needs scaled offset
+  // Phased samples with varying ploidy occupy a row per haplotype, so a sample's
+  // offset is the ploidy of every sample before it. missing holds sample indices in
+  // ascending order, so carry that running total from one missing sample to the
+  // next, instead of re-summing from the first sample each time. Re-summing costs
+  // the sample count per missing sample, which is quadratic over the cohort.
+  std::uint32_t summed_to = 0;   // samples already added to haplotypes
+  std::uint32_t haplotypes = 0;  // ploidy summed over those samples
   // for samples with missing data, just set values to NA
   for (auto n: missing) {
     offset = max_probs * n;
@@ -671,13 +678,13 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
       if (constant_ploidy) {
           offset *= k;
       } else {
-        // if we don't have a constant ploidy, we need to get the prob offset by
-        // checking all the ploidy values up to this sample.
         k = ploidy[n];
-        offset = 0;
-        for (std::uint32_t i=0; i<n; i++) {
-          offset += ploidy[i] * max_probs;
+        for (; summed_to < n; summed_to++) {
+          haplotypes += ploidy[summed_to];
         }
+        // this matches summing ploidy[i] * max_probs one sample at a time, since
+        // multiplying the total instead gives the same value even if it overflows
+        offset = haplotypes * max_probs;
       }
     }
     for (std::uint32_t x=0; x<(max_probs * k); x++) {
