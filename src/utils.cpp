@@ -101,23 +101,40 @@ static void range_sse4(std::uint8_t * x, std::uint32_t & size, size_t & i,
 
 #endif
 
-// Returns value of Binomial Coefficient C(n, k)
+/// @brief binomial coefficient C(n, k)
+///
+/// This counts the genotypes a sample can have, so it sizes the probability arrays and
+/// the byte count a variant is checked against. Both arguments come from the file, built
+/// from the allele count and the ploidy, so they can exceed any real variant.
+///
+/// @param n total items to choose from
+/// @param k number of items chosen
+/// @return C(n, k)
 std::uint32_t n_choose_k(int n, int k) {
-  std::uint32_t res = 1;
+  if ((n < 0) || (k < 0) || (k > n)) {
+    throw std::invalid_argument("cannot count the ways to choose " + std::to_string(k) +
+                                " from " + std::to_string(n));
+  }
 
   // Since C(n, k) = C(n, n-k)
   if ( k > n - k ) {
     k = n - k;
   }
 
-  // Calculate value of
-  // [n * (n-1) *---* (n-k+1)] / [k * (k-1) *----* 1]
+  std::uint64_t res = 1;
   for (std::uint32_t i = 0; i < (std::uint32_t) k; ++i) {
-    res *= (n - i);
+    // throw eror if next round would exceed integer limit
+    if (res > UINT64_MAX / (std::uint64_t) (n - i)) {
+      throw std::invalid_argument("variant needs more than 2^32 probabilities");
+    }
+    res *= (std::uint64_t) (n - i);
     res /= (i + 1);
   }
 
-  return res;
+  if (res > UINT32_MAX) {
+    throw std::invalid_argument("variant needs more than 2^32 probabilities");
+  }
+  return (std::uint32_t) res;
 }
 
 /// check if the minor allele is certain (to 99.9999999999999& confidence)

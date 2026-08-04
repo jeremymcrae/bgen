@@ -201,6 +201,84 @@ class TestMalformedGenotypes(unittest.TestCase):
             with self.assertRaises(ValueError):
                 var.probabilities
 
+    def test_genotype_count_beyond_counting_is_rejected(self):
+        ''' a variant needing more genotypes than can be counted is rejected
+
+        The genotypes per sample is C(ploidy + n_alleles - 1, n_alleles - 1), from an
+        allele count and a ploidy that both come from the file, and it sizes both the
+        probability array and the byte count the block is checked against. Counts beyond
+        a 32-bit range used to wrap, so 9 alleles at a ploidy of 56 became 54502224
+        rather than 4426165368, and the variant was sized from that.
+        '''
+        n = 2
+        for n_alleles, ploidy in [(9, 56), (12, 32), (16, 21), (24, 14)]:
+            with self.subTest(n_alleles=n_alleles, ploidy=ploidy):
+                path = write_bgen(self.tmpdir / f'c{n_alleles}_{ploidy}.bgen', n,
+                                  n_alleles=n_alleles)
+                patched(path, self._ploidy_edits(path, n, ploidy))
+
+                with BgenReader(path) as bfile:
+                    var = next(iter(bfile))
+                    with self.assertRaisesRegex(ValueError, 'than can be counted'):
+                        var.probabilities
+
+    def test_wrapped_genotype_count_cannot_be_satisfied(self):
+        ''' a count that wrapped low must not be satisfiable by a matching block
+
+        This is the harmful case. 9 alleles at a ploidy of 42 has 536878650 genotypes,
+        but the 32-bit count wrapped all the way down to 7738, which asks for only 15474
+        bytes of probabilities. A block that size then passed the size check, so the
+        variant parsed with no error and handed back an array of the wrong width.
+
+        The count fits a 32-bit result, so it is now computed correctly, and a block sized
+        for the wrapped value is rejected as far too small.
+        '''
+        n, n_alleles, ploidy = 2, 9, 42
+        path = write_bgen(self.tmpdir / 'wrapped.bgen', n, n_alleles=n_alleles)
+        patched(path, self._ploidy_edits(path, n, ploidy))
+        # pad the block out to what the wrapped count would have demanded, so the old
+        # code would have found it satisfying
+        offset = block_offset(path)
+        data = bytearray(path.read_bytes())
+        (block_len, ) = struct.unpack_from('<I', data, offset)
+        padding = b'\x11' * (n * (7738 - 1))
+        struct.pack_into('<I', data, offset, block_len + len(padding))
+        end = offset + 4 + block_len
+        path.write_bytes(bytes(data[:end]) + padding + bytes(data[end:]))
+
+        with BgenReader(path) as bfile:
+            var = next(iter(bfile))
+            with self.assertRaises(ValueError) as raised:
+                var.probabilities
+            # whichever check catches it, it must not hand back probabilities
+            self.assertIn('bgen variant', str(raised.exception))
+
+    def _ploidy_edits(self, path, n_samples, ploidy):
+        ''' edits raising a variant's declared and per sample ploidy
+
+        min_ploidy and max_ploidy follow the sample and allele counts in the genotype
+        block, then a ploidy byte per sample, and parse_ploidy rejects any sample outside
+        the declared bounds, so all of them have to move together.
+        '''
+        offset = block_offset(path)
+        edits = [(offset + 4 + 6, '<B', ploidy), (offset + 4 + 7, '<B', ploidy)]
+        edits += [(offset + 4 + 8 + i, '<B', ploidy) for i in range(n_samples)]
+        return edits
+
+    def test_countable_genotype_counts_are_still_read(self):
+        ''' counts which do fit must keep working, including large ones
+
+        The rejection has to be limited to counts that genuinely cannot be represented,
+        or variants which used to read would start failing. A biallelic sample at the
+        largest ploidy the format can store has a countable number of genotypes.
+        '''
+        n = 2
+        path = write_bgen(self.tmpdir / 'big.bgen', n, n_alleles=2, ploidy=63)
+        with BgenReader(path) as bfile:
+            var = next(iter(bfile))
+            # ploidy + 1 genotypes for a biallelic sample
+            self.assertEqual(var.probabilities.shape, (n, 64))
+
     def test_truncated_block_raises_every_time(self):
         ''' asking again after a rejection raises again, rather than reading
 
