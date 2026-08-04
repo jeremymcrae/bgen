@@ -17,6 +17,53 @@ except ImportError:
     # windows has no resource module, so the memory capped test is skipped there
     HAS_RLIMIT = False
 
+# how long to give a child before treating it as stuck. These children read a bgen from
+# a pipe and exit, which takes well under a second, so this only trips on a real hang.
+# Without it a child that never exits leaves the whole test run waiting forever.
+CHILD_TIMEOUT = 120
+
+# a child that caps its own address space has to import before capping. OpenBLAS sizes
+# its thread arenas by core count, and if RLIMIT_AS is too tight to mmap them its init
+# retries forever rather than failing, so capping first hangs on machines with enough
+# cores. Capping after the imports leaves the allocation under test just as constrained.
+CAP_AFTER_IMPORT = '''
+import resource
+# measure what the imports already took, so the headroom below does not depend on how
+# much address space this machine's numpy needed. Only linux publishes this, and
+# elsewhere the cap just falls back to being an absolute one, as it used to be
+used = 0
+try:
+    with open('/proc/self/status') as handle:
+        for line in handle:
+            if line.startswith('VmSize'):
+                used = int(line.split()[1]) * 1024
+except OSError:
+    pass
+resource.setrlimit(resource.RLIMIT_AS, (used + 1024 ** 3, used + 1024 ** 3))
+'''
+
+def run_piped(code, data):
+    ''' run code in a subprocess with data fed to its stdin
+
+    The bgen is piped in so the reader sees a stream it cannot seek, which is the point
+    of these tests. It runs in a subprocess so the parent's own stdin is left alone,
+    and so a crash shows up as a signal rather than taking the test run down.
+
+    The child gets this process' sys.path, so it imports the build under test rather
+    than any installed copy.
+    '''
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join(p for p in sys.path if p))
+    try:
+        return subprocess.run([sys.executable, '-c', code], input=data,
+                              capture_output=True, env=env, timeout=CHILD_TIMEOUT)
+    except subprocess.TimeoutExpired as e:
+        # say what was being run, since a bare timeout gives no clue which child stuck
+        out = (e.stdout or b'').decode('utf8', 'replace')
+        err = (e.stderr or b'').decode('utf8', 'replace')
+        raise AssertionError(
+            f'child did not exit within {CHILD_TIMEOUT}s, so it is stuck rather than '
+            f'slow.\ncode:\n{code}\nstdout so far:\n{out}\nstderr so far:\n{err}')
+
 class TestBgenStream(unittest.TestCase):
     ''' class to make sure BgenReader works correctly
     '''
@@ -41,10 +88,6 @@ class TestBgenStream(unittest.TestCase):
         collects the variants into a list. A streamed bgen loads its genotypes
         as each variant is constructed, so this used to hand the same genotype
         buffers to two variants, and freeing them twice aborted the process.
-        
-        This runs in a subprocess, so that the whole bgen can be piped in without
-        the parent's stdin being redirected, and so an abort shows up as a signal
-        rather than taking the test run down with it.
         '''
         path = self.folder / 'example.16bits.zstd.bgen'
         code = ('from bgen import BgenReader\n'
@@ -52,9 +95,7 @@ class TestBgenStream(unittest.TestCase):
                 'assert len(b.rsids()) == 199\n'
                 'assert len(b.positions()) == 199\n'
                 'print("ok")\n')
-        env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
-        proc = subprocess.run([sys.executable, '-c', code], input=path.read_bytes(),
-                              capture_output=True, env=env)
+        proc = run_piped(code, path.read_bytes())
         # a double free aborts, which shows up as a negative (signal) returncode
         self.assertEqual(proc.returncode, 0, msg=proc.stderr.decode('utf8', 'replace'))
         self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
@@ -69,6 +110,9 @@ class TestBgenStream(unittest.TestCase):
         from the file, as the only thing sizing the sample list, so a stream that
         claims millions of samples used to allocate for them all before running out
         of data.
+        
+        The cap is applied after the imports, since capping first hangs OpenBLAS's
+        thread init.
         '''
         n = 50_000_000
         # a header claiming n samples, and a sample block sized to match, but with
@@ -78,17 +122,13 @@ class TestBgenStream(unittest.TestCase):
         flags = (2 << 2) | (1 << 31)
         data = struct.pack('<IIII', header_length + len(block), header_length, 0, n)
         data += b'bgen' + struct.pack('<I', flags) + block
-        cap = 1024 ** 3
-        code = ('import resource\n'
-                f'resource.setrlimit(resource.RLIMIT_AS, ({cap}, {cap}))\n'
-                'from bgen import BgenReader\n'
+        code = ('from bgen import BgenReader\n'
+                + CAP_AFTER_IMPORT +
                 'try:\n'
                 '    BgenReader("/dev/stdin")\n'
                 'except ValueError:\n'
                 '    print("ok")\n')
-        env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
-        proc = subprocess.run([sys.executable, '-c', code], input=data,
-                              capture_output=True, env=env)
+        proc = run_piped(code, data)
         self.assertEqual(proc.returncode, 0,
                          msg=proc.stderr.decode('utf8', 'replace'))
         self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
@@ -115,10 +155,7 @@ class TestBgenStream(unittest.TestCase):
                         '    print("accepted")\n'
                         'except ValueError:\n'
                         '    print("rejected")\n')
-                env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
-                proc = subprocess.run([sys.executable, '-c', code],
-                                      input=bytes(data), capture_output=True,
-                                      env=env)
+                proc = run_piped(code, bytes(data))
                 self.assertEqual(proc.returncode, 0,
                                  msg=proc.stderr.decode('utf8', 'replace'))
                 self.assertEqual(proc.stdout.decode('utf8').strip(), 'rejected')
@@ -147,9 +184,7 @@ class TestBgenStream(unittest.TestCase):
                 'assert s[0] == "sample_0"\n'
                 f'assert s[-1] == "sample_{n - 1}"\n'
                 'print("ok")\n')
-        env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
-        proc = subprocess.run([sys.executable, '-c', code], input=data,
-                              capture_output=True, env=env)
+        proc = run_piped(code, data)
         self.assertEqual(proc.returncode, 0,
                          msg=proc.stderr.decode('utf8', 'replace'))
         self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')

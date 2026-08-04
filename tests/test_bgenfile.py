@@ -21,8 +21,9 @@ except ImportError:
     # windows has no resource module, so the memory capped tests are skipped there
     HAS_RLIMIT = False
 
-# ceiling for the memory capped tests. Comfortably fits the interpreter, numpy and a
-# sub-megabyte bgen, but not one string per sample for a corrupt sample count
+# headroom for the memory capped tests, on top of whatever the imports already took.
+# Comfortably fits a sub-megabyte bgen, but not one string per sample for a corrupt
+# sample count
 MEMORY_CAP = 2 * 1024 ** 3
 
 def run_capped(code):
@@ -31,14 +32,32 @@ def run_capped(code):
     The cap has to apply to the whole process, so this cannot run in-process. The
     child inherits this process' sys.path, so it imports the same build under test
     rather than any installed copy.
+    
+    The imports happen before the cap is applied. OpenBLAS sizes its thread arenas by
+    core count, and if RLIMIT_AS is too tight to mmap them its init retries forever
+    instead of failing, so capping first can hang. Capping afterwards leaves the
+    allocation under test just as constrained, and the headroom is measured from what
+    the imports already took so it does not depend on this machine's numpy. Only linux
+    publishes that, and elsewhere the cap falls back to being absolute, as it used to be.
     '''
     preamble = textwrap.dedent(f'''
-        import resource, sys
+        import sys
         sys.path[:] = {sys.path!r}
-        resource.setrlimit(resource.RLIMIT_AS, ({MEMORY_CAP}, {MEMORY_CAP}))
+        import numpy, resource
+        from bgen import BgenReader
+        used = 0
+        try:
+            with open('/proc/self/status') as handle:
+                for line in handle:
+                    if line.startswith('VmSize'):
+                        used = int(line.split()[1]) * 1024
+        except OSError:
+            pass
+        cap = used + {MEMORY_CAP}
+        resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
         ''')
     return subprocess.run([sys.executable, '-c', preamble + textwrap.dedent(code)],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, timeout=120)
 
 class TestBgenReader(unittest.TestCase):
     ''' class to make sure BgenReader works correctly
