@@ -4,6 +4,33 @@ import re
 
 import numpy as np
 
+def cap_after_import(headroom):
+    ''' source for a child process to cap its own address space
+
+    Returns code to run *after* the child's imports, so that the cap applies only to the
+    allocation under test. A child that caps first hangs rather than failing: OpenBLAS
+    sizes its thread arenas by core count, and when RLIMIT_AS is too tight to mmap them,
+    its init retries forever. Importing bgen already needs several hundred MB, so how
+    much room a fixed cap leaves depends on the machine, and a machine with more cores
+    than the one a cap was chosen on crosses the line and hangs.
+
+    Sizing the cap from what the imports actually took removes that dependency, leaving
+    headroom bytes for the allocation under test. Only linux publishes VmSize, and
+    elsewhere the cap falls back to being an absolute one.
+    '''
+    return f'''
+import resource
+used = 0
+try:
+    with open('/proc/self/status') as handle:
+        for line in handle:
+            if line.startswith('VmSize'):
+                used = int(line.split()[1]) * 1024
+except OSError:
+    pass
+resource.setrlimit(resource.RLIMIT_AS, (used + {headroom}, used + {headroom}))
+'''
+
 class GenVar:
     ''' store data for easy comparison with BgenVars
     '''

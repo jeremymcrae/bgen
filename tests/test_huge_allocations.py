@@ -16,7 +16,8 @@ anything checks them, a file of a hundred bytes can ask for gigabytes of memory:
 Both are checked here by running a child with a capped address space. Without the fix the
 child dies with MemoryError or std::bad_alloc; with it, the file is rejected as malformed.
 The cap is what makes these safe to run: the point is a claim too large to serve, so
-serving it would page out the machine.
+serving it would page out the machine. It is applied after the child's imports, and sized
+from what those took, since capping before them hangs (see cap_after_import).
 
 Allele lengths cannot simply be capped, since indels and structural variants carry real
 sequence, so a legitimately long allele is checked here too.
@@ -24,7 +25,6 @@ sequence, so a legitimately long allele is checked here too.
 
 import os
 from pathlib import Path
-import resource
 import struct
 import subprocess
 import sys
@@ -34,17 +34,34 @@ import unittest
 import numpy as np
 
 from bgen import BgenReader, BgenWriter
+from tests.utils import cap_after_import
 
-# enough address space for the interpreter and numpy, but far less than the claims below
-CHILD_MEMORY_CAP = 1200 * 1024 * 1024
+try:
+    import resource
+    # capping needs RLIMIT_AS, which windows lacks, and sizing the cap from what the
+    # imports took needs /proc, so the capped tests only run where both exist
+    CAN_CAP = (hasattr(resource, 'RLIMIT_AS')
+               and Path('/proc/self/status').exists())
+except ImportError:
+    CAN_CAP = False
+
+# room left for the allocation under test, on top of whatever the child's imports took.
+# It has to be less than the smallest claim below, or a claim would be servable, and more
+# than the tiny bgens here genuinely need
+CHILD_HEADROOM = 512 * 1024 * 1024
+
+# how long to give a child before treating it as stuck. These children read a bgen of a
+# few hundred bytes and exit, so this only trips on a real hang. Without it a stuck child
+# leaves the whole test run waiting.
+CHILD_TIMEOUT = 120
 
 # read a bgen in a child with a capped address space, reporting what came back. The cap is
-# set in the child rather than the parent so the test process keeps its own memory.
+# set in the child rather than the parent so the test process keeps its own memory, and
+# after the imports rather than before, since capping first hangs OpenBLAS's thread init.
 CHILD = r'''
-import resource, sys
-cap = int(sys.argv[3])
-resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
+import sys
 from bgen import BgenReader
+''' + cap_after_import(CHILD_HEADROOM) + r'''
 path, action = sys.argv[1], sys.argv[2]
 try:
     bfile = BgenReader(path, delay_parsing=True)
@@ -68,9 +85,13 @@ def run_capped(path, action):
     straight from the file shows up as MemoryError, bad_alloc or a fatal signal.
     '''
     env = dict(os.environ, PYTHONPATH=os.pathsep.join(p for p in sys.path if p))
-    done = subprocess.run([sys.executable, '-c', CHILD, str(path), action,
-                           str(CHILD_MEMORY_CAP)], capture_output=True, text=True,
-                          env=env, timeout=600)
+    try:
+        done = subprocess.run([sys.executable, '-c', CHILD, str(path), action],
+                              capture_output=True, text=True, env=env,
+                              timeout=CHILD_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        # a hang is a failure of this test, not something to wait out
+        return f'STUCK the child did not exit within {CHILD_TIMEOUT}s'
     out = done.stdout.strip()
     if done.returncode != 0 and not out:
         # died without reporting, e.g. killed by a signal
@@ -108,6 +129,7 @@ class TestHugeAllocations(unittest.TestCase):
             offset += 2 + size
         return offset + 4 + 2
 
+    @unittest.skipUnless(CAN_CAP, 'needs RLIMIT_AS and /proc to cap memory')
     def test_overstated_allele_length_is_not_allocated(self):
         ''' an allele claiming more bytes than the file holds is rejected
 
@@ -129,6 +151,7 @@ class TestHugeAllocations(unittest.TestCase):
                 outcome = run_capped(bad, 'iterate')
                 self.assertNotIn('MEMORY', outcome)
                 self.assertNotIn('DIED', outcome)
+                self.assertNotIn('STUCK', outcome)
                 self.assertNotIn('bad_alloc', outcome)
                 # the allele cannot be read, so the file is short of the variants it
                 # claims, which is what the reader reports
@@ -157,6 +180,7 @@ class TestHugeAllocations(unittest.TestCase):
         path.write_bytes(bytes(data))
         return path
 
+    @unittest.skipUnless(CAN_CAP, 'needs RLIMIT_AS and /proc to cap memory')
     def test_placeholder_sample_ids_are_bounded(self):
         ''' a bgen without sample IDs cannot claim more samples than it could hold
 
@@ -177,6 +201,7 @@ class TestHugeAllocations(unittest.TestCase):
                 outcome = run_capped(bad, 'samples')
                 self.assertNotIn('MEMORY', outcome)
                 self.assertNotIn('DIED', outcome)
+                self.assertNotIn('STUCK', outcome)
                 self.assertIn('ValueError', outcome)
                 self.assertIn('cannot describe', outcome)
 

@@ -11,7 +11,7 @@ import numpy as np
 
 from bgen import BgenReader, BgenWriter
 
-from tests.utils import load_gen_data, arrays_equal
+from tests.utils import load_gen_data, arrays_equal, cap_after_import
 
 try:
     import resource
@@ -25,25 +25,10 @@ except ImportError:
 # Without it a child that never exits leaves the whole test run waiting forever.
 CHILD_TIMEOUT = 120
 
-# a child that caps its own address space has to import before capping. OpenBLAS sizes
-# its thread arenas by core count, and if RLIMIT_AS is too tight to mmap them its init
-# retries forever rather than failing, so capping first hangs on machines with enough
-# cores. Capping after the imports leaves the allocation under test just as constrained.
-CAP_AFTER_IMPORT = '''
-import resource
-# measure what the imports already took, so the headroom below does not depend on how
-# much address space this machine's numpy needed. Only linux publishes this, and
-# elsewhere the cap just falls back to being an absolute one, as it used to be
-used = 0
-try:
-    with open('/proc/self/status') as handle:
-        for line in handle:
-            if line.startswith('VmSize'):
-                used = int(line.split()[1]) * 1024
-except OSError:
-    pass
-resource.setrlimit(resource.RLIMIT_AS, (used + 1024 ** 3, used + 1024 ** 3))
-'''
+# a child that caps its own address space has to import before capping, which is what
+# cap_after_import arranges. 1 GB is far more headroom than these children need, and far
+# less than the claims they are fed.
+CAP_AFTER_IMPORT = cap_after_import(1024 ** 3)
 
 def run_piped(code, data):
     ''' run code in a subprocess with data fed to its stdin
