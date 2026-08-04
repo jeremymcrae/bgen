@@ -3,10 +3,13 @@ from pathlib import Path
 import os
 import struct
 import subprocess
+import tempfile
 import unittest
 import sys
 
-from bgen import BgenReader
+import numpy as np
+
+from bgen import BgenReader, BgenWriter
 
 from tests.utils import load_gen_data, arrays_equal
 
@@ -129,6 +132,71 @@ class TestBgenStream(unittest.TestCase):
                 'except ValueError:\n'
                 '    print("ok")\n')
         proc = run_piped(code, data)
+        self.assertEqual(proc.returncode, 0,
+                         msg=proc.stderr.decode('utf8', 'replace'))
+        self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
+    
+    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
+    @unittest.skipUnless(HAS_RLIMIT, 'needs RLIMIT_AS to cap memory')
+    def test_streamed_bgen_corrupt_variant_count(self):
+        ''' a corrupt variant count on stdin must not size an allocation
+        
+        The reserve for the variant list is bounded by what the file could hold, but a
+        stream cannot be seeked, so its size is unknown and that bound was skipped. A
+        Variant is a few hundred bytes, so a stream claiming millions of them used to
+        ask for several GB up front and fail with a memory error, rather than reporting
+        the file as truncated.
+        
+        The cap is applied after the imports, since capping first hangs OpenBLAS's
+        thread init.
+        '''
+        # a header with no variant data behind it, so the parse should stop immediately
+        for nvariants in [10_000_000, 4_294_967_295]:
+            with self.subTest(nvariants=nvariants):
+                header_length = 20
+                flags = 2 << 2  # layout 2, and no sample IDs in the bgen
+                data = struct.pack('<IIII', header_length, header_length,
+                                   nvariants, 1)
+                data += b'bgen' + struct.pack('<I', flags)
+                code = ('from bgen import BgenReader\n'
+                        + CAP_AFTER_IMPORT +
+                        'try:\n'
+                        # the reserve happens when the variants are parsed, which is
+                        # what asking for the rsids does
+                        '    BgenReader("/dev/stdin").rsids()\n'
+                        'except ValueError:\n'
+                        '    print("ok")\n')
+                proc = run_piped(code, data)
+                self.assertEqual(proc.returncode, 0,
+                                 msg=proc.stderr.decode('utf8', 'replace'))
+                self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
+    
+    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
+    def test_streamed_bgen_with_many_variants(self):
+        ''' a streamed bgen with more variants than the reserve cap still reads
+        
+        The reserve on a stream is capped, so a bgen holding more variants than the cap
+        grows the list as they arrive. This makes sure that growth is not mistaken for
+        corruption, and does not drop or reorder anything, by checking every variant is
+        present and in order.
+        '''
+        # more variants than MAX_VARIANT_RESERVE in reader.cpp, so the list has to grow
+        nvariants = (1 << 16) + 5
+        genotypes = np.array([[0.7, 0.2, 0.1]] * 2)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'many_variants.bgen'
+            with BgenWriter(path, n_samples=2, samples=['a', 'b']) as bfile:
+                for idx in range(nvariants):
+                    bfile.add_variant(varid=f'v{idx}', rsid=f'rs{idx}', chrom='1',
+                                      pos=idx + 1, alleles=['A', 'C'],
+                                      genotypes=genotypes, bit_depth=8)
+            code = ('from bgen import BgenReader\n'
+                    'b = BgenReader("/dev/stdin")\n'
+                    'ids = b.rsids()\n'
+                    f'assert len(ids) == {nvariants}, len(ids)\n'
+                    f'assert ids == [f"rs{{i}}" for i in range({nvariants})], "ids differ"\n'
+                    'print("ok")\n')
+            proc = run_piped(code, path.read_bytes())
         self.assertEqual(proc.returncode, 0,
                          msg=proc.stderr.decode('utf8', 'replace'))
         self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
