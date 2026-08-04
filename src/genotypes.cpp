@@ -264,8 +264,11 @@ std::uint64_t Genotypes::probability_bytes() {
     // sample stores a different number of genotypes. parse_ploidy masks the
     // ploidy to its low 6 bits, so the count for each of the 64 possible values
     // can be worked out once rather than once per sample.
+    //
+    // Only fill up to max_ploidy. The counts above it cannot occur (parse_ploidy
+    // rejects samples beyond it).
     std::uint32_t counts[64];
-    for (int ploid=0; ploid < 64; ploid++) {
+    for (int ploid=0; ploid <= max_ploidy; ploid++) {
       int p = ploid;
       std::uint32_t n_probs = get_max_probs(p, n_alleles, phased);
       if (n_probs < 1) {
