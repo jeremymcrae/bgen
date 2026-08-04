@@ -514,6 +514,48 @@ class TestMalformedGenotypes(unittest.TestCase):
                             var = next(iter(bfile))
                             self.assertEqual(len(var.probabilities), 20)
 
+    def test_declared_max_ploidy_above_63(self):
+        ''' a variant declaring a max_ploidy above 63 is rejected
+
+        The per sample ploidy is stored in 6 bits, so parse_ploidy masks each one
+        to at most 63 and a declared maximum above that can never be reached. That
+        made its range check pass trivially, while the count of genotypes per
+        ploidy was worked out for every value up to max_ploidy in a 64 entry array
+        on the stack - so a single byte took the writes up to 255 entries, 768
+        bytes past the end. The small overshoots landed in stack padding and
+        returned plausible probabilities, and only larger ones tripped the canary.
+        '''
+        n = 4
+        for target in [64, 65, 66, 70, 100, 128, 200, 255]:
+            path = write_variable_ploidy(self.tmpdir / 'a.bgen', n,
+                                         [1, 2, 1, 2])
+            offset = block_offset(path)
+            data = bytearray(path.read_bytes())
+            # only raise the declared maximum; every per sample byte is left
+            # alone, so the block stays exactly the size its contents need
+            data[offset + 4 + 7] = target
+            path.write_bytes(bytes(data))
+
+            with BgenReader(path) as bfile:
+                var = next(iter(bfile))
+                with self.assertRaisesRegex(ValueError, 'ploidy is greater than 63'):
+                    var.probabilities
+
+    def test_max_ploidy_of_63_still_reads(self):
+        ''' the largest ploidy the format can store must still be accepted
+
+        63 is the last value which fits in the 6 bits, so the check has to reject
+        from 64 up and no lower, or valid variants at the top of the range would
+        start failing.
+        '''
+        n = 4
+        path = write_variable_ploidy(self.tmpdir / 'a.bgen', n, [62, 63, 62, 63])
+        with BgenReader(path) as bfile:
+            var = next(iter(bfile))
+            # biallelic, so the widest row is the largest ploidy plus one
+            self.assertEqual(var.probabilities.shape, (n, 64))
+            self.assertEqual(list(var.ploidy), [62, 63, 62, 63])
+
     def test_valid_variable_ploidy_blocks_still_read(self):
         ''' variable ploidy blocks are sized per sample, so check those too
         '''
