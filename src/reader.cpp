@@ -14,6 +14,14 @@ namespace bgen {
 /// makes the reserve smaller than it could be.
 const std::uint64_t MIN_VARIANT_BYTES = 12;
 
+/// most variants to reserve space for up front when the bgen's size is unknown
+///
+/// A Variant is a few hundred bytes, so reserving the claimed count asks the
+/// allocator for over a terabyte when that count is corrupt, which fails even
+/// though the pages are never touched. This is only needed for a stream, whose
+/// size cannot be measured, so growing past it costs a few reallocations.
+const std::uint64_t MAX_VARIANT_RESERVE = 1 << 16;
+
 CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool delay_parsing) {
   if (path != "/dev/stdin") {
     handle = std::make_shared<std::ifstream>(path, std::ios::in | std::ios::binary);
@@ -95,6 +103,10 @@ void CppBgenReader::parse_all_variants() {
     if (n_reserve > possible) {
       n_reserve = possible;
     }
+  } else {
+    // A stream cannot be seeked, so nothing here bounds the count. Cap the reserve
+    // and let the vector grow as the variants actually arrive.
+    n_reserve = std::min(n_reserve, MAX_VARIANT_RESERVE);
   }
   variants.reserve(n_reserve);
   try {
