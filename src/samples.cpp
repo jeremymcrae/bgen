@@ -155,13 +155,24 @@ Samples::Samples(std::string path, std::uint32_t n_samples) {
 /// now would let a corrupt count allocate arbitrarily. Reading a variant
 /// validates the count against the genotype data, so the IDs are left until
 /// something asks for them.
-Samples::Samples(std::uint32_t n_samples) {
+Samples::Samples(std::uint32_t n_samples, std::uint64_t _file_size) {
   n_placeholders = n_samples;
+  file_size = _file_size;
 }
 
 /// sample IDs, generating placeholders on first use if the bgen had none
+///
+/// Deferring the placeholders avoids unneccessary allocation, but a caller can ask
+/// for them without reading a variant, so the count needs to be checked. The file
+/// size is a generous bound to keep a small bgen from building billions of strings.
 const std::vector<std::string> & Samples::get_samples() {
   if (n_placeholders > 0) {
+    if ((file_size > 0) && ((std::uint64_t) n_placeholders > file_size)) {
+      throw std::invalid_argument("bgen claims " + std::to_string(n_placeholders) +
+                                  " samples, which a file of " +
+                                  std::to_string(file_size) +
+                                  " bytes cannot describe");
+    }
     samples.reserve(std::min((std::uint64_t) n_placeholders, MAX_ID_RESERVE));
     for (std::uint32_t i=0; i<n_placeholders; i++) {
       samples.push_back(std::to_string(i));

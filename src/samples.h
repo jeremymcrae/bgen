@@ -17,7 +17,8 @@ public:
   Samples(std::istream * handle, std::uint32_t n_samples,
           std::uint64_t file_size=0);
   Samples(std::string path, std::uint32_t n_samples);
-  Samples(std::uint32_t n_samples);
+  // a bgen with no IDs in it. file_size limits how many samples the file could hold
+  Samples(std::uint32_t n_samples, std::uint64_t file_size=0);
   Samples() {}
   const std::vector<std::string> & get_samples();
 private:
@@ -26,6 +27,9 @@ private:
   // with no IDs of its own. Those are generated on request rather than up front,
   // so the sample count cannot size an allocation before anything has checked it
   std::uint32_t n_placeholders = 0;
+  // bytes the bgen holds, used to reject a placeholder count the file cannot
+  // back. Zero means the size is unknown, so no bound can be applied
+  std::uint64_t file_size = 0;
 };
 
 } // namespace bgen
