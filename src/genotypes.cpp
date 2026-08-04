@@ -613,7 +613,7 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
   // define variables for parsing depths not aligned with 8 bit char array
   float factor = 1.0 / ((float) (std::pow(2, (int) bit_depth)) - 1);
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
-  std::uint32_t bit_idx = 0;  // index position in bits
+  std::uint64_t bit_idx = 0;  // index position in bits
   
   if (constant_ploidy & (max_probs == 3) & (bit_depth == 8)) {
     // A fast path for one scenario: all samples have ploidy=2, with 8 bits per
@@ -955,7 +955,7 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
   std::int64_t hom;
   std::uint32_t hom_alt;
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
-  std::uint32_t bit_idx = 0;  // index position in bits
+  std::uint64_t bit_idx = 0;  // index position in bits
   for (std::uint32_t n=0; n<nrows; n++) {
     if (!constant_ploidy) {
       curr_ploidy = this->ploidy[n];
@@ -1010,7 +1010,7 @@ void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, f
   float factor = (layout == 2) ? 1.0f / (float) maxval : 1.0f / 32768;
   float prob;
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
-  std::uint32_t bit_idx = 0;  // index position in bits
+  std::uint64_t bit_idx = 0;  // index position in bits
   for (std::uint32_t n=0; n<nrows; n++) {
     if (!constant_ploidy) {
       curr_ploidy = this->ploidy[n];
