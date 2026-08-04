@@ -219,7 +219,7 @@ class TestMalformedGenotypes(unittest.TestCase):
 
                 with BgenReader(path) as bfile:
                     var = next(iter(bfile))
-                    with self.assertRaisesRegex(ValueError, 'than can be counted'):
+                    with self.assertRaisesRegex(ValueError, 'more than 2\\^32 probabilities'):
                         var.probabilities
 
     def test_wrapped_genotype_count_cannot_be_satisfied(self):
