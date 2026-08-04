@@ -368,7 +368,7 @@ static inline void check_cumulative(double cumulative) {
 }
 
 static bool missing_genotypes(double *genotypes, std::uint32_t size) {
-  std::uint16_t nan_count = 0;
+  std::uint32_t nan_count = 0;
   for (std::uint32_t i=0; i<size; i++) {
     nan_count += std::isnan(genotypes[i]);
   }
