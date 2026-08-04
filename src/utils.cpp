@@ -1,6 +1,7 @@
 
 #include <array>
 #include <algorithm>
+#include <cstring>
 #include <stdexcept>
 
 #include "utils.h"
@@ -44,20 +45,20 @@ static std::uint64_t ploidy_sum_avx2(std::uint8_t * x, std::uint32_t & size, std
 // segfaults. It's a mystery why.
 BGEN_TARGET_SSE4
 static std::uint64_t ploidy_sum_sse4(std::uint8_t * x, std::uint32_t & size, std::uint32_t & i) {
-  std::uint64_t total = 0;
   std::uint32_t arr[4];
   __m128i initial;
   __m128i _vals;
   __m128i _sum = _mm_set_epi32(0, 0, 0, 0);
-  for (; i + 12 < size; i += 4) {
-    // load data and convert to 32-bit uints
-    initial = _mm_loadu_si128((const __m128i*) &x[i]);
+  for (; i + 4 <= size; i += 4) {
+    // load four values and convert to 32-bit uints
+    std::int32_t tmp;
+    std::memcpy(&tmp, &x[i], 4);
+    initial = _mm_cvtsi32_si128(tmp);
     _vals = _mm_cvtepu8_epi32(initial);
     _sum = _mm_add_epi32(_sum, _vals);
   }
   _mm_storeu_si128((__m128i*) &arr[0], _sum);
-  total += arr[0] + arr[1] + arr[2] + arr[3];
-  return total;
+  return arr[0] + arr[1] + arr[2] + arr[3];
 }
 
 // get min and max of ploidy values with AVX2
