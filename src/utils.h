@@ -1,6 +1,7 @@
 #ifndef BGEN_UTILS_H_
 #define BGEN_UTILS_H_
 
+#include <algorithm>
 #include <bitset>
 #include <cmath>
 #include <cstdint>
@@ -59,19 +60,38 @@ inline bool read_value(std::istream & handle, T & value) {
   return (bool) handle.read(reinterpret_cast<char *>(&value), sizeof(T));
 }
 
+/// max chunk size per file read at a time for a string
+const std::size_t STRING_READ_CHUNK = 1 << 20;
+
 /// read a string prefixed by its length, and report whether the reads worked
 ///
-/// Reads exactly len bytes. A std::istream_iterator cannot be used here, as it
-/// does formatted input and so skips whitespace, corrupting any ID containing a
-/// space and misaligning the stream for everything after it.
+/// Reads exactly len bytes, defined by the length type.
+///
+/// Long strings are read in chunks, which costs a few extra resizes on genuinely
+/// long alleles but means a corrupt length only allocates what the file can supply.
 template <typename LenType>
 inline bool read_prefixed_string(std::istream & handle, std::string & value) {
   LenType len;
   if (!read_value(handle, len)) {
     return false;
   }
-  value.resize(len);
-  return (len == 0) || (bool) handle.read(&value[0], len);
+  std::size_t remaining = (std::size_t) len;
+  if (remaining <= STRING_READ_CHUNK) {
+    // short enough that the claim cannot amplify much, so read it in one go
+    value.resize(remaining);
+    return (remaining == 0) || (bool) handle.read(&value[0], remaining);
+  }
+  value.clear();
+  while (remaining > 0) {
+    std::size_t chunk = std::min(remaining, STRING_READ_CHUNK);
+    std::size_t start = value.size();
+    value.resize(start + chunk);
+    if (!handle.read(&value[start], chunk)) {
+      return false;
+    }
+    remaining -= chunk;
+  }
+  return true;
 }
 
 struct Range {
