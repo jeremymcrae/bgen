@@ -372,8 +372,9 @@ void Genotypes::load_data_and_parse_header() {
 
     if (max_ploidy < min_ploidy) {
       throw std::invalid_argument("maximum ploidy is less than minimum ploidy");
-    } elif (max_ploidy > 63) {
+    } else if (max_ploidy > 63) {
       throw std::invalid_argument("maximum ploidy is greater than 63");
+    }
   }
   
   constant_ploidy = (min_ploidy == max_ploidy);
