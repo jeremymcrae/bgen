@@ -152,9 +152,10 @@ Samples::Samples(std::string path, std::uint32_t n_samples) {
 ///
 /// The IDs are not built here. Nothing has checked n_samples at this point, and
 /// no per sample data exists in the bgen to check it against, so building them
-/// now would let a corrupt count allocate arbitrarily. Reading a variant
-/// validates the count against the genotype data, so the IDs are left until
-/// something asks for them.
+/// now would let a corrupt count allocate arbitrarily. get_samples() checks the
+/// count against file_size when it does build them, since nothing else will:
+/// layout 2 does not repeat the sample count per variant, and a caller can ask
+/// for the IDs without reading a variant at all.
 Samples::Samples(std::uint32_t n_samples, std::uint64_t _file_size) {
   n_placeholders = n_samples;
   file_size = _file_size;
@@ -162,7 +163,7 @@ Samples::Samples(std::uint32_t n_samples, std::uint64_t _file_size) {
 
 /// sample IDs, generating placeholders on first use if the bgen had none
 ///
-/// Deferring the placeholders avoids unneccessary allocation, but a caller can ask
+/// Deferring the placeholders avoids unnecessary allocation, but a caller can ask
 /// for them without reading a variant, so the count needs to be checked. The file
 /// size is a generous bound to keep a small bgen from building billions of strings.
 const std::vector<std::string> & Samples::get_samples() {

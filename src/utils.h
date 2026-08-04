@@ -65,7 +65,9 @@ const std::size_t STRING_READ_CHUNK = 1 << 20;
 
 /// read a string prefixed by its length, and report whether the reads worked
 ///
-/// Reads exactly len bytes, defined by the length type.
+/// Reads exactly len bytes, defined by the length type. A std::istream_iterator
+/// cannot be used here, as it does formatted input and so skips whitespace,
+/// corrupting any ID containing a space and misaligning the stream after it.
 ///
 /// Long strings are read in chunks, which costs a few extra resizes on genuinely
 /// long alleles but means a corrupt length only allocates what the file can supply.
