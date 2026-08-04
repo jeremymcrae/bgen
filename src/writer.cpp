@@ -292,13 +292,18 @@ static void zstd_compress(char *input, int input_len, std::vector<char> &output)
   output.resize(total_out);
 }
 
-/// Read genotype data for a variant from disk and decompress.
+/// Compress genotype data for a variant.
 ///
-/// The decompressed data is stored in the 'uncompressed' member. Decompression
-/// is handled internally by either zlib_decompress, or zstd_decompress,
+/// Compression is handled internally by either zlib_decompress, or zstd_decompress,
 /// depending on compression scheme.
 static std::vector<char> compress(std::vector<std::uint8_t> &uncompressed, std::uint32_t compression) {
-  std::vector<char> compressed(uncompressed.size() * 5 + 20);
+  std::size_t bound;
+  if (compression == 1) { // zlib
+    bound = compressBound(uncompressed.size());
+  } else { // zstd
+    bound = ZSTD_compressBound(uncompressed.size());
+  }
+  std::vector<char> compressed(bound);
   if (compression == 1) { // zlib
     zlib_compress(reinterpret_cast<char *>(&uncompressed[0]), (int)uncompressed.size(), compressed);
   } else if (compression == 2) { // zstd
