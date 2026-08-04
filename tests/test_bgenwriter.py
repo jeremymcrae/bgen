@@ -352,6 +352,210 @@ class TestBgenWriter(unittest.TestCase):
             with self.subTest(bit_depth=bit_depth):
                 self.assertEqual(self._collect_warnings(geno, bit_depth), [])
 
+    def _assert_missing_layout(self, base, probs, missing, bit_depth, width=None,
+                               note=''):
+        ''' every missing sample reads back missing, and every other one reads back
+
+        The tolerance covers both sources of error: the bit depth the values were
+        quantised to, and the float32 the reader returns them in. Above about 22 bits the
+        float32 dominates, so a bit depth term on its own rejects correct output.
+        '''
+        tol = 1.0 / (2 ** bit_depth - 1) + 4 * float(np.spacing(np.float32(1.0)))
+        for i in range(len(base)):
+            k = width[i] if width is not None else base.shape[1]
+            got = probs[i][:k]
+            want = base[i][:k]
+            where = f'sample {i}, bit_depth={bit_depth}, missing={missing}{note}'
+            if i in missing:
+                self.assertTrue(np.all(np.isnan(got)),
+                                f'{where} should read back as missing')
+            else:
+                self.assertFalse(np.any(np.isnan(got)),
+                                 f'{where} should not read back as missing')
+                np.testing.assert_allclose(got, want, atol=tol, rtol=0,
+                                           err_msg=where)
+
+    def test_missing_samples_roundtrip_at_every_bit_depth(self):
+        ''' missing samples must read back as missing, wherever they sit
+
+        Their probabilities are not written value by value, since every one of them
+        encodes as zero and the buffer already holds zeroes. That means the encoder
+        advances the bit offset by hand, so a sample written after a missing one lands
+        at an offset that was never checked against a stored value. Read the file back
+        and confirm both the missing rows and their neighbours survive.
+        '''
+        n = 9
+        rng = np.random.default_rng(42)
+        base = rng.random((n, 3))
+        base /= base.sum(axis=1, keepdims=True)
+        samples = [f's{i}' for i in range(n)]
+
+        placements = [[0], [n - 1], [0, n - 1], [4], [3, 4, 5],
+                      list(range(0, n, 2)), list(range(n))]
+        for bit_depth in [1, 2, 5, 8, 11, 16, 17, 24, 32]:
+            for missing in placements:
+                geno = base.copy()
+                geno[missing] = np.nan
+                path = self.tmpdir / 'miss.bgen'
+                with BgenWriter(path, n, samples=samples) as bfile:
+                    bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], geno,
+                                      bit_depth=bit_depth)
+
+                with BgenReader(path) as bfile:
+                    probs = next(iter(bfile)).probabilities
+                self._assert_missing_layout(base, probs, missing, bit_depth)
+
+    def test_missing_phased_samples_roundtrip(self):
+        ''' the same for phased data, which skips per haplotype
+
+        The phased encoder walks haplotypes within a sample, so skipping a missing one
+        has to advance by ploidy * (n_probs - 1) rather than by a single row.
+        '''
+        n = 8
+        rng = np.random.default_rng(7)
+        samples = [f's{i}' for i in range(n)]
+        for ploidy in [1, 2, 3]:
+            base = rng.random((n, 2 * ploidy))
+            for hap in range(ploidy):
+                cols = slice(hap * 2, (hap + 1) * 2)
+                base[:, cols] /= base[:, cols].sum(axis=1, keepdims=True)
+            for bit_depth in [1, 8, 16, 32]:
+                for missing in [[0], [n - 1], [2, 3], list(range(0, n, 2))]:
+                    geno = base.copy()
+                    geno[missing] = np.nan
+                    path = self.tmpdir / 'missp.bgen'
+                    with BgenWriter(path, n, samples=samples) as bfile:
+                        bfile.add_variant(
+                            'v', 'rs', '01', 10, ['A', 'C'], geno,
+                            ploidy=np.full(n, ploidy, dtype=np.uint8),
+                            phased=True, bit_depth=bit_depth)
+
+                    with BgenReader(path) as bfile:
+                        var = next(iter(bfile))
+                        probs = var.probabilities
+                        self.assertTrue(var.is_phased)
+                    self._assert_missing_layout(base, probs, missing, bit_depth,
+                                                note=f', ploidy={ploidy}')
+
+    def test_missing_samples_with_varying_ploidy_roundtrip(self):
+        ''' and with a ploidy that differs per sample
+
+        Each sample then stores a different number of probabilities, so the skip has to
+        use that sample's own width rather than the widest.
+        '''
+        n = 9
+        rng = np.random.default_rng(19)
+        samples = [f's{i}' for i in range(n)]
+        ploidy = np.tile([1, 2, 3], n // 3).astype(np.uint8)
+        widths = [math.comb(int(p) + 1, 1) for p in ploidy]
+        base = np.full((n, max(widths)), np.nan)
+        for i, ploid in enumerate(ploidy):
+            row = rng.random(widths[i])
+            base[i, :widths[i]] = row / row.sum()
+
+        for bit_depth in [1, 8, 15, 32]:
+            for missing in [[0], [n - 1], [1, 2], list(range(0, n, 3))]:
+                geno = base.copy()
+                geno[missing] = np.nan
+                path = self.tmpdir / 'missv.bgen'
+                with BgenWriter(path, n, samples=samples) as bfile:
+                    bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], geno,
+                                      ploidy=ploidy, bit_depth=bit_depth)
+
+                with BgenReader(path) as bfile:
+                    var = next(iter(bfile))
+                    probs = var.probabilities
+                    self.assertEqual(list(var.ploidy), list(ploidy))
+                self._assert_missing_layout(base, probs, missing, bit_depth,
+                                            width=widths)
+
+    def test_biallelic_8bit_matches_neighbouring_shapes(self):
+        ''' the common shape is encoded by a specialised loop, which must agree
+
+        Biallelic, unphased, constant ploidy 2, bit depth 8 is what almost all real data
+        looks like, so it skips the generic encoder. Nothing about the stored bytes may
+        change as a result. There is no way to route the same variant through both
+        encoders from Python, so instead check the parts that are observable: the values
+        read back, and that the shapes either side of the dispatch still behave.
+        '''
+        n = 50
+        rng = np.random.default_rng(101)
+        geno = rng.random((n, 3))
+        geno /= geno.sum(axis=1, keepdims=True)
+        samples = [f's{i}' for i in range(n)]
+
+        # the dispatched shape, and its immediate neighbours which take the generic path
+        shapes = [
+            ('dispatched', dict(bit_depth=8), geno),
+            ('bit_depth 7', dict(bit_depth=7), geno),
+            ('bit_depth 9', dict(bit_depth=9), geno),
+            ('explicit ploidy', dict(bit_depth=8,
+                                     ploidy=np.full(n, 2, dtype=np.uint8)), geno),
+        ]
+        for label, kwargs, probs in shapes:
+            path = self.tmpdir / 'shape.bgen'
+            with BgenWriter(path, n, samples=samples) as bfile:
+                bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], probs,
+                                  **kwargs)
+            with BgenReader(path) as bfile:
+                var = next(iter(bfile))
+                got = var.probabilities
+                self.assertEqual(list(var.ploidy), [2] * n, label)
+                self.assertFalse(var.is_phased, label)
+            depth = kwargs['bit_depth']
+            tol = 1 / (2 ** depth - 1) + 4 * float(np.spacing(np.float32(1.0)))
+            np.testing.assert_allclose(got, probs, atol=tol, rtol=0,
+                                       err_msg=label)
+
+    def test_biallelic_8bit_stores_every_quantised_value(self):
+        ''' the specialised encoder must cover the whole 0 to 255 range
+
+        It scales a running total rather than each probability, and clamps so the total
+        never decreases, so walk the first probability across every step the bit depth
+        can represent and confirm each one round trips.
+        '''
+        n = 256
+        first = np.arange(n) / 255.0
+        geno = np.zeros((n, 3))
+        geno[:, 0] = first
+        geno[:, 1] = 1.0 - first
+        samples = [f's{i}' for i in range(n)]
+
+        path = self.tmpdir / 'steps.bgen'
+        with BgenWriter(path, n, samples=samples) as bfile:
+            bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], geno,
+                              bit_depth=8)
+
+        with BgenReader(path) as bfile:
+            got = next(iter(bfile)).probabilities
+        # each stored value is exact at this bit depth, so only float32 error remains
+        np.testing.assert_allclose(got, geno, atol=1e-6, rtol=0)
+
+    def test_biallelic_8bit_rejects_bad_rows(self):
+        ''' the specialised encoder keeps the same rejections as the generic one
+
+        It writes the probability checks out by hand rather than looping, so each one has
+        to still be there: a partially missing row, a row summing above one, and a
+        negative probability.
+        '''
+        n = 8
+        samples = [f's{i}' for i in range(n)]
+        base = np.full((n, 3), 1 / 3)
+
+        partial = base.copy()
+        partial[3, 1] = np.nan
+        cases = [
+            (partial, 'must encode all as missing'),
+            (np.full((n, 3), 0.5), 'sum to more than 1'),
+            (np.array([[-0.5, 0.75, 0.75]] * n), 'must be between 0 and 1'),
+        ]
+        for geno, message in cases:
+            path = self.tmpdir / 'bad.bgen'
+            with BgenWriter(path, n, samples=samples) as bfile:
+                with self.assertRaisesRegex(ValueError, message):
+                    bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], geno,
+                                      bit_depth=8)
+
     def test_probabilities_stay_in_range(self):
         ''' check the inferred final probability is never out of range
 

@@ -528,6 +528,62 @@ static std::array<std::uint32_t, 64> probs_per_ploidy(int n_alleles, int max_plo
   return counts;
 }
 
+/// @brief encode the common case of biallelic, unphased, ploidy 2, at a bit depth of 8
+///
+/// Almost all real data has this shape, and it lets the generic loop's per sample overhead
+/// go: there are always three probabilities in and two bytes out, the scaling factor is
+/// always 255, and the output is byte aligned so no bit offset arithmetic is needed.
+///
+/// The rounding and clamping decisions are still made by scale_cumulative, the same
+/// function the generic path uses, so there is only one definition of how a probability
+/// becomes a stored value. Only the loop structure around it is specialised.
+///
+/// @param encoded buffer to write into, already zero filled
+/// @param genotype_offset where this variant's probability bytes start
+/// @param ploidy_offset where the per sample ploidy bytes start
+/// @param n_samples number of samples
+/// @param genotypes three probabilities per sample
+/// @return offset one past the last byte written
+static std::uint32_t encode_biallelic_8bit(std::vector<std::uint8_t> &encoded,
+                     std::uint32_t genotype_offset,
+                     std::uint32_t ploidy_offset,
+                     std::uint32_t n_samples,
+                     double *genotypes)
+{
+  const double factor = 255.0;
+  std::uint8_t *out = &encoded[genotype_offset];
+  std::uint8_t *flags = &encoded[ploidy_offset];
+  for (std::uint32_t n=0; n < n_samples; n++, out += 2) {
+    double *probs = &genotypes[3 * n];
+    if (missing_genotypes(probs, 3)) {
+      flags[n] |= 0x80;
+      // as in encode_unphased, both bytes of a missing sample encode as zero and the
+      // buffer already holds zeroes, so there is nothing to write
+      continue;
+    }
+    // the probabilities for a sample sum to 1.0, so scale their running total
+    check_probability(probs[0]);
+    double cumulative = probs[0];
+    check_cumulative(cumulative);
+    std::uint64_t running = scale_cumulative(cumulative, factor, 0);
+    out[0] = (std::uint8_t) running;
+
+    check_probability(probs[1]);
+    cumulative += probs[1];
+    check_cumulative(cumulative);
+    std::uint64_t previous = running;
+    running = scale_cumulative(cumulative, factor, previous);
+    out[1] = (std::uint8_t) (running - previous);
+
+    // the third probability is inferred by the reader rather than stored, but it still
+    // has to be checked, or a row summing above one would be written as something else
+    check_probability(probs[2]);
+    cumulative += probs[2];
+    check_cumulative(cumulative);
+  }
+  return genotype_offset + 2 * n_samples;
+}
+
 static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
                      std::uint32_t genotype_offset,
                      std::uint32_t ploidy_offset,
@@ -760,8 +816,16 @@ static std::vector<std::uint8_t> encode_layout2(
   i += 1;
 
   if (!phased) {
-    encoded_size = encode_unphased(encoded, i, ploidy_offset, n_samples, n_alleles,
+    if ((n_alleles == 2) && constant_ploidy && (max_ploidy == 2) &&
+        (bit_depth == 8)) {
+      // the shape nearly all real data has, which avoids the generic loop's per sample
+      // overhead. It writes the same bytes encode_unphased would
+      encoded_size = encode_biallelic_8bit(encoded, i, ploidy_offset, n_samples,
+                                           genotypes);
+    } else {
+      encoded_size = encode_unphased(encoded, i, ploidy_offset, n_samples, n_alleles,
                                 constant_ploidy, max_ploidy, genotypes, bit_depth);
+    }
   } else {
     encoded_size = encode_phased(encoded, i, ploidy_offset, n_samples, n_alleles,
                                    constant_ploidy, max_ploidy, genotypes, bit_depth);
