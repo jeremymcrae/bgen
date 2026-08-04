@@ -12,6 +12,9 @@ calls the SSE4 version when AVX2 is missing, and there is no way to ask for the 
 at runtime. So these tests compile the helpers directly and call them with the ploidy
 array butted up against an unreadable page, which turns any overread into a crash rather
 than something that depends on allocator slack.
+
+The same helpers also used to widen the bytes to 32 bits and accumulate there, which
+overflowed partway through a large cohort, so that is checked here too.
 '''
 
 import os
@@ -91,6 +94,48 @@ int main() {
 '''
 
 
+# sum a large array of the largest possible ploidy, which is where a 32-bit accumulator
+# wraps. This allocates one byte per sample, so it stays affordable
+OVERFLOW_PROBE = r'''
+#include <cstdint>
+#include <cstdio>
+#include <new>
+#include <vector>
+
+#include "utils.cpp"
+
+using namespace bgen;
+
+int main() {
+  int failures = 0;
+  // max_ploidy is read as a whole byte from the file, and the constant ploidy branch of
+  // parse_ploidy memsets the array to it without masking, so 255 is reachable
+  const std::uint8_t worst = 255;
+  // well past where 32-bit lanes wrapped, which was about 33.7M for avx2 and 16.8M for sse4
+  for (std::uint32_t size : {16843024u, 33686048u, 40000000u}) {
+    std::vector<std::uint8_t> values;
+    try {
+      values.assign(size, worst);
+    } catch (const std::bad_alloc &) {
+      continue;
+    }
+    std::uint64_t want = (std::uint64_t) size * worst;
+    std::uint32_t n = size;
+    if (fast_ploidy_sum(values.data(), n) != want) { failures++; }
+
+    // the sse4 helper is skipped on a cpu with avx2, so drive it directly as well
+    std::uint32_t i = 0;
+    n = size;
+    std::uint64_t got = ploidy_sum_sse4(values.data(), n, i);
+    for (; i < size; i++) { got += values[i]; }
+    if (got != want) { failures++; }
+  }
+  printf("%d\n", failures);
+  return 0;
+}
+'''
+
+
 def compiler():
     ''' the compiler python itself was built with, so the probe matches the extension
     '''
@@ -108,35 +153,57 @@ class TestPloidySimdBounds(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        ''' build the probe once, since compiling is the slow part
+        ''' build the probes once, since compiling is the slow part
         '''
         cls.tmpdir = tempfile.mkdtemp()
-        source = Path(cls.tmpdir) / 'probe.cpp'
-        source.write_text(PROBE)
-        cls.binary = Path(cls.tmpdir) / 'probe'
-        build = subprocess.run(compiler() + ['-std=c++11', '-O2', f'-I{SRC}',
-                                             '-o', str(cls.binary), str(source)],
-                               capture_output=True, text=True, timeout=300)
-        cls.build_error = build.stderr if build.returncode != 0 else None
+        cls.binaries = {}
+        cls.build_errors = {}
+        for name, code in [('bounds', PROBE), ('overflow', OVERFLOW_PROBE)]:
+            source = Path(cls.tmpdir) / f'{name}.cpp'
+            source.write_text(code)
+            binary = Path(cls.tmpdir) / name
+            build = subprocess.run(compiler() + ['-std=c++11', '-O2', f'-I{SRC}',
+                                                 '-o', str(binary), str(source)],
+                                   capture_output=True, text=True, timeout=300)
+            cls.binaries[name] = binary
+            cls.build_errors[name] = (build.stderr if build.returncode != 0 else None)
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdir, ignore_errors=True)
 
-    def test_ploidy_helpers_stay_in_bounds(self):
-        ''' the helpers must not read past a ploidy array that ends at a guard page
+    def run_probe(self, name):
+        ''' run one of the compiled probes and return its output
         '''
-        if self.build_error is not None:
-            self.skipTest(f'could not build the probe: {self.build_error[-500:]}')
-        proc = subprocess.run([str(self.binary)], capture_output=True, text=True,
-                              timeout=300)
+        if self.build_errors[name] is not None:
+            self.skipTest(f'could not build the {name} probe: '
+                          f'{self.build_errors[name][-500:]}')
+        proc = subprocess.run([str(self.binaries[name])], capture_output=True,
+                              text=True, timeout=300)
         # a read past the end of the array lands on the guard page, which is a signal
         self.assertGreaterEqual(proc.returncode, 0,
                                 msg=f'crashed with signal {-proc.returncode}, so a '
                                     'helper read past the end of the ploidy array')
         self.assertEqual(proc.returncode, 0, msg=proc.stderr[-500:])
-        self.assertEqual(proc.stdout.strip(), '0',
+        return proc.stdout.strip()
+
+    def test_ploidy_helpers_stay_in_bounds(self):
+        ''' the helpers must not read past a ploidy array that ends at a guard page
+        '''
+        self.assertEqual(self.run_probe('bounds'), '0',
                          msg='a helper returned the wrong sum or range')
+
+    def test_ploidy_sum_does_not_overflow(self):
+        ''' the sums must stay correct for a big cohort at the largest ploidy
+
+        The bytes used to be widened to 32 bits and accumulated there, so both an
+        individual lane and the sum of the lanes wrapped partway through a large cohort.
+        The size at which that happened depended on the ploidy values, so it could not be
+        guarded by a fixed sample count. They are accumulated into 64-bit counters now,
+        which cannot overflow for any array a 32-bit size can describe.
+        '''
+        self.assertEqual(self.run_probe('overflow'), '0',
+                         msg='a ploidy sum overflowed')
 
 
 if __name__ == '__main__':

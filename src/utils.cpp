@@ -1,7 +1,6 @@
 
 #include <array>
 #include <algorithm>
-#include <cstring>
 #include <stdexcept>
 
 #include "utils.h"
@@ -18,26 +17,17 @@ namespace bgen {
 // only ever entered after a runtime check for AVX2 support.
 BGEN_TARGET_AVX2
 static std::uint64_t ploidy_sum_avx2(std::uint8_t * x, std::uint32_t & size, std::uint32_t & i) {
-  std::uint64_t total = 0;
-  std::uint32_t arr[8];
-  __m128i initial;
-  __m256i _vals1, _vals2;
-  __m256i _sum1 = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0);
-  __m256i _sum2 = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0);
-  for (; i + 16 < size; i += 16) {
-    // load data and convert to 32-bit uints
-    initial = _mm_loadu_si128((const __m128i*) &x[i]);
-    _vals1 = _mm256_cvtepu8_epi32(initial);
-    _vals2 = _mm256_cvtepu8_epi32(_mm_bsrli_si128(initial, 8));
-
-    _sum1 = _mm256_add_epi32(_sum1, _vals1);
-    _sum2 = _mm256_add_epi32(_sum2, _vals2);
+  std::uint64_t arr[4];
+  __m256i _sum = _mm256_setzero_si256();
+  const __m256i zero = _mm256_setzero_si256();
+  for (; i + 32 <= size; i += 32) {
+    // sum each half of every 64-bit lane against zero, which accumulates the bytes
+    // straight into 64-bit counters, so nothing can overflow part way through
+    __m256i values = _mm256_loadu_si256((const __m256i*) &x[i]);
+    _sum = _mm256_add_epi64(_sum, _mm256_sad_epu8(values, zero));
   }
-  _mm256_storeu_si256((__m256i*) &arr[0], _sum1);
-  total += arr[0] + arr[1] + arr[2] + arr[3] + arr[4] + arr[5] + arr[6] + arr[7];
-  _mm256_storeu_si256((__m256i*) &arr[0], _sum2);
-  total += arr[0] + arr[1] + arr[2] + arr[3] + arr[4] + arr[5] + arr[6] + arr[7];
-  return total;
+  _mm256_storeu_si256((__m256i*) &arr[0], _sum);
+  return arr[0] + arr[1] + arr[2] + arr[3];
 }
 
 // this code is solely here to avoid a bug on macosx x86_64 when AVX2 is not
@@ -45,20 +35,15 @@ static std::uint64_t ploidy_sum_avx2(std::uint8_t * x, std::uint32_t & size, std
 // segfaults. It's a mystery why.
 BGEN_TARGET_SSE4
 static std::uint64_t ploidy_sum_sse4(std::uint8_t * x, std::uint32_t & size, std::uint32_t & i) {
-  std::uint32_t arr[4];
-  __m128i initial;
-  __m128i _vals;
-  __m128i _sum = _mm_set_epi32(0, 0, 0, 0);
-  for (; i + 4 <= size; i += 4) {
-    // load four values and convert to 32-bit uints
-    std::int32_t tmp;
-    std::memcpy(&tmp, &x[i], 4);
-    initial = _mm_cvtsi32_si128(tmp);
-    _vals = _mm_cvtepu8_epi32(initial);
-    _sum = _mm_add_epi32(_sum, _vals);
+  std::uint64_t arr[2];
+  __m128i _sum = _mm_setzero_si128();
+  const __m128i zero = _mm_setzero_si128();
+  for (; i + 16 <= size; i += 16) {
+    __m128i values = _mm_loadu_si128((const __m128i*) &x[i]);
+    _sum = _mm_add_epi64(_sum, _mm_sad_epu8(values, zero));
   }
   _mm_storeu_si128((__m128i*) &arr[0], _sum);
-  return arr[0] + arr[1] + arr[2] + arr[3];
+  return arr[0] + arr[1];
 }
 
 // get min and max of ploidy values with AVX2
@@ -160,10 +145,10 @@ bool minor_certain(double freq, int n_checked, double z) {
 // Summing the ploidy array via numpy is more expensive than it should be, this
 // is just a quick vectorized sum to speed that up.
 //
-// We need to load the data into vector registers, but we need to convert the
-// 8-bit vectors to 32-bit to avoid overflow. 32-bit uints should be sufficient,
-// since this sums ploidy states, which can be at most 255 per person, so this
-// allows at least 269 million individuals (((2 ** 32) * 16) / 255).
+// The bytes are accumulated straight into 64-bit counters, so no intermediate can
+// overflow. A 32-bit accumulator could not manage that: the ploidy is at most 255
+// per person, so the lanes and the sum of the lanes both wrap partway through a
+// large cohort, and the size at which that happens depends on the ploidy values.
 //
 /// @param x array of floats
 /// @param size size of array
@@ -171,12 +156,6 @@ bool minor_certain(double freq, int n_checked, double z) {
 std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
   std::uint32_t i = 0;
   std::uint64_t total = 0;
-  
-  if (size > 269000000) {
-    // raise error if this gets too many samples. the fix would be to refactor
-    // this function to use packed 64-bit ints e.g. _mm512_add_epi64
-    throw std::invalid_argument("too many samples for valid summing");
-  }
 
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
