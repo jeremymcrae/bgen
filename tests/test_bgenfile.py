@@ -545,6 +545,23 @@ class TestBgenReader(unittest.TestCase):
         with BgenReader(self.folder / 'example.16bits.bgen') as bfile:
             self.assertEqual(len([x for x in bfile]), len(bfile))
     
+    def test_truncated_bgen_index_still_reports_truncation(self):
+        ''' indexing a truncated file must blame the file, not seeking
+
+        Reaching a variant by index on a stream now reports that a stream cannot seek.
+        A truncated file on disk can seek perfectly well, so it has to keep reporting
+        what is actually wrong with it.
+        '''
+        data = (self.folder / 'example.16bits.bgen').read_bytes()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / 'truncated.bgen'
+            path.write_bytes(data[:len(data) * 90 // 100])
+            
+            with BgenReader(path, delay_parsing=True) as bfile:
+                with self.assertRaisesRegex(ValueError, 'truncated') as raised:
+                    bfile[0]
+                self.assertNotIn('seek', str(raised.exception))
+    
     def test_truncated_bgen_reparse(self):
         ''' a failed parse must not leave half-parsed variants behind
         

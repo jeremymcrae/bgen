@@ -57,6 +57,8 @@ with BgenReader(sys.stdin) as bfile:
 '
 # NOTE: if using a separate sample file, you cannot also read that from stdin,
 #       you would need: with BgenReader(sys.stdin, SAMPLE_PATH) as bfile:
+# NOTE: a stream cannot seek, so variants can only be reached by iteration.
+#       Picking variants with bfile[i] or fetch() needs a file on disk.
 ```
 
 #### API documentation

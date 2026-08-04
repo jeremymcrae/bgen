@@ -18,6 +18,13 @@ import numpy as np
 
 from bgen.index import Index
 
+# Random access needs to seek to a variant's offset, which a stream cannot do, so the
+# only way through a pipe is to iterate. Kept in one place because several methods hit
+# the same wall and had been describing it differently, or blaming the file instead.
+NO_RANDOM_ACCESS = ('cannot pick out single variants while reading from stdin, since '
+                    'that needs to seek within the bgen. Iterate over the bgen to '
+                    'reach the variants in order, or read from a file instead')
+
 cdef extern from "<iostream>" namespace "std::ios_base":
     cdef cppclass open_mode:
         pass
@@ -576,6 +583,13 @@ cdef class BgenReader:
         if idx >= size or idx < 0:
             raise IndexError(f'cannot get Variant at index: {orig_idx}')
         
+        # Getting a variant by index has to seek to it, which a pipe cannot do. Say so
+        # before parsing, since otherwise the seek fails after the walk and the error
+        # blames the file for being truncated, which sends people looking for
+        # corruption in a bgen that is perfectly fine.
+        if self.is_stdin:
+            raise ValueError(NO_RANDOM_ACCESS)
+        
         # account for lazy loading variants from bgen
         if self.index is None and self.thisptr.variants.size() == 0:
             self.thisptr.parse_all_variants()
@@ -673,6 +687,8 @@ cdef class BgenReader:
             raise ValueError('bgen file is closed')
         
         if not self.index:
+            if self.is_stdin:
+                raise ValueError(NO_RANDOM_ACCESS)
             raise ValueError("can't fetch variants without index")
         
         for offset in self.index.fetch(chrom, start, stop):
@@ -697,6 +713,9 @@ cdef class BgenReader:
           idx = [i for i, x in enumerate(self.rsids()) if x == rsid]
           return [self[i] for i in idx]
       
+      if self.is_stdin:
+          raise ValueError(NO_RANDOM_ACCESS)
+      
       raise ValueError("can't get variant without fully loading the bgen, or indexing")
     
     def at_position(self, pos):
@@ -715,6 +734,9 @@ cdef class BgenReader:
       if not self.delay_parsing:
           idx = [i for i, x in enumerate(self.positions()) if x == pos]
           return [self[i] for i in idx]
+      
+      if self.is_stdin:
+          raise ValueError(NO_RANDOM_ACCESS)
       
       raise ValueError("can't get variant without fully loading the bgen, or indexing")
     

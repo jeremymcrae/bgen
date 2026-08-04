@@ -83,7 +83,80 @@ class TestBgenStream(unittest.TestCase):
         self.folder = Path(__file__).parent /  "data"
     
     @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
-    def test_bgen_streaming_parse_all_variants(self):
+    def test_random_access_on_stream_names_the_real_problem(self):
+        ''' picking a single variant out of a stream has to blame the stream
+
+        A pipe cannot seek, so there is no way to reach a variant by index, rsid or
+        position. That used to be reported as 'bgen is truncated', which sends people
+        looking for corruption in a file that is perfectly intact - the same file streams
+        every variant fine. Check each entry point says what is actually wrong.
+        '''
+        path = self.folder / 'example.16bits.zstd.bgen'
+        data = path.read_bytes()
+        calls = ['b[0]', 'b[198]', 'b[-1]', 'b.with_rsid("RSID_5")',
+                 'b.at_position(5000)', 'list(b.fetch("01"))']
+        for call in calls:
+            with self.subTest(call=call):
+                code = ('from bgen import BgenReader\n'
+                        'b = BgenReader("/dev/stdin")\n'
+                        'try:\n'
+                        f'    {call}\n'
+                        '    print("NO ERROR")\n'
+                        'except ValueError as e:\n'
+                        '    print(e)\n')
+                proc = run_piped(code, data)
+                self.assertEqual(proc.returncode, 0,
+                                 msg=proc.stderr.decode('utf8', 'replace'))
+                message = proc.stdout.decode('utf8').strip()
+                self.assertIn('stdin', message)
+                self.assertIn('seek', message)
+                self.assertNotIn('truncated', message)
+
+    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
+    def test_streaming_still_works_after_a_refused_lookup(self):
+        ''' refusing a lookup must not consume the stream
+
+        The refusal happens before anything is parsed, so the variants are all still
+        there to iterate over. If it were raised after walking the file, the advice to
+        iterate instead would be useless.
+        '''
+        path = self.folder / 'example.16bits.zstd.bgen'
+        code = ('from bgen import BgenReader\n'
+                'b = BgenReader("/dev/stdin")\n'
+                'try:\n'
+                '    b[0]\n'
+                'except ValueError:\n'
+                '    pass\n'
+                'print(len(list(b)))\n')
+        proc = run_piped(code, path.read_bytes())
+        self.assertEqual(proc.returncode, 0,
+                         msg=proc.stderr.decode('utf8', 'replace'))
+        self.assertEqual(proc.stdout.decode('utf8').strip(), '199')
+
+    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
+    def test_truncated_stream_does_not_blame_seeking(self):
+        ''' a stream that really is short must not be blamed on seeking
+
+        The new message names an unseekable stream as the problem, so it must not appear
+        for a stream that is genuinely damaged, or a corrupt bgen would look merely
+        unseekable. A stream cut short reports the read that failed, since cutting
+        mid-variant is caught while decompressing rather than by the variant count.
+        '''
+        path = self.folder / 'example.16bits.zstd.bgen'
+        data = path.read_bytes()
+        code = ('from bgen import BgenReader\n'
+                'b = BgenReader("/dev/stdin")\n'
+                'try:\n'
+                '    print(len(list(b)))\n'
+                'except ValueError as e:\n'
+                '    print(e)\n')
+        proc = run_piped(code, data[:len(data) // 2])
+        self.assertEqual(proc.returncode, 0,
+                         msg=proc.stderr.decode('utf8', 'replace'))
+        message = proc.stdout.decode('utf8').strip()
+        self.assertNotEqual(message, '199')
+        self.assertNotIn('seek', message)
+
         ''' check we can parse all variants of a bgen from stdin
         
         Anything which needs every variant at once (rsids, varids, chroms,
