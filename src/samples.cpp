@@ -8,12 +8,12 @@
 
 namespace bgen {
 
-/// most IDs to reserve space for up front when nothing bounds the count
+/// most IDs to reserve space for up front
 ///
 /// Reserving the full count would ask the allocator for tens of bytes per claimed
 /// sample, which a corrupt count can push past any address space limit even though
-/// the pages are never touched. This is only needed where the bgen's own size is
-/// unknown, so growing past it costs a few reallocations on a stream.
+/// the pages are never touched. Growing past this costs a few reallocations, which
+/// only bgens with more than a million samples pay.
 const std::uint64_t MAX_ID_RESERVE = 1 << 20;
 
 /// how many samples a block of this many bytes could describe
@@ -62,27 +62,19 @@ Samples::Samples(std::istream * handle, std::uint32_t n_samples,
   // count the bytes the IDs occupy, to compare with sample_header_length afterwards
   std::uint64_t used = 8;
   
-  if (file_size > 0) {
-    samples.resize(n_samples);
-    for (std::uint32_t i=0; i<n_samples; i++) {
-      // read the IDs as raw bytes, so that IDs containing spaces survive intact
-      if (!read_prefixed_string<std::uint16_t>(*handle, samples[i])) {
-        throw std::invalid_argument("bgen file is truncated inside the sample block");
-      }
-      used += 2 + samples[i].size();
+  // The checks above bound the count by the bytes available, but an ID costs far more
+  // in memory than the two bytes that justified counting it, so building one per
+  // claimed sample up front still amplifies the file by an order of magnitude. Reserve
+  // a bounded amount instead and grow as the IDs actually arrive, so a count that the
+  // data cannot back out only costs what was read before it ran out.
+  samples.reserve(std::min((std::uint64_t) n_samples, MAX_ID_RESERVE));
+  for (std::uint32_t i=0; i<n_samples; i++) {
+    samples.emplace_back();
+    // read the IDs as raw bytes, so that IDs containing spaces survive intact
+    if (!read_prefixed_string<std::uint16_t>(*handle, samples.back())) {
+      throw std::invalid_argument("bgen file is truncated inside the sample block");
     }
-  } else {
-    // On a stream we cannot use the block length to validate sample count. Reserving
-    // only takes address space, but could hit the process memory limit with large values,
-    // so cap it and grow as the IDs actually arrive.
-    samples.reserve(std::min((std::uint64_t) n_samples, MAX_ID_RESERVE));
-    for (std::uint32_t i=0; i<n_samples; i++) {
-      samples.emplace_back();
-      if (!read_prefixed_string<std::uint16_t>(*handle, samples.back())) {
-        throw std::invalid_argument("bgen file is truncated inside the sample block");
-      }
-      used += 2 + samples.back().size();
-    }
+    used += 2 + samples.back().size();
   }
   
   // The IDs should have taken the block right up to its declared length.

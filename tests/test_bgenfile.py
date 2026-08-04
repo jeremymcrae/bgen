@@ -26,7 +26,7 @@ except ImportError:
 # sample count
 MEMORY_CAP = 2 * 1024 ** 3
 
-def run_capped(code):
+def run_capped(code, cap=None):
     ''' run code in a subprocess under a memory cap
     
     The cap has to apply to the whole process, so this cannot run in-process. The
@@ -40,6 +40,8 @@ def run_capped(code):
     the imports already took so it does not depend on this machine's numpy. Only linux
     publishes that, and elsewhere the cap falls back to being absolute, as it used to be.
     '''
+    if cap is None:
+        cap = MEMORY_CAP
     preamble = textwrap.dedent(f'''
         import sys
         sys.path[:] = {sys.path!r}
@@ -53,7 +55,7 @@ def run_capped(code):
                         used = int(line.split()[1]) * 1024
         except OSError:
             pass
-        cap = used + {MEMORY_CAP}
+        cap = used + {cap}
         resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
         ''')
     return subprocess.run([sys.executable, '-c', preamble + textwrap.dedent(code)],
@@ -442,6 +444,60 @@ class TestBgenReader(unittest.TestCase):
         path = Path(self.tmpdir) / f'ids{len(ids)}_{block_delta}_{len(blob)}.bgen'
         path.write_bytes(data)
         return path
+    
+    def _unsatisfiable_ids_bgen(self, path, file_size):
+        ''' a bgen claiming as many samples as its size could possibly allow
+        
+        The sample block length is set to exactly fit the claimed count, so the count
+        passes both capacity checks, but every ID says it is 65535 bytes long, so the
+        reads run out of file after a handful. That is the gap the allocation used to
+        fall through: the count is bounded by the bytes available, but each ID costs far
+        more in memory than the two bytes that justified counting it.
+        '''
+        header_length = 20
+        flags = (2 << 2) | (1 << 31)
+        n_samples = (file_size - 8) // 2
+        block = struct.pack('<II', 8 + n_samples * 2, n_samples)
+        data = bytearray()
+        data += struct.pack('<IIII', header_length + len(block), header_length, 0,
+                            n_samples)
+        data += b'bgen' + struct.pack('<I', flags) + block
+        data += b'\xff' * (file_size - len(data))
+        path.write_bytes(bytes(data))
+        return n_samples
+    
+    def test_sample_ids_beyond_end_of_file_are_rejected(self):
+        ''' a count the ID bytes cannot satisfy is rejected while reading them
+        '''
+        path = Path(self.tmpdir) / 'unsatisfiable.bgen'
+        n_samples = self._unsatisfiable_ids_bgen(path, 1 * 1024 * 1024)
+        self.assertGreater(n_samples, 500_000)
+        with self.assertRaises(ValueError):
+            BgenReader(path, delay_parsing=True)
+    
+    @unittest.skipUnless(HAS_RLIMIT, 'needs RLIMIT_AS to cap memory')
+    def test_sample_ids_are_not_allocated_before_being_read(self):
+        ''' the sample list must grow with the IDs read, not the count claimed
+        
+        The count is bounded by the file size, since an ID needs at least a two byte
+        length prefix, but it used to size the list up front, and a std::string costs
+        16 times that. So a file whose IDs run out immediately still allocated 16 bytes
+        of memory per byte of file. The cap here is a small multiple of the file, which
+        the old resize() cannot fit while leaving ample room for the IDs that are
+        genuinely readable.
+        '''
+        file_size = 32 * 1024 * 1024
+        path = Path(self.tmpdir) / 'unsatisfiable_capped.bgen'
+        self._unsatisfiable_ids_bgen(path, file_size)
+        out = run_capped(f'''
+            from bgen import BgenReader
+            try:
+                BgenReader({str(path)!r}, delay_parsing=True)
+            except ValueError:
+                print('rejected')
+            ''', cap=4 * file_size)
+        self.assertEqual(out.returncode, 0, msg=out.stderr[-2000:])
+        self.assertIn('rejected', out.stdout)
     
     def test_valid_sample_block_still_accepted(self):
         ''' the block length check must not reject an untouched file
