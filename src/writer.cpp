@@ -471,6 +471,26 @@ static std::uint64_t emplace_probability(std::uint64_t value,
   return window;
 }
 
+/// @brief precompute number of probabilities per sample for every ploidy
+///
+/// Only entries up to max_ploidy are filled. Higher ploidies cannot occur, and for a
+/// variant with many alleles they are not even representable (12 alleles at a ploidy
+/// of 63 exceeds a 32-bit count), so computing them would refuse a valid variant.
+///
+/// @param n_alleles allele count for the variant
+/// @param max_ploidy highest ploidy any sample has
+/// @param phased whether the genotypes are phased
+/// @return counts indexed by ploidy, valid up to max_ploidy
+static std::array<std::uint32_t, 64> probs_per_ploidy(int n_alleles, int max_ploidy,
+                                                     bool phased) {
+  std::array<std::uint32_t, 64> counts{};
+  for (int ploid = 0; ploid <= max_ploidy; ploid++) {
+    int p = ploid;
+    counts[ploid] = get_max_probs(p, n_alleles, phased);
+  }
+  return counts;
+}
+
 static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
                      std::uint32_t genotype_offset,
                      std::uint32_t ploidy_offset,
@@ -486,6 +506,12 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
   bool phased = false;
   std::uint32_t max_probs = get_max_probs(_ploid, _n_alleles, phased);
   std::uint32_t n_probs = max_probs;  // for storing probs per person
+
+  // only needed when the ploidy varies, since a constant ploidy reuses max_probs
+  std::array<std::uint32_t, 64> ploidy_probs;
+  if (!constant_ploidy) {
+    ploidy_probs = probs_per_ploidy(_n_alleles, (int) max_ploidy, phased);
+  }
 
   double factor = std::pow(2, bit_depth) - 1;
   bool missing;
