@@ -17,6 +17,11 @@ import numpy as np
 
 _IS_WIN32 = sys.platform == 'win32'
 
+# bits per stored probability unless the caller asks for something else. This gives a
+# step of 1/255, so two decimal places survive a round trip, and it doubles as the
+# yardstick for warning about depths that lose more than this
+DEFAULT_BIT_DEPTH = 8
+
 cdef extern from "<iostream>" namespace "std":
     cdef cppclass ostream:
         pass
@@ -173,6 +178,35 @@ cdef class BgenWriter:
         return f'BgenFile("{self.path.decode("utf8")}")'
     
 
+    def _check_bit_depth_fits(self, genotypes, bit_depth, rsid, varid):
+        ''' warn when the bit depth is too coarse for the genotype probabilities
+
+        Stored probabilities step by 1/(2**bit_depth - 1), so a low depth can lose
+        information e.g. [0.3, 0.3, 0.4] encoded into a 1 bit file roundtrips to
+        [0, 1, 0]. This check permits hard-coded genotypes, and variable probabilities
+        by adjusting the tolerance to the bit depth.
+        '''
+        # bit depths above the default do not need checking
+        tolerance = 0.5 / (2 ** DEFAULT_BIT_DEPTH - 1)
+        if 0.5 / (2 ** bit_depth - 1) <= tolerance:
+            return
+
+        factor = float(2 ** bit_depth - 1)
+        with np.errstate(invalid='ignore'):
+            error = np.abs(np.round(genotypes * factor) / factor - genotypes)
+        if error.size == 0 or np.all(np.isnan(error)):
+            # nothing was stored, or every sample is missing, so nothing was lost
+            return
+        worst = float(np.nanmax(error))
+        if worst <= tolerance:
+            return
+
+        stores = ('only stores 0 or 1' if bit_depth == 1
+                  else f'only stores multiples of 1/{factor:.0f}')
+        logging.warning(f'variant {rsid}/{varid} loses up to {worst:.3g} per '
+                        f'probability at bit_depth={bit_depth}, which {stores}. Use a '
+                        f'higher bit_depth to keep the values you passed in')
+
     def _validate_genotypes(self, genotypes):
         ''' check the genotype values
         '''
@@ -243,7 +277,7 @@ cdef class BgenWriter:
 
     def add_variant(self, varid, rsid, chrom, uint32_t pos, alleles, 
                     genotypes, ploidy=2, bool phased=False,
-                    int bit_depth=8):
+                    int bit_depth=DEFAULT_BIT_DEPTH):
         ''' add a variant to the bgen file on disk
 
         Args:
@@ -284,6 +318,7 @@ cdef class BgenWriter:
         cdef double[:, :] geno_c
         cdef uint32_t n_samples, n_genos
         genotypes, n_samples, n_genos = self._validate_genotypes(genotypes)
+        self._check_bit_depth_fits(genotypes, bit_depth, rsid, varid)
         geno_c = self._make_contiguous(genotypes)
     
         # validate ploidy levels

@@ -61,8 +61,11 @@ class BgenWriter:
             ploidy: integer for constant ploidy, or numpy array of ploidy values per
                 sample, in same order as genotypes
             phased: whether the genotypes are for phased data or not
-            bit_depth: interger from 1-32 (inclusive) for how many bits to store
-                each genotype in.
+            bit_depth: integer from 1-32 (inclusive) for how many bits to store
+                each genotype in. Stored probabilities step by 1/(2**bit_depth - 1),
+                so the default of 8 keeps two decimal places. Depths that lose more
+                than that warn. Depths above 24 only cost space, since probabilities
+                are read back as float32.
         '''
         ...
     def add_variant_direct(self, variant: BgenVar) -> None:

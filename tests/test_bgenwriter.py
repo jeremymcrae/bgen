@@ -262,6 +262,96 @@ class TestBgenWriter(unittest.TestCase):
                     probs = x.probabilities
                     self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth))
     
+    def _collect_warnings(self, geno, bit_depth, **kwargs):
+        ''' write a variant and return the bit_depth warnings it logged
+        '''
+        messages = []
+
+        class Collect(logging.Handler):
+            def emit(self, record):
+                messages.append(record.getMessage())
+
+        path = self.tmpdir / f'warn_{bit_depth}_{len(messages)}_{id(geno)}.bgen'
+        handler = Collect()
+        logger = logging.getLogger()
+        logger.addHandler(handler)
+        try:
+            with BgenWriter(path, geno.shape[0],
+                            samples=[f's{i}' for i in range(geno.shape[0])]) as bfile:
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                                  bit_depth=bit_depth, **kwargs)
+        finally:
+            logger.removeHandler(handler)
+        return [x for x in messages if 'bit_depth' in x]
+
+    def test_coarse_bit_depth_warns(self):
+        ''' a bit depth too coarse for the probabilities has to say so
+
+        Probabilities are stored as integers out of 2**bit_depth - 1, so a low depth does
+        not round so much as replace the values: [0.3, 0.3, 0.4] comes back from a one bit
+        file as [0, 1, 0]. That used to happen silently.
+
+        Which depths warn depends on the values, since the test is whether the loss beats
+        what the default depth would cost. These probabilities are coarse enough to warn
+        up to a depth of 5, and by 6 they already round to within the tolerance.
+        '''
+        geno = np.array([[0.3, 0.3, 0.4]])
+        for bit_depth in range(1, 6):
+            with self.subTest(bit_depth=bit_depth):
+                messages = self._collect_warnings(geno, bit_depth)
+                self.assertEqual(len(messages), 1, messages)
+                self.assertIn(f'bit_depth={bit_depth}', messages[0])
+
+        # and the values really are changed, which is what the warning is about
+        path = self.tmpdir / 'coarse.bgen'
+        with BgenWriter(path, 1, samples=['a']) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno, bit_depth=1)
+        with BgenReader(path) as bfile:
+            probs = np.asarray(next(iter(bfile)).probabilities)
+        self.assertTrue(np.allclose(probs, [[0, 1, 0]]), probs)
+
+    def test_adequate_bit_depth_stays_quiet(self):
+        ''' the default depth and above must not warn, or the warning gets ignored
+
+        The default of 8 gives a step of 1/255, which keeps two decimal places, so
+        ordinary imputed probabilities are stored well enough. Warning merely because
+        they are not exactly representable would fire on nearly every file written.
+        '''
+        rng = np.random.default_rng(9)
+        geno = rng.random((20, 3))
+        geno /= geno.sum(axis=1)[:, None]
+        for bit_depth in [8, 12, 16, 24, 32]:
+            with self.subTest(bit_depth=bit_depth):
+                self.assertEqual(self._collect_warnings(geno, bit_depth), [])
+
+    def test_exactly_representable_values_stay_quiet(self):
+        ''' data a low depth can hold exactly must not warn
+
+        Hard called genotypes are exact at any depth, so storing them in a single bit is
+        a legitimate way to save space. Keying the warning on the depth alone would scold
+        people doing that.
+        '''
+        hard = np.zeros((6, 3))
+        hard[np.arange(6), np.arange(6) % 3] = 1.0
+        for bit_depth in [1, 2, 4, 8]:
+            with self.subTest(bit_depth=bit_depth, data='hard calls'):
+                self.assertEqual(self._collect_warnings(hard, bit_depth), [])
+
+        # values that are exact multiples for their depth are equally fine
+        for bit_depth in [2, 3, 4]:
+            factor = 2 ** bit_depth - 1
+            geno = np.array([[1 / factor, 2 / factor, 1 - 3 / factor]])
+            with self.subTest(bit_depth=bit_depth, data='exact multiples'):
+                self.assertEqual(self._collect_warnings(geno, bit_depth), [])
+
+    def test_missing_genotypes_do_not_warn(self):
+        ''' samples stored as missing lose nothing, whatever the depth
+        '''
+        geno = np.full((3, 3), np.nan)
+        for bit_depth in [1, 4, 8]:
+            with self.subTest(bit_depth=bit_depth):
+                self.assertEqual(self._collect_warnings(geno, bit_depth), [])
+
     def test_probabilities_stay_in_range(self):
         ''' check the inferred final probability is never out of range
 
