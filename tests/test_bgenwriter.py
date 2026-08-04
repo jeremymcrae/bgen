@@ -5,6 +5,8 @@ import unittest
 import tempfile
 import logging
 import os
+import sqlite3
+import threading
 import time
 import sys
 import math
@@ -986,3 +988,95 @@ class TestBgenWriter(unittest.TestCase):
             bfile.add_variant('var1', 'rs1', 'chr1', 10, alleles, geno)
         with BgenReader(path) as bfile:
             self.assertEqual(list(next(iter(bfile)).alleles), alleles)
+
+    def _break_bgen_fd(self, path):
+        ''' close the descriptor the writer holds for its bgen
+
+        Writes to the bgen then fail, while the .bgi index keeps working, so the failure
+        is confined to the data file the way an I/O error on it would be. Limiting the
+        file size instead would break the sqlite index too.
+        '''
+        target = os.path.realpath(str(path))
+        for name in os.listdir('/proc/self/fd'):
+            try:
+                if os.readlink(f'/proc/self/fd/{name}') == target:
+                    os.close(int(name))
+                    return True
+            except (OSError, ValueError):
+                pass
+        return False
+
+    @unittest.skipUnless(sys.platform.startswith('linux'),
+                         'needs /proc to find the bgen descriptor')
+    def test_write_error_is_not_followed_by_a_bogus_offset(self):
+        ''' a writer that has already failed must not report made up file offsets
+
+        The offsets come from tellp(), which returns -1 once the stream has failed. That
+        used to be cast to an unsigned 64 bit offset, so a caller that caught a write
+        error and carried on recorded 18446744073709551615 as a variant's position in the
+        index, with no error at all. Anything reading that index would then seek to
+        nonsense.
+        '''
+        geno = np.array([[0.1, 0.8, 0.1]] * 3)
+        src = self.tmpdir / 'offsets_src.bgen'
+        with BgenWriter(src, 3, samples=['a', 'b', 'c']) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+        reader = BgenReader(src)
+        self.addCleanup(reader.close)
+        variant = next(iter(reader))
+
+        path = self.tmpdir / 'offsets.bgen'
+        bfile = BgenWriter(path, 3, samples=['a', 'b', 'c'])
+        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+        self.assertTrue(self._break_bgen_fd(path), 'could not find the bgen descriptor')
+
+        # each call has to keep refusing, rather than inventing an offset. A caller that
+        # catches the first error and carries on is exactly how a bogus offset used to
+        # reach the index
+        for i in range(3):
+            with self.assertRaises(OSError) as ctx:
+                bfile.add_variant(f'v{i}', f'rs{i}', 'chr1', i + 20, ['A', 'C'], geno)
+            self.assertIn('position', str(ctx.exception))
+
+        # the direct copy is the site that used to return (uint64)-1 without any error
+        with self.assertRaises(OSError) as ctx:
+            bfile.add_variant_direct(variant)
+        self.assertIn('position', str(ctx.exception))
+
+        # nothing bogus should have reached the index
+        bgi = Path(str(path) + '.bgi')
+        starts = []
+        if bgi.exists():
+            con = sqlite3.connect(bgi)
+            starts = [row[0] for row in
+                      con.execute('select file_start_position from Variant').fetchall()]
+            con.close()
+        self.assertTrue(all(0 < x < 2 ** 32 for x in starts), starts)
+
+    def test_writing_to_a_pipe_reports_a_useful_error(self):
+        ''' a bgen needs a seekable output, and saying so beats an iostream error
+
+        The header records where the variants start and how many there are, and both are
+        only known at the end, so the writer seeks back to fill them in. On a pipe the
+        position cannot even be read, which used to surface as
+        "basic_ios::clear: iostream error" from somewhere in the middle of a write.
+        '''
+        path = self.tmpdir / 'pipe.fifo'
+        os.mkfifo(path)
+
+        def drain():
+            with open(path, 'rb') as handle:
+                handle.read()
+
+        # a reader has to be attached, or opening the fifo for writing blocks
+        reader = threading.Thread(target=drain, daemon=True)
+        reader.start()
+        try:
+            with self.assertRaises(OSError) as ctx:
+                bfile = BgenWriter(path, 2, samples=['a', 'b'])
+                geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+                bfile.close()
+            self.assertIn('position', str(ctx.exception))
+        finally:
+            reader.join(timeout=30)

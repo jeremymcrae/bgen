@@ -21,9 +21,41 @@ static void append_bytes(std::vector<char> &buf, const void *data, std::size_t s
   buf.insert(buf.end(), bytes, bytes + size);
 }
 
+/// @brief the current write position, or a clear error if there is not one
+///
+/// The positions tellp() reports are written into the bgen header as the variant data
+/// offset, and handed back to python to build the .bgi index, so a wrong one silently
+/// produces a file whose index points at the wrong bytes.
+///
+/// tellp() has two ways to not give an answer, and only one of them is noisy. On a
+/// stream that has already failed it returns -1 immediately, without touching the stream
+/// state, so the exception mask has nothing to report and (std::uint64_t) -1 becomes a
+/// recorded offset of 18446744073709551615. On a healthy output that cannot seek, such as
+/// a pipe, the seek itself fails and the mask does throw, but only with "basic_ios::clear:
+/// iostream error", which does not say what went wrong.
+static std::uint64_t current_position(std::ofstream &handle) {
+  std::streamoff pos = -1;
+  if (!handle.fail()) {
+    try {
+      pos = handle.tellp();
+    } catch (const std::exception &) {
+      // the mask turned the failed seek into a throw. Fall through to report it in
+      // terms of what the caller can act on
+      pos = -1;
+    }
+  }
+  if (pos < 0) {
+    throw std::ios_base::failure("cannot find the current position in the bgen. A bgen "
+                                 "has to be written to a file that can seek, rather than "
+                                 "to a pipe, and no more can be written after a failed "
+                                 "write");
+  }
+  return (std::uint64_t) pos;
+}
+
 // write a 32-bit value at a given file offset
 static void write_at_offset(std::ofstream &handle, std::uint32_t &val, std::uint32_t offset=0) {
-  std::uint64_t orig_pos = handle.tellp();
+  std::uint64_t orig_pos = current_position(handle);
   handle.seekp(offset);
   handle.write(reinterpret_cast<char *>(&val), 4);
   handle.seekp(orig_pos);
@@ -142,7 +174,18 @@ void CppBgenWriter::add_samples(std::vector<std::string> &samples) {
     handle.write(reinterpret_cast<char *>(&id_size), 2);
     handle << x;
   }
-  variant_data_offset = (std::uint32_t)handle.tellp() - 4;
+  // The bgen stores this as a four byte field, so an offset past that has no valid
+  // encoding. Casting a larger one down wraps it, which leaves a file whose header
+  // sends readers to the wrong place for the variants, so check it in 64 bits first.
+  // The block length check above bounds the sample block alone, but the offset also
+  // carries the header, so the two together can still overflow.
+  std::uint64_t data_offset = current_position(handle) - 4;
+  if (data_offset > UINT32_MAX) {
+    throw std::invalid_argument("the header and sample IDs take up " +
+                                std::to_string(data_offset) + " bytes, which overflows "
+                                "the bgen variant data offset field");
+  }
+  variant_data_offset = (std::uint32_t) data_offset;
   write_variants_offset(handle, variant_data_offset);
 }
 
@@ -152,7 +195,7 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
                                                   std::uint32_t &pos,
                                                   std::vector<std::string> &alleles,
                                                   std::uint32_t _n_samples) {
-  std::uint64_t var_offset = handle.tellp();
+  std::uint64_t var_offset = current_position(handle);
   if (_n_samples != n_samples) {
     throw std::invalid_argument("number of samples doesn't match sample count in file");
   }
@@ -204,9 +247,13 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
 }
 
 std::uint64_t CppBgenWriter::write_variant_direct(std::vector<std::uint8_t> & data) {
-  std::uint64_t var_offset = handle.tellp();
+  std::uint64_t var_offset = current_position(handle);
   n_variants += 1;
-  std::copy(data.begin(), data.end(), std::ostreambuf_iterator<char>(handle));
+  // write() rather than a std::ostreambuf_iterator, because the iterator reports a
+  // failed write only in its own state. It leaves the stream looking good, so the
+  // exception mask that covers every other write here would not see the bytes go
+  // missing, and this function would still return a plausible offset for the index.
+  handle.write(reinterpret_cast<char *>(data.data()), data.size());
   return var_offset;
 }
 
@@ -720,7 +767,7 @@ void CppBgenWriter::encode_genotype_data(std::uint16_t n_alleles,
 std::uint64_t CppBgenWriter::write_genotype_data() {
   handle.write(pending.data(), pending.size());
   pending.clear();
-  return handle.tellp();
+  return current_position(handle);
 }
 
 }  // namespace bgen
