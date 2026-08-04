@@ -525,7 +525,7 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
   for (std::uint32_t i=0; i<(n_samples*max_probs); i+= max_probs) {
     if (!constant_ploidy) {
       _ploid = (int)(encoded[ploidy_offset + (i / max_probs)] &= 63);
-      n_probs = get_max_probs(_ploid, _n_alleles, phased);
+      n_probs = ploidy_probs[_ploid];
     } else {
       n_probs = max_probs;
     }
@@ -589,6 +589,12 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
   std::uint32_t max_probs = get_max_probs(_ploid, _n_alleles, phased);
   std::uint32_t n_probs = max_probs; // for storing probs per person
 
+  // as in encode_unphased, only the varying ploidy path needs the table
+  std::array<std::uint32_t, 64> ploidy_probs;
+  if (!constant_ploidy) {
+    ploidy_probs = probs_per_ploidy(_n_alleles, (int) max_ploidy, phased);
+  }
+
   double factor = std::pow(2, bit_depth) - 1;
   bool missing;
   std::uint32_t bit_idx = 0;
@@ -602,7 +608,7 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
   while (i < (n_samples * max_probs * max_ploidy)) {
     if (!constant_ploidy) {
       _ploid = (int)(encoded[ploidy_offset + sample_idx] &= 63);
-      n_probs = get_max_probs(_ploid, _n_alleles, phased);
+      n_probs = ploidy_probs[_ploid];
     } else {
       _ploid = max_ploidy;
       n_probs = max_probs;
