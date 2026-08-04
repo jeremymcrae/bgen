@@ -123,7 +123,7 @@ std::uint32_t n_choose_k(int n, int k) {
 
   std::uint64_t res = 1;
   for (std::uint32_t i = 0; i < (std::uint32_t) k; ++i) {
-    // throw eror if next round would exceed integer limit
+    // throw error if next round would exceed integer limit
     if (res > UINT64_MAX / (std::uint64_t) (n - i)) {
       throw std::invalid_argument("variant needs more than 2^32 probabilities");
     }
