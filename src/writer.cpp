@@ -368,7 +368,27 @@ static inline void check_cumulative(double cumulative) {
   }
 }
 
-static bool missing_genotypes(double *genotypes, std::uint32_t size) {
+/// @brief round a non-negative double to the nearest integer, halves away from zero
+///
+/// std::round is an out of line libm call on the platforms this builds for, and it sits
+/// in the innermost encode loop, once per stored probability. Truncation plus a
+/// comparison inlines to a few instructions instead. Both the truncation and the
+/// subtraction below are exact, so this avoids the usual std::floor(x + 0.5) trap where
+/// x + 0.5 rounds up in the addition and pushes the result to the wrong integer.
+///
+/// Only defined for finite non-negative x below 2^53, which is what the callers pass.
+static inline std::uint64_t round_nonneg(double x) {
+  std::uint64_t truncated = (std::uint64_t) x;
+  return truncated + (x - (double) truncated >= 0.5);
+}
+
+/// @brief decide whether a sample's genotypes are all missing, rejecting a partial row
+///
+/// Marked inline because the hot encode paths call it once per sample, for as few as three
+/// values, where the call itself costs more than the work. The nan count is deliberately
+/// kept branchless: an early exit on the first non-nan measured faster when few samples
+/// are missing but far slower around half, where the branch stops being predictable.
+static inline bool missing_genotypes(double *genotypes, std::uint32_t size) {
   std::uint32_t nan_count = 0;
   for (std::uint32_t i=0; i<size; i++) {
     nan_count += std::isnan(genotypes[i]);
@@ -405,7 +425,11 @@ static std::vector<std::uint8_t> encode_layout1(
       check_probability(g);
       cumulative += g;
       check_cumulative(cumulative);
-      scaled32 = (std::int32_t)std::round(g * 32768);
+      // check_probability allows a small negative, down to -PROB_TOLERANCE, which
+      // round_nonneg is not defined for. Such a value scales to zero anyway, which is
+      // what std::round followed by the cast to an integer used to produce
+      double product = g * 32768;
+      scaled32 = (product > 0.0) ? (std::int32_t) round_nonneg(product) : 0;
       // check the value is in bounds
       if ((scaled32 < 0) || (scaled32 > 65535)) {
         throw std::invalid_argument("scaled genotype is out of bounds");
@@ -430,24 +454,36 @@ static std::vector<std::uint8_t> encode_layout1(
 /// running total instead means the stored values sum to round(total * max), so
 /// the constraint holds for any probabilities that sum to 1.0.
 ///
+/// The bounds are applied to the double, before the cast to an integer, since a cast
+/// is only defined for values the integer type can represent. That also keeps nan and
+/// inf away from it, though check_probability and check_cumulative mean neither can
+/// arrive here in the first place.
+///
 /// @param cumulative running total of the probabilities so far, including this one
-/// @param factor scaling factor, the maximum encoded value for the bit depth
+/// @param factor scaling factor, the maximum encoded value for the bit depth. Passed by
+///        value since it is only read, which also lets a caller hand over a constant
 /// @param previous value this returned for the preceding probability, so that
 ///        clamping cannot make the current probability encode as negative
 /// @return the running total scaled to the encoded integer range
 static std::uint64_t scale_cumulative(double cumulative,
-                                      double &factor,
+                                      double factor,
                                       std::uint64_t previous)
 {
-  double scaled = std::round(cumulative * factor);
+  double scaled = cumulative * factor;
   // the comparison order also catches nan, which must not reach the cast below
-  if (!(scaled >= (double) previous)) {
+  if (!(scaled >= 0.0)) {
     return previous;
   }
   if (scaled > factor) {
     return (std::uint64_t) factor;
   }
-  return (std::uint64_t) scaled;
+  std::uint64_t value = round_nonneg(scaled);
+  // previous is either zero or an earlier return of this function, so it is never
+  // above factor, and returning it cannot exceed the range for the bit depth
+  if (value < previous) {
+    return previous;
+  }
+  return value;
 }
 
 /// @brief figure out the 64-bit pattern to insert an encoded genotype probability
@@ -523,25 +559,33 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
   double g;
   double cumulative;
   std::uint64_t running, previous, value;
-  for (std::uint32_t i=0; i<(n_samples*max_probs); i+= max_probs) {
+  // counted alongside i rather than recovered as i / max_probs, which is a division by
+  // a value only known at runtime, once or twice for every sample. encode_phased
+  // already tracks the index this way
+  std::uint32_t sample_idx = 0;
+  for (std::uint32_t i=0; i<(n_samples*max_probs); i+= max_probs, sample_idx++) {
     if (!constant_ploidy) {
-      _ploid = (int)(encoded[ploidy_offset + (i / max_probs)] &= 63);
+      _ploid = (int)(encoded[ploidy_offset + sample_idx] &= 63);
       n_probs = ploidy_probs[_ploid];
     } else {
       n_probs = max_probs;
     }
     missing = missing_genotypes(&genotypes[i], n_probs);
     if (missing) {
-      encoded[ploidy_offset + (i / max_probs)] |= 0x80;
+      encoded[ploidy_offset + sample_idx] |= 0x80;
+      // Every probability of a missing sample encodes as zero: the loop below would
+      // substitute zero for each value, leaving the running total at zero, so each
+      // stored value is zero too. The buffer is zero initialised and nothing has
+      // written this sample's bits yet, so stepping over them writes the same bytes
+      // the loop would have. That also keeps the missing test out of the inner loop
+      bit_idx += (n_probs - 1) * bit_depth;
+      continue;
     }
     // the probabilities for a sample sum to 1.0, so scale their running total
     cumulative = 0.0;
     running = 0;
     for (std::uint32_t j = 0; j < (n_probs - 1); j++) {
       g = genotypes[i + j];
-      if (missing) {
-        g = 0;
-      }
       check_probability(g);
       cumulative += g;
       check_cumulative(cumulative);
@@ -564,12 +608,10 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
     // Otherwise a sample whose stored values are individually fine but whose
     // total runs over one would be written with a different final probability
     // than the caller passed in.
-    if (!missing) {
-      g = genotypes[i + n_probs - 1];
-      check_probability(g);
-      cumulative += g;
-      check_cumulative(cumulative);
-    }
+    g = genotypes[i + n_probs - 1];
+    check_probability(g);
+    cumulative += g;
+    check_cumulative(cumulative);
   }
   return genotype_offset + (bit_idx / 8) + (std::uint32_t)((bit_idx % 8) > 0);
 }
@@ -617,6 +659,12 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
     missing = missing_genotypes(&genotypes[i], n_probs);
     if (missing) {
       encoded[ploidy_offset + sample_idx] |= 0x80;
+      // as in encode_unphased, every stored probability of a missing sample is zero,
+      // and the buffer is already zero here, so step over the whole sample
+      bit_idx += (std::uint32_t)_ploid * (n_probs - 1) * bit_depth;
+      i += max_probs * max_ploidy;
+      sample_idx += 1;
+      continue;
     }
     // phased data is received in n_alleles * n_ploidy values, but is stored in
     // n_alleles * (n_ploidy - 1) values, where n_ploidy can differ per person.
@@ -628,9 +676,6 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
       for (std::uint32_t j = 0; j < (n_probs - 1); j++) {
         // repeat for each allele
         g = genotypes[i];
-        if (missing) {
-          g = 0;
-        }
         check_probability(g);
         cumulative += g;
         check_cumulative(cumulative);
@@ -645,12 +690,10 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
         i += 1;
       }
       // as above, the final probability of the haplotype is inferred, not stored
-      if (!missing) {
-        g = genotypes[i];
-        check_probability(g);
-        cumulative += g;
-        check_cumulative(cumulative);
-      }
+      g = genotypes[i];
+      check_probability(g);
+      cumulative += g;
+      check_cumulative(cumulative);
       i += 1;
     }
     i += (max_probs * max_ploidy) - (n_probs * _ploid);
