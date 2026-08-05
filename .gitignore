@@ -2,7 +2,7 @@
 __pycache__/
 dist/
 build/
-xtools/
+.xtools/
 *zlib_build/
 src/bgen/*.cpp
 src/bgen/*.so
