@@ -556,6 +556,136 @@ class TestBgenWriter(unittest.TestCase):
                     bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], geno,
                                       bit_depth=8)
 
+    def test_biallelic_8bit_covers_every_batch_boundary(self):
+        ''' the specialised encoder vectorises, so sample counts must not matter
+
+        It encodes several samples at a time where the hardware allows (four under avx2,
+        two under NEON) and finishes the remainder one at a time. A sample count that is
+        not a whole number of batches therefore takes both paths, and an off by one in
+        either would corrupt or drop the samples at the join. Walk every count across two
+        batch widths so no alignment is missed.
+        '''
+        rng = np.random.default_rng(202)
+        for n in range(1, 18):
+            with self.subTest(n_samples=n):
+                geno = rng.random((n, 3))
+                geno /= geno.sum(axis=1, keepdims=True)
+                samples = [f's{i}' for i in range(n)]
+                path = self.tmpdir / f'batch{n}.bgen'
+                with BgenWriter(path, n, samples=samples) as bfile:
+                    bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], geno,
+                                      bit_depth=8)
+                with BgenReader(path) as bfile:
+                    var = next(iter(bfile))
+                    got = var.probabilities
+                self.assertEqual(got.shape, (n, 3))
+                np.testing.assert_allclose(got, geno, atol=1 / 255 + 1e-6, rtol=0)
+
+    def test_biallelic_8bit_handles_missing_in_every_lane(self):
+        ''' a batch mixing missing and present samples must encode both correctly
+
+        The vectorised encoder tests a whole batch at once, and missing samples fail that
+        test, so it has to separate a batch that is partly missing from one that is
+        unencodable. Placing missing samples at every position within and across batches
+        covers each combination of lanes, which is where a mask error would show up as a
+        neighbour being written as missing, or a missing sample being written as data.
+        '''
+        rng = np.random.default_rng(303)
+        n = 16
+        base = rng.random((n, 3))
+        base /= base.sum(axis=1, keepdims=True)
+        samples = [f's{i}' for i in range(n)]
+        # every subset of the first four samples, so each lane pattern of a batch occurs,
+        # plus patterns that straddle a batch edge
+        patterns = [[i for i in range(4) if mask & (1 << i)] for mask in range(16)]
+        patterns += [[3, 4], [2, 3, 4, 5], [n - 1], [0, n - 1],
+                     list(range(0, n, 2)), list(range(n))]
+        for missing in patterns:
+            with self.subTest(missing=tuple(missing)):
+                geno = base.copy()
+                geno[missing] = np.nan
+                path = self.tmpdir / 'lanes.bgen'
+                with BgenWriter(path, n, samples=samples) as bfile:
+                    bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], geno,
+                                      bit_depth=8)
+                with BgenReader(path) as bfile:
+                    var = next(iter(bfile))
+                    got = var.probabilities
+                    ploidy = np.array(var.ploidy)
+                absent = np.zeros(n, dtype=bool)
+                absent[missing] = True
+                # a missing sample reads back as nan, and a present one must not
+                self.assertTrue(np.isnan(got[absent]).all())
+                self.assertFalse(np.isnan(got[~absent]).any())
+                np.testing.assert_allclose(got[~absent], base[~absent],
+                                           atol=1 / 255 + 1e-6, rtol=0)
+                # the ploidy byte still has to read as 2 for every sample
+                self.assertEqual(list(ploidy), [2] * n)
+
+    def test_biallelic_8bit_rounds_ties_away_from_zero(self):
+        ''' the vectorised encoder must round halves the same way as the scalar one
+
+        The obvious vector rounding instruction rounds halves to even, whereas the scalar
+        encoder rounds them away from zero, and probabilities that are multiples of 1/510
+        land exactly on a half after scaling. Those are the values where the two rules
+        disagree, so store them and check what comes back matches the away from zero rule.
+        '''
+        # (k + 0.5) / 255 scales to exactly k + 0.5, the tie for every stored value
+        ties = np.array([(k + 0.5) / 255.0 for k in range(255)])
+        n = len(ties)
+        geno = np.zeros((n, 3))
+        geno[:, 0] = ties
+        geno[:, 1] = 1.0 - ties
+        samples = [f's{i}' for i in range(n)]
+
+        path = self.tmpdir / 'ties.bgen'
+        with BgenWriter(path, n, samples=samples) as bfile:
+            bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], geno, bit_depth=8)
+
+        with BgenReader(path) as bfile:
+            got = next(iter(bfile)).probabilities
+        # away from zero sends k + 0.5 up to k + 1, so the stored value is one higher than
+        # truncation would give. Half to even would send every other tie down instead
+        expected = (np.arange(255) + 1) / 255.0
+        np.testing.assert_allclose(got[:, 0], expected, atol=1e-6, rtol=0)
+
+    def test_biallelic_8bit_rejects_running_total_over_tolerance(self):
+        ''' the running total after two probabilities is checked, not just the final one
+
+        check_probability allows a probability down to -PROB_TOLERANCE, so a negative third
+        value can pull a row back under the limit after the first two have already gone
+        over it. Such a row must still be rejected, because the encoder stores the running
+        total and a value above the maximum cannot be represented.
+
+        The vectorised encoder tests the intermediate total separately from the final one,
+        and dropping that test is invisible to any row whose probabilities are all
+        non-negative: the final total is then the larger of the two, so checking it alone
+        appears to be enough. These rows are the only ones that tell the two apart, and
+        the window is about 1e-6 wide, so they have to be constructed rather than sampled.
+        '''
+        tolerance = 1e-6
+        n = 8
+        samples = [f's{i}' for i in range(n)]
+        # each row has p0 + p1 above 1 + tolerance, but p0 + p1 + p2 back inside it
+        rows = [
+            (0.5, 0.5 + 1.5 * tolerance, -tolerance),
+            (0.5, 0.5 + 2 * tolerance, -tolerance),
+            (0.25, 0.75 + 1.5 * tolerance, -tolerance / 2),
+        ]
+        for p0, p1, p2 in rows:
+            self.assertGreater(p0 + p1, 1 + tolerance)
+            self.assertLessEqual(p0 + p1 + p2, 1 + tolerance)
+            # place the row in each position of a batch, so no lane is left untested
+            for lane in range(4):
+                with self.subTest(row=(p0, p1, p2), lane=lane):
+                    geno = np.full((n, 3), 1 / 3)
+                    geno[lane] = [p0, p1, p2]
+                    path = self.tmpdir / f'running{lane}.bgen'
+                    with BgenWriter(path, n, samples=samples) as bfile:
+                        with self.assertRaisesRegex(ValueError, 'sum to more than 1'):
+                            bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], geno,
+                                              bit_depth=8)
+
     def test_probabilities_stay_in_range(self):
         ''' check the inferred final probability is never out of range
 

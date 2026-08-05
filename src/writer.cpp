@@ -11,8 +11,17 @@
 #include "zstd/lib/zstd.h"
 #include <zlib.h>
 
+#if defined(__x86_64__)
+  #include <immintrin.h>
+#endif
+
+#if defined(__aarch64__)
+  #include <arm_neon.h>
+#endif
+
 #include "writer.h"
 #include "genotypes.h"
+#include "utils.h"
 
 namespace bgen {
 
@@ -528,6 +537,271 @@ static std::array<std::uint32_t, 64> probs_per_ploidy(int n_alleles, int max_plo
   return counts;
 }
 
+/// @brief encode a range of samples of the biallelic, unphased, ploidy 2, 8 bit shape
+///
+/// Split out from encode_biallelic_8bit so the vector paths below can hand back any batch
+/// they decline, which is how every rounding, clamping and error decision stays in one
+/// place. Encodes samples [first, last).
+///
+/// @param out first output byte of the variant, two per sample
+/// @param flags per sample ploidy bytes, whose top bit marks a missing sample
+/// @param first first sample to encode
+/// @param last one past the last sample to encode
+/// @param genotypes three probabilities per sample
+static void encode_biallelic_8bit_range(std::uint8_t *out,
+                     std::uint8_t *flags,
+                     std::uint32_t first,
+                     std::uint32_t last,
+                     double *genotypes)
+{
+  const double factor = 255.0;
+  for (std::uint32_t n=first; n < last; n++) {
+    double *probs = &genotypes[3 * n];
+    std::uint8_t *bytes = out + 2 * n;
+    if (missing_genotypes(probs, 3)) {
+      flags[n] |= 0x80;
+      // as in encode_unphased, both bytes of a missing sample encode as zero and the
+      // buffer already holds zeroes, so there is nothing to write
+      continue;
+    }
+    // the probabilities for a sample sum to 1.0, so scale their running total
+    check_probability(probs[0]);
+    double cumulative = probs[0];
+    check_cumulative(cumulative);
+    std::uint64_t running = scale_cumulative(cumulative, factor, 0);
+    bytes[0] = (std::uint8_t) running;
+
+    check_probability(probs[1]);
+    cumulative += probs[1];
+    check_cumulative(cumulative);
+    std::uint64_t previous = running;
+    running = scale_cumulative(cumulative, factor, previous);
+    bytes[1] = (std::uint8_t) (running - previous);
+
+    // the third probability is inferred by the reader rather than stored, but it still
+    // has to be checked, or a row summing above one would be written as something else
+    check_probability(probs[2]);
+    cumulative += probs[2];
+    check_cumulative(cumulative);
+  }
+}
+
+#if defined(__x86_64__)
+
+/// @brief deinterleave 4 samples' worth of stride 3 doubles into one vector per probability
+///
+/// The genotypes arrive as p0,p1,p2 per sample, but the arithmetic wants all four samples'
+/// p0 in one register. Three loads cover 12 doubles, and each output lane is then selected
+/// from whichever load holds it: p0 comes from A[0], A[3], B[2], C[1], and so on.
+BGEN_TARGET_AVX2
+static inline void deinterleave3_avx2(const double *src, __m256d &p0, __m256d &p1,
+                                      __m256d &p2) {
+  #define BGEN_SEL(a, b, c, d) (((d) << 6) | ((c) << 4) | ((b) << 2) | (a))
+  __m256d A = _mm256_loadu_pd(src);
+  __m256d B = _mm256_loadu_pd(src + 4);
+  __m256d C = _mm256_loadu_pd(src + 8);
+  p0 = _mm256_blend_pd(
+      _mm256_blend_pd(_mm256_permute4x64_pd(A, BGEN_SEL(0, 3, 0, 0)),
+                      _mm256_permute4x64_pd(B, BGEN_SEL(0, 0, 2, 0)), 0x4),
+      _mm256_permute4x64_pd(C, BGEN_SEL(0, 0, 0, 1)), 0x8);
+  p1 = _mm256_blend_pd(
+      _mm256_blend_pd(_mm256_permute4x64_pd(A, BGEN_SEL(1, 0, 0, 0)),
+                      _mm256_permute4x64_pd(B, BGEN_SEL(0, 0, 3, 0)), 0x6),
+      _mm256_permute4x64_pd(C, BGEN_SEL(0, 0, 0, 2)), 0x8);
+  p2 = _mm256_blend_pd(
+      _mm256_blend_pd(_mm256_permute4x64_pd(A, BGEN_SEL(2, 0, 0, 0)),
+                      _mm256_permute4x64_pd(B, BGEN_SEL(0, 1, 0, 0)), 0x2),
+      _mm256_permute4x64_pd(C, BGEN_SEL(0, 0, 0, 3)), 0xC);
+  #undef BGEN_SEL
+}
+
+/// @brief round non-negative doubles half away from zero, matching round_nonneg
+///
+/// _mm256_round_pd's nearest mode is half to even, which differs from round_nonneg at every
+/// exact .5, and probabilities that are multiples of 1/510 land there exactly. So floor and
+/// then add one wherever the fraction reaches a half, which is what the scalar version does.
+BGEN_TARGET_AVX2
+static inline __m256d round_nonneg_avx2(__m256d x) {
+  __m256d floored = _mm256_round_pd(x, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC);
+  __m256d frac = _mm256_sub_pd(x, floored);
+  __m256d carry = _mm256_and_pd(_mm256_cmp_pd(frac, _mm256_set1_pd(0.5), _CMP_GE_OQ),
+                                _mm256_set1_pd(1.0));
+  return _mm256_add_pd(floored, carry);
+}
+
+/// @brief encode the biallelic 8 bit shape four samples at a time
+///
+/// Each sample is independent, so the scaling is vectorisable. The checks are not, since
+/// they throw, so instead every lane is tested for whether it is encodable, and a batch
+/// containing anything else is handed to the scalar range function, which reaches the same
+/// check in the same order and throws the identical error. The vector code therefore never
+/// decides an error, only whether it is allowed to proceed.
+///
+/// Wholly missing samples are handled here rather than deferred, since real data has plenty
+/// of them and sending those batches to the scalar loop would undo the gain.
+BGEN_TARGET_AVX2
+static void encode_biallelic_8bit_avx2(std::uint8_t *out, std::uint8_t *flags,
+                                       std::uint32_t n_samples, double *genotypes) {
+  const __m256d lo_ok = _mm256_set1_pd(-PROB_TOLERANCE);
+  const __m256d hi_ok = _mm256_set1_pd(1.0 + PROB_TOLERANCE);
+  const __m256d factor = _mm256_set1_pd(255.0);
+  const __m256d zero = _mm256_setzero_pd();
+
+  std::uint32_t n = 0;
+  for (; n + 4 <= n_samples; n += 4) {
+    __m256d p0, p1, p2;
+    deinterleave3_avx2(&genotypes[3 * n], p0, p1, p2);
+
+    // the same range check_probability applies. Both comparisons are false for nan, so a
+    // missing sample fails this too and is dealt with below
+    __m256d ok = _mm256_and_pd(_mm256_cmp_pd(p0, lo_ok, _CMP_GE_OQ),
+                               _mm256_cmp_pd(p0, hi_ok, _CMP_LE_OQ));
+    ok = _mm256_and_pd(ok, _mm256_and_pd(_mm256_cmp_pd(p1, lo_ok, _CMP_GE_OQ),
+                                         _mm256_cmp_pd(p1, hi_ok, _CMP_LE_OQ)));
+    ok = _mm256_and_pd(ok, _mm256_and_pd(_mm256_cmp_pd(p2, lo_ok, _CMP_GE_OQ),
+                                         _mm256_cmp_pd(p2, hi_ok, _CMP_LE_OQ)));
+    __m256d c1 = _mm256_add_pd(p0, p1);
+    __m256d total = _mm256_add_pd(c1, p2);
+    // and the check_cumulative bound on both running totals. The first probability alone
+    // cannot exceed it, having already passed the range check
+    ok = _mm256_and_pd(ok, _mm256_cmp_pd(c1, hi_ok, _CMP_LE_OQ));
+    ok = _mm256_and_pd(ok, _mm256_cmp_pd(total, hi_ok, _CMP_LE_OQ));
+
+    int ok_mask = _mm256_movemask_pd(ok);
+    int miss_mask = 0;
+    if (ok_mask != 0xF) {
+      // a lane can fail simply because the sample is missing, so identify those: nan is
+      // the only value not equal to itself
+      __m256d all_nan = _mm256_and_pd(
+          _mm256_cmp_pd(p0, p0, _CMP_UNORD_Q),
+          _mm256_and_pd(_mm256_cmp_pd(p1, p1, _CMP_UNORD_Q),
+                        _mm256_cmp_pd(p2, p2, _CMP_UNORD_Q)));
+      miss_mask = _mm256_movemask_pd(all_nan);
+      if ((ok_mask | miss_mask) != 0xF) {
+        // something is partially missing or out of range, so let the scalar loop throw
+        encode_biallelic_8bit_range(out, flags, n, n + 4, genotypes);
+        continue;
+      }
+      for (int lane = 0; lane < 4; lane++) {
+        if (miss_mask & (1 << lane)) {
+          flags[n + lane] |= 0x80;
+        }
+      }
+      // a missing lane must not store whatever its nan scaled to, and both its bytes are
+      // already zero in the buffer, so substitute zero as the scalar path does. Both
+      // architectures happen to reach zero without this, but by unrelated routes: x86's
+      // MAXPD returns its second operand for a NaN input, so the clamp below yields zero,
+      // whereas on aarch64 the NaN survives the clamp and FCVTZU converts it to zero. The
+      // substitution is kept rather than relying on either rule
+      p0 = _mm256_blendv_pd(p0, zero, all_nan);
+      c1 = _mm256_blendv_pd(c1, zero, all_nan);
+    }
+
+    // bound the doubles before any cast, exactly as scale_cumulative does
+    __m256d s0 = _mm256_min_pd(_mm256_max_pd(_mm256_mul_pd(p0, factor), zero), factor);
+    __m256d s1 = _mm256_min_pd(_mm256_max_pd(_mm256_mul_pd(c1, factor), zero), factor);
+    __m256d v0 = round_nonneg_avx2(s0);
+    // the monotonic clamp, so the stored difference below cannot go negative
+    __m256d v1 = _mm256_max_pd(round_nonneg_avx2(s1), v0);
+
+    __m128i i0 = _mm256_cvttpd_epi32(v0);
+    __m128i i1 = _mm256_cvttpd_epi32(_mm256_sub_pd(v1, v0));
+    // narrow to bytes, then interleave so each sample's pair of bytes ends up adjacent.
+    // The narrowing saturates, which is why a missing lane substituting zero above is
+    // enough: it stores zeroes over the zeroes the buffer already holds
+    __m128i packed = _mm_packus_epi16(_mm_packus_epi32(i0, i1), _mm_setzero_si128());
+    __m128i pairs = _mm_unpacklo_epi8(packed, _mm_srli_si128(packed, 4));
+    std::memcpy(out + 2 * n, &pairs, 8);
+  }
+  // however many samples are left over after the last full batch
+  encode_biallelic_8bit_range(out, flags, n, n_samples, genotypes);
+}
+#endif
+
+#if defined(__aarch64__)
+
+/// @brief round non-negative doubles half away from zero, matching round_nonneg
+///
+/// vrndnq_f64 rounds halves to even, which differs from round_nonneg at every exact .5, so
+/// floor and add one wherever the fraction reaches a half, as the scalar version does.
+static inline float64x2_t round_nonneg_neon(float64x2_t x) {
+  float64x2_t floored = vrndmq_f64(x);
+  float64x2_t frac = vsubq_f64(x, floored);
+  // a true comparison lane is all ones, so masking 1.0 with it gives the increment
+  uint64x2_t carry = vandq_u64(vcgeq_f64(frac, vdupq_n_f64(0.5)),
+                               vreinterpretq_u64_f64(vdupq_n_f64(1.0)));
+  return vaddq_f64(floored, vreinterpretq_f64_u64(carry));
+}
+
+/// @brief encode the biallelic 8 bit shape two samples at a time
+///
+/// The same structure as the avx2 version, and for the same reasons, but a NEON double
+/// vector holds two lanes rather than four. In exchange the stride 3 layout costs nothing
+/// to unpack, since vld3q_f64 deinterleaves as it loads.
+static void encode_biallelic_8bit_neon(std::uint8_t *out, std::uint8_t *flags,
+                                       std::uint32_t n_samples, double *genotypes) {
+  const float64x2_t lo_ok = vdupq_n_f64(-PROB_TOLERANCE);
+  const float64x2_t hi_ok = vdupq_n_f64(1.0 + PROB_TOLERANCE);
+  const float64x2_t factor = vdupq_n_f64(255.0);
+  const float64x2_t zero = vdupq_n_f64(0.0);
+
+  std::uint32_t n = 0;
+  for (; n + 2 <= n_samples; n += 2) {
+    float64x2x3_t loaded = vld3q_f64(&genotypes[3 * n]);
+    float64x2_t p0 = loaded.val[0], p1 = loaded.val[1], p2 = loaded.val[2];
+
+    uint64x2_t ok = vandq_u64(vcgeq_f64(p0, lo_ok), vcleq_f64(p0, hi_ok));
+    ok = vandq_u64(ok, vandq_u64(vcgeq_f64(p1, lo_ok), vcleq_f64(p1, hi_ok)));
+    ok = vandq_u64(ok, vandq_u64(vcgeq_f64(p2, lo_ok), vcleq_f64(p2, hi_ok)));
+    float64x2_t c1 = vaddq_f64(p0, p1);
+    float64x2_t total = vaddq_f64(c1, p2);
+    ok = vandq_u64(ok, vcleq_f64(c1, hi_ok));
+    ok = vandq_u64(ok, vcleq_f64(total, hi_ok));
+
+    // vminvq across the mask reinterpreted as 32-bit lanes is zero unless every lane passed
+    if (vminvq_u32(vreinterpretq_u32_u64(ok)) == 0) {
+      // vceqq_f64(x, x) is false only for nan, so a lane whose three probabilities are all
+      // nan has every bit of this clear
+      uint64x2_t present = vorrq_u64(vorrq_u64(vceqq_f64(p0, p0), vceqq_f64(p1, p1)),
+                                     vceqq_f64(p2, p2));
+      uint64x2_t all_nan = vceqzq_u64(present);
+      // both lanes have to be either encodable or wholly missing to stay here
+      if (vminvq_u32(vreinterpretq_u32_u64(vorrq_u64(ok, all_nan))) == 0) {
+        encode_biallelic_8bit_range(out, flags, n, n + 2, genotypes);
+        continue;
+      }
+      if (vgetq_lane_u64(all_nan, 0) != 0) {
+        flags[n] |= 0x80;
+      }
+      if (vgetq_lane_u64(all_nan, 1) != 0) {
+        flags[n + 1] |= 0x80;
+      }
+      // as in the avx2 path, substitute zero so a nan lane stores the zeroes already in
+      // the buffer. Here FMAX propagates the NaN through the clamp and FCVTZU is what
+      // converts it to zero, which is a different rule to the one x86 relies on, so
+      // neither path depends on it
+      p0 = vbslq_f64(all_nan, zero, p0);
+      c1 = vbslq_f64(all_nan, zero, c1);
+    }
+
+    float64x2_t s0 = vminq_f64(vmaxq_f64(vmulq_f64(p0, factor), zero), factor);
+    float64x2_t s1 = vminq_f64(vmaxq_f64(vmulq_f64(c1, factor), zero), factor);
+    float64x2_t v0 = round_nonneg_neon(s0);
+    float64x2_t v1 = vmaxq_f64(round_nonneg_neon(s1), v0);
+
+    // vcvtq_u64_f64 saturates rather than wrapping, so it plays the same part as the x86
+    // packus: a difference that came out negative lands on zero
+    uint64x2_t u0 = vcvtq_u64_f64(v0);
+    uint64x2_t u1 = vcvtq_u64_f64(vsubq_f64(v1, v0));
+    out[2 * n] = (std::uint8_t) vgetq_lane_u64(u0, 0);
+    out[2 * n + 1] = (std::uint8_t) vgetq_lane_u64(u1, 0);
+    out[2 * n + 2] = (std::uint8_t) vgetq_lane_u64(u0, 1);
+    out[2 * n + 3] = (std::uint8_t) vgetq_lane_u64(u1, 1);
+  }
+  encode_biallelic_8bit_range(out, flags, n, n_samples, genotypes);
+}
+#endif
+
 /// @brief encode the common case of biallelic, unphased, ploidy 2, at a bit depth of 8
 ///
 /// Almost all real data has this shape, and it lets the generic loop's per sample overhead
@@ -536,7 +810,8 @@ static std::array<std::uint32_t, 64> probs_per_ploidy(int n_alleles, int max_plo
 ///
 /// The rounding and clamping decisions are still made by scale_cumulative, the same
 /// function the generic path uses, so there is only one definition of how a probability
-/// becomes a stored value. Only the loop structure around it is specialised.
+/// becomes a stored value. Only the loop structure around it is specialised, and the vector
+/// paths hand any batch they cannot encode back to that one definition.
 ///
 /// @param encoded buffer to write into, already zero filled
 /// @param genotype_offset where this variant's probability bytes start
@@ -550,37 +825,21 @@ static std::uint32_t encode_biallelic_8bit(std::vector<std::uint8_t> &encoded,
                      std::uint32_t n_samples,
                      double *genotypes)
 {
-  const double factor = 255.0;
   std::uint8_t *out = &encoded[genotype_offset];
   std::uint8_t *flags = &encoded[ploidy_offset];
-  for (std::uint32_t n=0; n < n_samples; n++, out += 2) {
-    double *probs = &genotypes[3 * n];
-    if (missing_genotypes(probs, 3)) {
-      flags[n] |= 0x80;
-      // as in encode_unphased, both bytes of a missing sample encode as zero and the
-      // buffer already holds zeroes, so there is nothing to write
-      continue;
-    }
-    // the probabilities for a sample sum to 1.0, so scale their running total
-    check_probability(probs[0]);
-    double cumulative = probs[0];
-    check_cumulative(cumulative);
-    std::uint64_t running = scale_cumulative(cumulative, factor, 0);
-    out[0] = (std::uint8_t) running;
-
-    check_probability(probs[1]);
-    cumulative += probs[1];
-    check_cumulative(cumulative);
-    std::uint64_t previous = running;
-    running = scale_cumulative(cumulative, factor, previous);
-    out[1] = (std::uint8_t) (running - previous);
-
-    // the third probability is inferred by the reader rather than stored, but it still
-    // has to be checked, or a row summing above one would be written as something else
-    check_probability(probs[2]);
-    cumulative += probs[2];
-    check_cumulative(cumulative);
+#if defined(__x86_64__)
+  // avx2 is checked at runtime, since the build targets baseline x86-64
+  if (__builtin_cpu_supports("avx2")) {
+    encode_biallelic_8bit_avx2(out, flags, n_samples, genotypes);
+  } else {
+    encode_biallelic_8bit_range(out, flags, 0, n_samples, genotypes);
   }
+#elif defined(__aarch64__)
+  // every aarch64 has NEON, so there is nothing to check
+  encode_biallelic_8bit_neon(out, flags, n_samples, genotypes);
+#else
+  encode_biallelic_8bit_range(out, flags, 0, n_samples, genotypes);
+#endif
   return genotype_offset + 2 * n_samples;
 }
 
