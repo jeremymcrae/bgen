@@ -589,6 +589,75 @@ static void haplotype_probs_avx2(char * uncompressed, std::uint32_t & idx,
     idx += 16;
   }
 }
+
+/// @brief AVX2 half of the unphased biallelic diploid 8 bit decode
+///
+/// Writes three probabilities per sample: the two stored values and the remainder. All three
+/// come out of lut8 by gather rather than by arithmetic, because lut8 holds seven digit decimal
+/// literals which differ from value * (1.0f/255.0f) in 365 of its 511 entries. Computing the
+/// probabilities instead would be faster still, but would change every value the library
+/// returns, so the table is authoritative here.
+///
+/// Leaves n as the count of samples handled, for the scalar tail to finish.
+///
+/// Sets above_max if any sample's stored values summed above the maximum, which the clamp
+/// below would otherwise hide. Detecting that costs one bitwise or per eight samples: the
+/// remainders are accumulated before clamping, so a negative one leaves its sign bit in the
+/// accumulator, and one test after the loop reports whether any was seen.
+BGEN_TARGET_AVX2
+static void unphased_probs_avx2(char * uncompressed, std::uint32_t & idx,
+                                float * probs, std::uint32_t & nrows,
+                                std::uint32_t & n, bool & above_max) {
+  const __m256i k255 = _mm256_set1_epi32(255);
+  const __m256i zero = _mm256_setzero_si256();
+  __m256i signs = _mm256_setzero_si256();
+  // gather the two stored bytes of 8 samples from the 16 bytes they occupy
+  const __m128i even = _mm_setr_epi8(0, 2, 4, 6, 8, 10, 12, 14,
+                                     -1, -1, -1, -1, -1, -1, -1, -1);
+  const __m128i odd = _mm_setr_epi8(1, 3, 5, 7, 9, 11, 13, 15,
+                                    -1, -1, -1, -1, -1, -1, -1, -1);
+
+  const std::uint8_t * in = reinterpret_cast<const std::uint8_t *>(uncompressed + idx);
+  float * out = probs;
+  for ( ; n + 8 <= nrows; n += 8) {
+    // the samples are stored as interleaved pairs, so split them into the first and
+    // second probability of each sample before widening to the 32 bit gather indices
+    __m128i raw = _mm_loadu_si128((const __m128i *) in);
+    __m256i first = _mm256_cvtepu8_epi32(_mm_shuffle_epi8(raw, even));
+    __m256i second = _mm256_cvtepu8_epi32(_mm_shuffle_epi8(raw, odd));
+
+    // the third probability is the remainder, 255 - first - second. A bgen may store
+    // values summing above 255, which would index before the table, so clamp at zero
+    // exactly as remainder_lut8 does
+    __m256i third = _mm256_sub_epi32(_mm256_sub_epi32(k255, first), second);
+    // keep the sign bits before clamping, since the clamp is what hides a malformed sample
+    signs = _mm256_or_si256(signs, third);
+    third = _mm256_max_epi32(third, zero);
+
+    __m256 p0 = _mm256_i32gather_ps(lut8, first, 4);
+    __m256 p1 = _mm256_i32gather_ps(lut8, second, 4);
+    __m256 p2 = _mm256_i32gather_ps(lut8, third, 4);
+
+    // AVX2 has no scatter, and the output stride of three floats per sample does not
+    // divide the register width, so spill the lanes and interleave them
+    float b0[8], b1[8], b2[8];
+    _mm256_storeu_ps(b0, p0);
+    _mm256_storeu_ps(b1, p1);
+    _mm256_storeu_ps(b2, p2);
+    for (int j = 0; j < 8; j++) {
+      out[j * 3] = b0[j];
+      out[j * 3 + 1] = b1[j];
+      out[j * 3 + 2] = b2[j];
+    }
+    in += 16;
+    out += 24;
+  }
+  // a negative remainder left its sign bit in the accumulator
+  if (_mm256_movemask_ps(_mm256_castsi256_ps(signs)) != 0) {
+    above_max = true;
+  }
+  idx += n * 2;
+}
 #endif
 
 /// @brief look up the final probability of an unphased biallelic diploid sample
@@ -661,12 +730,17 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
     // sample. This is ~2.5X faster than the standard route to compute
     // probabilities, and diploid samples with 8 bits/prob is likely the most
     // common use case, so the speed-up justifies this special case.
-    std::uint64_t idx2 = 0;
-    std::uint8_t first;
-    std::uint8_t second;
-    for (std::uint32_t offset=0; offset < nrows * 3; offset += 3) {
-      first = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + idx2]);
-      second = *reinterpret_cast<const std::uint8_t*>(&uncompressed[idx + idx2 + 1]);
+    std::uint32_t n = 0;
+#if defined(__x86_64__)
+    if (__builtin_cpu_supports("avx2")) {
+      unphased_probs_avx2(uncompressed, idx, probs, nrows, n, probs_above_max);
+    }
+#endif
+    // finish off the samples the vector loop did not cover
+    const std::uint8_t * in = reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]);
+    for (std::uint32_t offset = n * 3; offset < nrows * 3; offset += 3) {
+      std::uint8_t first = in[0];
+      std::uint8_t second = in[1];
       probs[offset] = lut8[first];
       probs[offset + 1] = lut8[second];
       probs[offset + 2] = remainder_lut8(first, second);
