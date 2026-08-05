@@ -112,20 +112,37 @@ class build_clib_subclass(build_clib):
         super().build_libraries(libraries)
 
 class build_ext_subclass(build_ext):
-    ''' compile the zlib dependency when the extensions are built
+    ''' link the vendored zlib and zstd into the extension modules
     
     zlib is only needed to link the extension modules, so compiling it here
     (rather than at import) keeps metadata-only commands such as egg_info and
     sdist from invoking cmake.
+    
     '''
     def run(self):
         # build_ext links against the static libraries built by build_clib, but
         # does not run that command itself, so build zstd before the extensions
         self.run_command('build_clib')
+        # hide shared libs during build to avoid linking to conda-based libzstd.so
+        libraries = self.distribution.libraries
+        self.distribution.libraries = []
+        try:
+            super().run()
+        finally:
+            self.distribution.libraries = libraries
+    
+    def build_extensions(self):
+        # unlike run, this is only reached once self.compiler exists, so the
+        # platform's static library naming can be asked for rather than guessed
+        clib = self.get_finalized_command('build_clib')
+        zstd = Path(clib.build_clib) / self.compiler.library_filename(
+            'zstd', lib_type='static')
+        if not zstd.exists():
+            raise RuntimeError(f'the zstd static library is missing from {zstd}')
         _, zlib = build_zlib()
         for ext in self.extensions:
-            ext.extra_objects = zlib
-        super().run()
+            ext.extra_objects = [str(zstd)] + zlib
+        super().build_extensions()
 
 extensions = [
     Extension('bgen.reader',
