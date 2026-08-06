@@ -4,6 +4,22 @@ import re
 
 import numpy as np
 
+def can_cap_memory():
+    ''' whether this platform can actually cap a child's address space
+
+    macOS defines RLIMIT_AS (aliased to RLIMIT_RSS in its headers), so the constant
+    existing does not mean setrlimit() on it works. The kernel there rejects the call
+    with EINVAL, which surfaces as "current limit exceeds maximum limit". Requiring
+    /proc/self/status too, rather than probing setrlimit directly, also rules out
+    sizing the cap as an absolute headroom, which is tight enough to hang OpenBLAS's
+    thread init on a machine whose imports alone take more than that.
+    '''
+    try:
+        import resource
+    except ImportError:
+        return False
+    return hasattr(resource, 'RLIMIT_AS') and Path('/proc/self/status').exists()
+
 def cap_after_import(headroom):
     ''' source for a child process to cap its own address space
 

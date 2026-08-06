@@ -34,16 +34,9 @@ import unittest
 import numpy as np
 
 from bgen import BgenReader, BgenWriter
-from tests.utils import cap_after_import
+from tests.utils import cap_after_import, can_cap_memory
 
-try:
-    import resource
-    # capping needs RLIMIT_AS, which windows lacks, and sizing the cap from what the
-    # imports took needs /proc, so the capped tests only run where both exist
-    CAN_CAP = (hasattr(resource, 'RLIMIT_AS')
-               and Path('/proc/self/status').exists())
-except ImportError:
-    CAN_CAP = False
+CAN_CAP = can_cap_memory()
 
 # room left for the allocation under test, on top of whatever the child's imports took.
 # It has to be less than the smallest claim below, or a claim would be servable, and more

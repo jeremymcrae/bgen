@@ -11,14 +11,9 @@ import numpy as np
 
 from bgen import BgenReader, BgenWriter
 
-from tests.utils import load_gen_data, arrays_equal, cap_after_import
+from tests.utils import load_gen_data, arrays_equal, cap_after_import, can_cap_memory
 
-try:
-    import resource
-    HAS_RLIMIT = hasattr(resource, 'RLIMIT_AS')
-except ImportError:
-    # windows has no resource module, so the memory capped test is skipped there
-    HAS_RLIMIT = False
+HAS_RLIMIT = can_cap_memory()
 
 # how long to give a child before treating it as stuck. These children read a bgen from
 # a pipe and exit, which takes well under a second, so this only trips on a real hang.

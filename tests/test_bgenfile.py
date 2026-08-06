@@ -12,14 +12,9 @@ import numpy as np
 
 from bgen import BgenReader
 
-from tests.utils import load_gen_data
+from tests.utils import load_gen_data, can_cap_memory
 
-try:
-    import resource
-    HAS_RLIMIT = hasattr(resource, 'RLIMIT_AS')
-except ImportError:
-    # windows has no resource module, so the memory capped tests are skipped there
-    HAS_RLIMIT = False
+HAS_RLIMIT = can_cap_memory()
 
 # headroom for the memory capped tests, on top of whatever the imports already took.
 # Comfortably fits a sub-megabyte bgen, but not one string per sample for a corrupt
