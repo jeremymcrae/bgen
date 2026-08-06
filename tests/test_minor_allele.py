@@ -262,6 +262,138 @@ class TestMinorAllele(unittest.TestCase):
                 with self.subTest(n_samples=n_samples, af0=af0):
                     self.assertAlmostEqual(np.nanmean(dose), want, delta=0.01)
 
+    def test_frequency_the_sampling_cannot_resolve(self):
+        ''' check the allele is right when the sampled estimate never settles
+
+        The estimate stops early once a confidence interval clears 0.5, which never
+        happens for a frequency near enough to it. The whole cohort then decides, on a
+        path the small cohorts above do not reach, so cover it directly. A frequency of
+        one allele either side of the boundary is unambiguous, so there is a right
+        answer to check against however the frequency is summed.
+        '''
+        checked = 0
+        for n_samples in [500, 999, 1000, 2000]:
+            for delta in [-2, -1, 1, 2]:
+                n_ref = n_samples + delta
+                geno = np.zeros((n_samples, 3))
+                n_hom, n_het = n_ref // 2, n_ref % 2
+                geno[:n_hom] = [1, 0, 0]
+                if n_het:
+                    geno[n_hom] = [0, 1, 0]
+                geno[n_hom + n_het:] = [0, 0, 1]
+                path = self.tmpdir / f'unsettled_{n_samples}_{delta}.bgen'
+                self.write(path, geno)
+                with self.subTest(n_samples=n_samples, delta=delta):
+                    checked += self.check(path, geno)
+        self.assertEqual(checked, 16)
+
+    def test_missing_samples_with_a_frequency_near_one_half(self):
+        ''' missing samples must be excluded from the whole cohort sum too
+
+        The sampled estimate already skipped them, but a frequency near 0.5 falls
+        through to summing every sample, which is a separate piece of code. A missing
+        sample there would either poison the total, since its dosage is nan, or be
+        counted as a called sample and understate the frequency.
+
+        The frequency is aimed just *below* 0.5, so the first allele is the minor one.
+        A poisoned total gives a nan frequency, and nan <= 0.5 is false, so the answer
+        comes back as the second allele and the check fails. Aiming above 0.5 would
+        hide that, since the broken and the correct answer would agree.
+        '''
+        checked = 0
+        for n_samples in [500, 1000]:
+            for n_missing in [1, 7, 32, 100]:
+                # spread them out, so they land in different vector lanes
+                step = max(n_samples // n_missing, 1)
+                missing = list(range(0, n_samples, step))[:n_missing]
+                n_called = n_samples - len(missing)
+                # two alleles short of half, among the samples actually called
+                n_ref = n_called - 2
+                geno = np.zeros((n_samples, 3))
+                skip = set(missing)
+                n_hom, n_het = n_ref // 2, n_ref % 2
+                filled = 0
+                for i in range(n_samples):
+                    if i in skip:
+                        continue
+                    if filled < n_hom:
+                        geno[i] = [1, 0, 0]
+                    elif filled == n_hom and n_het:
+                        geno[i] = [0, 1, 0]
+                    else:
+                        geno[i] = [0, 0, 1]
+                    filled += 1
+                geno[missing] = nan
+                path = self.tmpdir / f'nearmiss_{n_samples}_{n_missing}.bgen'
+                self.write(path, geno)
+                with self.subTest(n_samples=n_samples, n_missing=n_missing):
+                    # the first allele must be the minor one for this to have teeth
+                    self.assertEqual(expected(geno, 2)[0], 'A')
+                    checked += self.check(path, geno)
+                    # the missing samples must still be the only nan dosages
+                    with BgenReader(path) as bfile:
+                        var = next(iter(bfile))
+                        dose = var.minor_allele_dosage
+                    self.assertEqual(sorted(np.where(np.isnan(dose))[0]),
+                                     sorted(missing))
+        self.assertEqual(checked, 8)
+
+    def test_samples_with_differing_ploidy(self):
+        ''' a variant whose samples differ in ploidy needs its alleles counted per sample
+
+        With one ploidy for the whole cohort the alleles come from the count of called
+        samples times that ploidy. That shortcut is wrong as soon as the samples differ,
+        and taking it inflates the divisor for haploid samples, so the frequency reads
+        low and the wrong allele comes back as minor.
+
+        Half the cohort is haploid here, and the frequency sits far enough above 0.5 that
+        the strided estimate settles on it, while treating the haploid samples as diploid
+        puts the estimate below a half and flips the answer.
+
+        The cohort has to be large for this to reach the strided sum at all. That estimate
+        only returns an answer once a 5 sigma interval clears 0.5, which at a frequency of
+        0.57 takes about 1150 samples, and it visits a hundredth of the cohort per stride.
+        A few hundred samples would fall through to the whole cohort pass instead and
+        never exercise the code this covers.
+        '''
+        checked = 0
+        for n_samples in [5000, 20000]:
+            n_hap = n_samples // 2
+            n_dip = n_samples - n_hap
+            ploidy = np.full(n_samples, 2, dtype=np.uint8)
+            ploidy[:n_hap] = 1
+            # max_probs for a diploid biallelic sample, haploid rows use the first two
+            geno = np.zeros((n_samples, 3))
+            # every haploid sample carries the reference allele, so they contribute
+            # n_hap alleles rather than the 2 * n_hap the shortcut would assume
+            geno[:n_hap, 0] = 1.0
+            geno[:n_hap, 2] = nan
+            # split the diploid half so the true frequency clears 0.5 while the count
+            # the shortcut would use falls below it
+            n_ref_hom = int(round(0.36 * n_dip))
+            geno[n_hap:n_hap + n_ref_hom] = [1, 0, 0]
+            geno[n_hap + n_ref_hom:] = [0, 0, 1]
+
+            n_ref = n_hap + 2 * n_ref_hom
+            n_alleles = n_hap + 2 * n_dip
+            path = self.tmpdir / f'mixploidy_{n_samples}.bgen'
+            with BgenWriter(path, n_samples,
+                            samples=[f's{i}' for i in range(n_samples)]) as bfile:
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                                  ploidy=ploidy, bit_depth=8)
+
+            with self.subTest(n_samples=n_samples):
+                # the reference allele is the major one, so 'C' is minor. Counting the
+                # haploid samples as diploid would put the frequency below a half and
+                # report 'A' instead
+                self.assertGreater(n_ref / n_alleles, 0.5)
+                self.assertLess(n_ref / (2 * n_samples), 0.5)
+                with BgenReader(path) as bfile:
+                    var = next(iter(bfile))
+                    self.assertEqual(var.minor_allele, 'C')
+                checked += 1
+        self.assertEqual(checked, 2)
+
 
 class TestMinorAlleleWithoutDosage(unittest.TestCase):
     ''' the minor allele must not depend on a dosage having been read first

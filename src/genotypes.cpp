@@ -450,29 +450,9 @@ void Genotypes::parse_ploidy() {
   // we want to avoid parsing the ploidy states if  every sample has the same
   // ploidy. If we have a constant ploidy, set all entries to the same value
   std::uint8_t mask = 63;
-  std::uint64_t mask_8 = std::uint64_t(0x8080808080808080);
   if (constant_ploidy) {
-    // the ploidy is already known from max_ploidy, so only the missingness needs reading
-    for (std::uint32_t x=0; x < (n_samples - (n_samples % 8)); x += 8) {
-      // Simultaneously check if any of the next 8 samples are missing by casting
-      // the data for the next 8 samples to an int64, and masking out all but
-      // the bits which indicate missingness. Only check individual samples if
-      // any are missing. This is ~3X quicker than looping across samples one by
-      // one, provided the proportion of missing samples is low.
-      if (*reinterpret_cast<const std::uint64_t*>(&uncompressed[idx + x]) & mask_8) {
-        for (std::uint32_t y=x; y < (x + 8); y++) {
-          if (uncompressed[idx + y] & 0x80) {
-            missing.push_back(y);
-          }
-        }
-      }
-    }
-    // We looped through in batches of 8, so check the remainder not in an 8-batch
-    for (std::uint32_t x=(n_samples - (n_samples % 8)); x < n_samples; x++) {
-      if (uncompressed[idx + x] & 0x80) {
-        missing.push_back(x);
-      }
-    }
+    // only the missingness matters, since the ploidy is known, and the scan is vectorised
+    fast_missing_scan(&uncompressed[idx], n_samples, missing);
   } else {
     ploidy.reset(new std::uint8_t[n_samples]);
     for (std::uint32_t x=0; x < n_samples; x++) {
@@ -702,15 +682,18 @@ static inline float remainder_lut8(std::uint8_t first, std::uint8_t second,
   return lut8[(idx > 0) ? idx : 0];
 }
 
-/// @brief look up the alt dosage of an unphased biallelic diploid sample
+/// @brief the dosage count of an unphased biallelic diploid sample
 ///
-/// The dosage index is first * 2 + second, which stays within the table while
-/// first + second <= 255, as the bgen spec requires. Malformed or older files can
-/// break that and index up to 765, so clamp to the last entry, which is the
-/// maximum possible dosage of 2.0.
-static inline float dosage_lut8(std::uint8_t first, std::uint8_t second) {
-  int idx = (int) first * 2 + (int) second;
-  return lut8[(idx < 511) ? idx : 510];
+/// The count is first * 2 + second, which reaches 510 while the two stored values sum
+/// to no more than 255, as the bgen spec requires. Malformed or older files can break
+/// that and reach 765, so clamp to the maximum, which the SIMD paths also do. Returning
+/// the count rather than a dosage keeps the divide by 255 identical to those paths, so
+/// a sample gets the same dosage wherever it sits in the variant.
+static inline int dosage_count8(std::uint8_t first, std::uint8_t second,
+                                bool & above_max) {
+  int count = (int) first * 2 + (int) second;
+  above_max |= (count > 510);
+  return (count < 511) ? count : 510;
 }
 
 /// fast path for phased data with ploidy=2, and 8 bits per probability
@@ -890,6 +873,15 @@ void Genotypes::probabilities(float * probs) {
 /// alleles. Any of those understates the frequency and flips the comparison
 /// against 0.5 below, reporting the wrong minor allele.
 ///
+/// A variant sitting at a frequency of almost exactly 0.5 never satisfies that
+/// interval, so the strides run out and every sample gets visited anyway - in steps of
+/// n_samples/100, which reads one value per cache line and defeats the prefetcher. Once
+/// enough samples have been checked for the striding to have served its purpose, the rest
+/// is finished in one sequential pass instead, which costs about half as much per sample.
+///
+/// A constant ploidy variant gathers each stride rather than walking it, which needs no
+/// per sample ploidy lookup and gives a bit identical sum.
+///
 /// @param dose float array of dosages for the reference (first) allele, with
 ///     missing samples already set to nan
 /// @return index for minor allele (0 or 1)
@@ -902,23 +894,40 @@ int Genotypes::find_minor_allele(float * dose) {
   // which is what bounds the interval below
   std::uint64_t n_alleles_seen = 0;
   std::uint64_t n_checked = 0;
+  // hoisted out of the loop, so a constant ploidy variant reads max_ploidy rather than an
+  // array which would have to be built for the purpose
+  bool varies = !constant_ploidy;
+  std::uint8_t fixed_ploidy = (std::uint8_t) max_ploidy;
+  // striding stops after this many samples. The interval above resolves any frequency
+  // outside roughly 0.49 to 0.51 within a few strides, so this only bites on variants
+  // sitting almost exactly at 0.5 - and for those the striding will not settle however
+  // long it runs, while costing 16 times the cache lines of a sequential pass, since each
+  // stride lands on its own line. Below the cap the strided sampling still does its job of
+  // guarding against a cohort ordered by genotype
+  std::uint64_t stride_limit = 10000;
   
   // To make sure we don't hit weird groupings of alleles in individuals, this
   // picks samples uniformly thoughout the population, by using an appropriate
   // step size.
   for (std::uint32_t idx2=0; idx2<increment; idx2++) {
-    for (std::uint32_t n=idx2; n<n_samples; n += increment) {
-      // a missing sample has no called alleles, so counts towards neither the
-      // total nor the alleles it is divided by. This relies on get_allele_dosage
-      // having marked it before this runs
-      if (std::isnan(dose[n])) {
-        continue;
+    if (varies) {
+      for (std::uint32_t n=idx2; n<n_samples; n += increment) {
+        // a missing sample has no called alleles, so counts towards neither the
+        // total nor the alleles it is divided by. This relies on get_allele_dosage
+        // having marked it before this runs
+        if (std::isnan(dose[n])) {
+          continue;
+        }
+        total += dose[n];
+        n_alleles_seen += ploidy[n];
+        n_checked += 1;
       }
-      total += dose[n];
-      // read max_ploidy directly when it is constant, rather than forcing the array
-      // to be built just to read one repeated value out of it
-      n_alleles_seen += constant_ploidy ? (std::uint64_t) max_ploidy : ploidy[n];
-      n_checked += 1;
+    } else {
+      // every callable sample carries the same ploidy, so the alleles seen follow from
+      // the count of them and the stride can be gathered rather than walked
+      std::uint64_t before = n_checked;
+      total += fast_strided_sum(dose, n_samples, idx2, increment, n_checked);
+      n_alleles_seen += (n_checked - before) * (std::uint64_t) fixed_ploidy;
     }
     if (n_alleles_seen == 0) {
       // nothing callable yet, but a later stride may reach samples with alleles
@@ -926,10 +935,41 @@ int Genotypes::find_minor_allele(float * dose) {
     }
     freq = total / (double) n_alleles_seen;
     if (minor_certain(freq, (int) n_checked, 5.0)) {
+      return (freq <= 0.5) ? 0 : 1;
+    }
+    if (n_checked >= stride_limit) {
+      // the strides are not going to resolve this one, so sum every sample in order
+      // rather than continuing to hop through the array
       break;
     }
   }
   
+  // Not resolved by sampling, so use the whole cohort. Summing from scratch keeps this
+  // independent of how far the strides above got, so the answer depends only on the
+  // dosages themselves
+  if (!varies) {
+    // every callable sample carries the same ploidy, so the alleles seen follow from the
+    // count of them and the sum can be vectorised
+    std::uint64_t n_called = 0;
+    total = fast_dosage_sum(dose, n_samples, n_called);
+    n_alleles_seen = n_called * (std::uint64_t) fixed_ploidy;
+  } else {
+    total = 0;
+    n_alleles_seen = 0;
+    for (std::uint32_t n=0; n<n_samples; n++) {
+      if (std::isnan(dose[n])) {
+        continue;
+      }
+      total += dose[n];
+      n_alleles_seen += ploidy[n];
+    }
+  }
+  if (n_alleles_seen == 0) {
+    // no sample has a called allele, so there is no frequency to compare. Report the
+    // first allele, as a zero frequency would
+    return 0;
+  }
+  freq = total / (double) n_alleles_seen;
   if (freq <= 0.5) {
     return 0;
   } else {
@@ -943,57 +983,55 @@ int Genotypes::find_minor_allele(float * dose) {
 BGEN_TARGET_AVX2
 static void ref_dosage_avx2(char * uncompressed, std::uint32_t & idx,
                             float * dose, std::uint32_t & nrows,
-                            std::uint32_t & n) {
-  __m256i mask_odd = _mm256_set_epi8(0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
-    -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,  -1, 0, -1, 0, -1, 0, -1);
-  __m256i mask_even = _mm256_set_epi8(-1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
-    -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0);
+                            std::uint32_t & n, bool & above_max) {
   const float c = 1.0f / 255.0f;
-  __m256 k = _mm256_set_ps(c, c, c, c, c, c, c, c);
+  __m256 k = _mm256_set1_ps(c);
+  // weights for the dot product below, 2 against each homozygous count (since ploidy=2)
+  // and 1 against each heterozygous count. Little endian, so the low byte of each pair
+  // multiplies the even input byte, which holds the homozygous count
+  __m256i weights = _mm256_set1_epi16(0x0102);
+  // the largest dosage count a valid sample can reach, first * 2 + second with the two
+  // stored values summing to no more than 255. Anything above it means the bgen stores
+  // probabilities summing above the maximum, so clamp it as the scalar path does
+  __m256i limit = _mm256_set1_epi16(510);
+  // running maximum count, checked against the limit once the loop ends
+  __m256i peak = _mm256_setzero_si256();
 
   __m256i initial;
-  __m256i first;
-  __m256i second;
-  __m128i lo16;
+  __m256i total;
   __m256i lo;
-  __m256 lo_float;
-  __m128i hi16;
   __m256i hi;
-  __m256 hi_float;
-  for (; n + 32 < nrows; n+=16) {
+  for (; n + 16 <= nrows; n+=16) {
     initial = _mm256_loadu_si256((__m256i *) &uncompressed[idx]);
 
-    // get heterozygous int dosage by masking out the even bytes, and right
-    // shifting by one byte, to align homozygous and heterozygous counts. The
-    // shift operation is from https://stackoverflow.com/a/25264853.
-    second = _mm256_and_si256(initial, mask_even);
-    second = _mm256_alignr_epi8(_mm256_permute2x128_si256(second, second, _MM_SHUFFLE(2, 0, 0, 1)), second, 1);
+    // multiply each byte by its weight and add the pairs, which both applies the
+    // ploidy and sums the two counts of a sample. Counts start as 8-bit uints and
+    // the weighted sum needs 10 bits, so the results are 16-bit ints. The inputs are
+    // unsigned and the weights positive, so the saturation this instruction applies
+    // to signed 16-bit output can never trigger
+    total = _mm256_maddubs_epi16(initial, weights);
 
-    // get homozygous int dosage by masking odd bytes, and left shift one bit to
-    // multiply homozygous counts by 2 (since ploidy=2)
-    first = _mm256_and_si256(initial, mask_odd);
-    first = _mm256_slli_epi32(first, 1);
+    // hold the largest count seen rather than comparing every iteration, since only
+    // whether any sample passed the limit matters, not which
+    peak = _mm256_max_epi16(peak, total);
 
-    // Now we have two 256 bit vectors with dosage counts adjusted for ploidy.
-    // One for homozygous counts and one for heterozygous counts. Counts started
-    // as 8-bit uints, interleaved with empty bytes (hom count spreads into
-    // adjacent byte, as 9-bit uint). We can treat them as 16-bit ints for addition
-    initial = _mm256_add_epi16(first, second);
+    // clamp to the maximum, as dosage_count8 does for the scalar tail. Without this a
+    // malformed sample gives a ref dosage above the ploidy, which the swap to the alt
+    // allele turns negative
+    total = _mm256_min_epi16(total, limit);
 
-    // convert the first half to floats, via 32 bit ints
-    lo16 = _mm256_castsi256_si128(initial);
-    lo = _mm256_cvtepi16_epi32(lo16);
-    lo_float = _mm256_cvtepi32_ps(lo);
+    // convert each half to floats, via 32 bit ints
+    lo = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(total));
+    hi = _mm256_cvtepi16_epi32(_mm256_extractf128_si256(total, 1));
 
-    // convert the second half to floats, via 32 bit ints
-    hi16 = _mm256_extractf128_si256(initial, 1);
-    hi = _mm256_cvtepi16_epi32(hi16);
-    hi_float = _mm256_cvtepi32_ps(hi);
-
-    _mm256_storeu_ps(&dose[n], _mm256_mul_ps(lo_float, k));
-    _mm256_storeu_ps(&dose[n + 8], _mm256_mul_ps(hi_float, k));
+    _mm256_storeu_ps(&dose[n], _mm256_mul_ps(_mm256_cvtepi32_ps(lo), k));
+    _mm256_storeu_ps(&dose[n + 8], _mm256_mul_ps(_mm256_cvtepi32_ps(hi), k));
 
     idx += 32;
+  }
+  // one comparison for the whole variant, rather than one per iteration
+  if (!_mm256_testz_si256(_mm256_cmpgt_epi16(peak, limit), _mm256_set1_epi8(-1))) {
+    above_max = true;
   }
 }
 #endif
@@ -1016,7 +1054,7 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
   std::uint32_t n=0;
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
-    ref_dosage_avx2(uncompressed, idx, dose, nrows, n);
+    ref_dosage_avx2(uncompressed, idx, dose, nrows, n, probs_above_max);
   }
 #elif defined(__aarch64__)
   // using this optimised method roughly doubles the speed of computing the ref
@@ -1026,61 +1064,51 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
   const float c = 1.0f / 255.0f;
   float32x4_t k = vdupq_n_f32(c);
   uint8x16x2_t initial;
-  uint16x8_t het, hom, total;
-  float32x4_t _dose;
-  for (; n + 16 < nrows; n += 8) {
+  uint16x8_t total;
+  // as in the AVX2 path, the largest count a valid sample reaches, and a running
+  // maximum so the check happens once per variant rather than once per iteration
+  uint16x8_t limit = vdupq_n_u16(510);
+  uint16x8_t peak = vdupq_n_u16(0);
+  uint8x8_t two = vdup_n_u8(2);  // ploidy, applied to the homozygous counts
+  for (; n + 16 <= nrows; n += 16) {
     // load data from the array into SIMD registers. This deinterleaves the
     // het and hom counts into separate vector registers
     initial = vld2q_u8(buff + idx);
 
-    // we need to convert the 8-bit uints to 32 bit floats, but we can't do that
-    // in one operation, since we've already packed the vector register. We start
-    // with the low half of each register, and first expand to 16-bit uints,
-    // since homozyous counts can go over by one bit
-    hom = vmovl_u8(vget_low_u8(initial.val[0]));
-    het = vmovl_u8(vget_low_u8(initial.val[1]));
-    hom = vshlq_n_u16(hom, 1);  // multiply hom alt counts by 2 since ploidy=2
+    // widen the low half of the het counts to 16-bit uints, and add twice each hom
+    // count in the same instruction, which both applies the ploidy and sums the two
+    // counts of a sample. 16-bit because the weighted sum needs 10 bits
+    total = vmlal_u8(vmovl_u8(vget_low_u8(initial.val[1])),
+                     vget_low_u8(initial.val[0]), two);
+    peak = vmaxq_u16(peak, total);
+    total = vminq_u16(total, limit);  // clamp as dosage_count8 does, see the AVX2 path
 
-    // sum the heterozygous and homozygous dosages
-    total = vaddq_u16(het, hom);
-
-    // still in low half, now expand 16-bit uints to 32-bit, convert to float, store
-    _dose = vcvtq_f32_u32(vmovl_u16(vget_low_u16(total)));
-    vst1q_f32(dose + n, vmulq_f32(_dose, k));
-    _dose = vcvtq_f32_u32(vmovl_u16(vget_high_u16(total)));
-    vst1q_f32(dose + n + 4, vmulq_f32(_dose, k));
+    // still in the low half, expand 16-bit uints to 32-bit, convert to float, store
+    vst1q_f32(dose + n, vmulq_f32(vcvtq_f32_u32(vmovl_u16(vget_low_u16(total))), k));
+    vst1q_f32(dose + n + 4, vmulq_f32(vcvtq_f32_u32(vmovl_u16(vget_high_u16(total))), k));
 
     // repeat for the high half of the vectors
-    hom = vmovl_u8(vget_high_u8(initial.val[0]));
-    het = vmovl_u8(vget_high_u8(initial.val[1]));
-    hom = vshlq_n_u16(hom, 1);
+    total = vmlal_u8(vmovl_u8(vget_high_u8(initial.val[1])),
+                     vget_high_u8(initial.val[0]), two);
+    peak = vmaxq_u16(peak, total);
+    total = vminq_u16(total, limit);
 
-    // sum the heterozygous and homozygous dosages
-    total = vaddq_u16(het, hom);
+    vst1q_f32(dose + n + 8, vmulq_f32(vcvtq_f32_u32(vmovl_u16(vget_low_u16(total))), k));
+    vst1q_f32(dose + n + 12, vmulq_f32(vcvtq_f32_u32(vmovl_u16(vget_high_u16(total))), k));
 
-    // expand each half to 32-bit, convert to float, store
-    _dose = vcvtq_f32_u32(vmovl_u16(vget_low_u16(total)));
-    vst1q_f32(dose + n + 8, vmulq_f32(_dose, k));
-    _dose = vcvtq_f32_u32(vmovl_u16(vget_high_u16(total)));
-    vst1q_f32(dose + n + 12, vmulq_f32(_dose, k));
-
-    idx += 16;
+    idx += 32;
+  }
+  if (vmaxvq_u16(peak) > 510) {
+    probs_above_max = true;
   }
 #endif
   // Finish off the remaining unvectorized samples. This is 50% slower than SIMD.
   // Also handles if we can't use the code above (not aarch64, x86_64 or lacks avx2)
-  for (; n < (nrows - (nrows % 2)); n += 2) {
-    // speed up throughput by calculating two samples at a time
-    dose[n] = dosage_lut8(*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]),
-                          *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1]));
-    dose[n + 1] = dosage_lut8(*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 2]),
-                              *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 3]));
-    idx += 4;
-  }
-  // and finish off the final sample/s
-  if (nrows % 2) {
-    dose[nrows - 1] = dosage_lut8(*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]),
-                                  *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1]));
+  for (; n < nrows; n++) {
+    dose[n] = dosage_count8(*reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]),
+                            *reinterpret_cast<const std::uint8_t *>(&uncompressed[idx + 1]),
+                            probs_above_max) * (1.0f / 255.0f);
+    idx += 2;
   }
 }
 

@@ -750,6 +750,361 @@ class TestBgenWriter(unittest.TestCase):
             self.assertTrue(np.allclose(fast[i], generic[i, :3], atol=1e-7),
                             f'sample {i}: {fast[i]} != {generic[i, :3]}')
 
+    def test_reading_8bit_matches_across_vector_boundary(self):
+        ''' the vectorised 8-bit read must agree with its own scalar tail
+
+        The unphased diploid fast path decodes eight samples at a time and leaves the
+        remainder to a scalar loop, so a sample's probabilities are produced by different
+        code depending on its position in the file. Give every sample identical genotypes,
+        so anything other than one distinct value per column means the two halves disagree,
+        and vary the sample count around multiples of eight so the split falls in a
+        different place each time.
+
+        Probabilities are chosen as multiples of 1/255 which are stored exactly, so the
+        comparison is of bit patterns rather than of rounding. Values that sum above one at
+        8 bits are included because the third probability is inferred as 255 - first -
+        second, which goes negative there and has to clamp identically in both halves.
+        '''
+        cases = [(1 / 255, 1 / 255), (0.2, 0.3), (1.0, 0.0), (0.0, 1.0),
+                 (254 / 255, 1 / 255), (0.5, 0.5)]
+        for first, second in cases:
+            for n in [1, 2, 7, 8, 9, 15, 16, 17, 23, 24, 25, 100]:
+                with self.subTest(probs=(first, second), n=n):
+                    geno = np.tile(np.array([[first, second, 1 - first - second]]), (n, 1))
+                    path = self.tmpdir / f'boundary_{n}.bgen'
+                    with BgenWriter(path, n, samples=[f's{i}' for i in range(n)]) as bfile:
+                        bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], geno,
+                                          ploidy=2, bit_depth=8)
+                    with BgenReader(path) as bfile:
+                        probs = next(iter(bfile)).probabilities
+
+                    self.assertEqual(probs.shape, (n, 3))
+                    for col in range(3):
+                        values = np.unique(probs[:, col])
+                        self.assertEqual(len(values), 1,
+                                         f'column {col} of {n} identical samples read back '
+                                         f'as {len(values)} distinct values, {values}, so '
+                                         f'the vectorised and scalar reads disagree')
+                    # and the values themselves must still be the ones stored
+                    np.testing.assert_allclose(probs[0], geno[0], atol=1 / 255 + 1e-6,
+                                               rtol=0)
+
+    def test_reading_8bit_dosage_matches_across_vector_boundary(self):
+        ''' the vectorised 8-bit dosage must agree with its own scalar tail
+
+        test_reading_8bit_matches_across_vector_boundary covers probabilities. Dosage takes
+        a separate route, ref_dosage_fast, which has its own vector loop and its own scalar
+        tail, so it needs its own check. Give every sample identical genotypes: more than
+        one distinct dosage can only mean the two halves disagree.
+
+        The dosage count is first * 2 + second, and the stored first probability is swept
+        over its whole range, because the two halves used to differ only for counts whose
+        exact value is not representable as a float.
+        '''
+        for first in [1, 23, 51, 77, 128, 200, 254, 255]:
+            for n in [1, 2, 7, 8, 9, 15, 16, 17, 31, 33, 100]:
+                with self.subTest(first=first, n=n):
+                    probs = np.tile(np.array([[first / 255, 0.0, 1 - first / 255]]), (n, 1))
+                    path = self.tmpdir / f'dose_boundary_{n}.bgen'
+                    with BgenWriter(path, n, samples=[f's{i}' for i in range(n)],
+                                    compression=None) as bfile:
+                        bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], probs,
+                                          ploidy=2, bit_depth=8)
+                    with BgenReader(path) as bfile:
+                        dose = np.asarray(next(iter(bfile)).alt_dosage)
+
+                    values = np.unique(dose)
+                    self.assertEqual(len(values), 1,
+                                     f'{n} identical samples read back as {len(values)} '
+                                     f'distinct dosages, {values}, so the vectorised and '
+                                     f'scalar dosage reads disagree')
+                    # and the dosage must still be the one stored, 2 - 2 * first / 255
+                    np.testing.assert_allclose(dose, 2.0 - 2.0 * first / 255,
+                                               atol=1e-6, rtol=0)
+
+    def test_reading_8bit_above_maximum_across_vector_boundary(self):
+        ''' the vectorised 8-bit read must clamp an over-large sum like the scalar one
+
+        The third probability is inferred as 255 - first - second, which goes negative for a
+        bgen storing values that sum above the maximum. Older versions of this package wrote
+        such files. The scalar read clamps the index to zero; the vectorised read has its own
+        clamp, and without it the gather would index before the lookup table and return
+        whatever lies in front of it in memory.
+
+        test_reading_probabilities_above_maximum covers the same ground for three samples,
+        which only ever reach the scalar loop. Vary the count so the vectorised half handles
+        the affected samples too.
+        '''
+        for n in [3, 8, 9, 16, 17, 100]:
+            with self.subTest(n_samples=n):
+                path = self.tmpdir / f'above_max_{n}.bgen'
+                geno = np.tile(np.array([[1.0, 0.0, 0.0]]), (n, 1))
+                with BgenWriter(path, n, samples=[f's{i}' for i in range(n)],
+                                compression=None) as bfile:
+                    bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                                      ploidy=2, bit_depth=8)
+
+                # each sample stores (255, 0), so rewrite to (255, 255), summing to 510 and
+                # making the inferred final probability 255 - 510 = -255
+                raw = bytearray(path.read_bytes())
+                patched = 0
+                for i in range(len(raw) - 1):
+                    if raw[i] == 255 and raw[i + 1] == 0:
+                        raw[i + 1] = 255
+                        patched += 1
+                self.assertEqual(patched, n)
+                path.write_bytes(bytes(raw))
+
+                with BgenReader(path, delay_parsing=True) as bfile:
+                    probs = next(iter(bfile)).probabilities
+
+                self.assertTrue(np.all((probs >= 0) & (probs <= 1)),
+                                f'probabilities out of range: {probs}')
+                # clamped to zero, rather than gathered from before the lookup table
+                self.assertTrue(np.all(probs[:, 2] == 0),
+                                f'expected zeroed final probability: {probs}')
+                # every sample is identical, so the vectorised and scalar halves must agree
+                for col in range(3):
+                    self.assertEqual(len(np.unique(probs[:, col])), 1,
+                                     f'column {col} disagrees across the vector boundary: '
+                                     f'{np.unique(probs[:, col])}')
+
+    def test_malformed_values_stay_in_range(self):
+        ''' a malformed bgen must not yield probabilities or dosages outside their range
+
+        A probability lies in 0-1 and a dosage in 0-ploidy. When the stored values sum above
+        what the bit depth allows, the inferred remainder goes negative, so each decoder
+        clamps it. There are five: the 8-bit probability and dosage paths each have a
+        vectorised half and a scalar tail, and the general path covers other bit depths.
+        Every one has to clamp, or the values it returns are impossible.
+
+        Sample counts straddle the vector strides, so some runs are handled wholly by the
+        scalar code and others hand over to it partway through. Samples are identical, so
+        any variation in the result means the two halves of a decoder disagree.
+        '''
+        for bit_depth in (8, 16, 32):
+            for n in (4, 12, 40, 64):
+                with self.subTest(bit_depth=bit_depth, n=n):
+                    path = self.tmpdir / f'range_{bit_depth}_{n}.bgen'
+                    patched = self._write_above_maximum(path, n, bit_depth, 'all')
+                    self.assertEqual(patched, n)
+
+                    with BgenReader(path, delay_parsing=True) as bfile:
+                        var = next(iter(bfile))
+                        probs = var.probabilities
+                        alt = np.asarray(var.alt_dosage, dtype=float)
+                    with BgenReader(path, delay_parsing=True) as bfile:
+                        minor = np.asarray(next(iter(bfile)).minor_allele_dosage,
+                                           dtype=float)
+
+                    self.assertTrue(np.all((probs >= 0) & (probs <= 1)),
+                                    f'probabilities outside 0-1: {np.unique(probs)}')
+                    for label, dose in (('alt', alt), ('minor', minor)):
+                        self.assertTrue(np.all((dose >= 0) & (dose <= 2)),
+                                        f'{label} dosage outside 0-2: {np.unique(dose)}')
+                    # identical samples, so each decoder's halves must agree
+                    for col in range(probs.shape[1]):
+                        self.assertEqual(len(np.unique(probs[:, col])), 1,
+                                         f'probability column {col} differs across the '
+                                         f'vector boundary: {np.unique(probs[:, col])}')
+                    self.assertEqual(len(np.unique(alt)), 1,
+                                     f'alt dosage differs across the vector boundary: '
+                                     f'{np.unique(alt)}')
+                    # the clamp puts the ref dosage at the ploidy, so the alt dosage the
+                    # swap derives from it is zero. Every decoder has to agree on which end
+                    # to clamp to, or the same malformed file reads differently by bit depth
+                    self.assertTrue(np.all(alt == 0),
+                                    f'expected zeroed alt dosage, got {np.unique(alt)}')
+                    self.assertTrue(np.all(probs[:, -1] == 0),
+                                    f'expected zeroed final probability, got '
+                                    f'{np.unique(probs[:, -1])}')
+
+    def _read_warnings(self, path, prop):
+        ''' read every variant via prop and return the malformed-bgen warnings logged
+        '''
+        messages = []
+
+        class Collect(logging.Handler):
+            def emit(self, record):
+                messages.append(record.getMessage())
+
+        handler = Collect()
+        logger = logging.getLogger()
+        logger.addHandler(handler)
+        try:
+            with BgenReader(path, delay_parsing=True) as bfile:
+                for var in bfile:
+                    getattr(var, prop)
+        finally:
+            logger.removeHandler(handler)
+        return [x for x in messages if 'malformed' in x]
+
+    def test_reading_probabilities_above_maximum_warns(self):
+        ''' a bgen storing probabilities above the maximum has to say so
+
+        Such a file is malformed, and the probability inferred for the affected samples is
+        not the one the file describes, so reading it silently hands back numbers that
+        cannot be trusted. Older versions of this package wrote these files.
+
+        The detection lives in five separate decoders, and each has to notice on its own.
+        Only samples 8 and beyond reach the vectorised 8-bit halves, so a variant with
+        fewer than that tests only the scalar code; putting the bad samples at the front or
+        the back of a large variant separates the vector loop from its tail. Bit depths
+        above 8 take the general decoder instead, and the dosage properties take two more
+        decoders again. Each combination below is therefore a different code path, not a
+        repeat.
+        '''
+        # (bit depth, sample count, which samples to corrupt, what it exercises)
+        #
+        # bit depths are kept to whole bytes so the patching below can find the stored
+        # values; 12 bits would pack them across byte boundaries. 16 bits reaches the same
+        # general decoder that 12 would.
+        cases = [
+            (8, 4, 'all', '8-bit scalar only, too few samples to vectorise'),
+            (8, 64, 'first', '8-bit vector loop'),
+            (8, 12, 'last', '8-bit scalar tail after a vector pass'),
+            (16, 4, 'all', 'general decoder, no vectorisation'),
+            (16, 64, 'first', 'general decoder over many samples'),
+            (16, 40, 'last', 'general decoder, corrupt samples at the end'),
+        ]
+        for bit_depth, n, which, description in cases:
+            for prop in ('probabilities', 'alt_dosage', 'minor_allele_dosage'):
+                with self.subTest(bit_depth=bit_depth, n=n, corrupt=which, prop=prop):
+                    path = self.tmpdir / f'malformed_{bit_depth}_{n}_{which}.bgen'
+                    self._write_above_maximum(path, n, bit_depth, which)
+                    messages = self._read_warnings(path, prop)
+                    self.assertEqual(len(messages), 1,
+                                     f'{description}: expected one warning for {prop}, '
+                                     f'got {messages}')
+                    self.assertIn('rs0/var0', messages[0])
+
+    def _write_above_maximum(self, path, n, bit_depth, which):
+        ''' write a bgen whose stored probabilities sum above what the bit depth allows
+
+        The writer will not produce one, since it rejects such probabilities, so write a
+        valid variant and then raise the stored values by patching the bytes. Every sample
+        stores its first two probabilities as (max, 0), so setting the second to max as
+        well makes the pair sum to twice the maximum.
+
+        Bit depths are whole bytes so the stored values can be located by their byte
+        pattern. which selects the samples to corrupt: 'first' and 'last' put them at one
+        end of the variant, so the vectorised and scalar halves of the 8-bit decoders can be
+        told apart, since only one of them then sees a bad sample.
+        '''
+        geno = np.tile(np.array([[1.0, 0.0, 0.0]]), (n, 1))
+        with BgenWriter(path, n, samples=[f's{i}' for i in range(n)],
+                        compression=None) as bfile:
+            bfile.add_variant('var0', 'rs0', '01', 10, ['A', 'C'], geno, ploidy=2,
+                              bit_depth=bit_depth)
+
+        width = (bit_depth + 7) // 8      # bytes per stored probability
+        maxval = (1 << bit_depth) - 1
+        top = maxval.to_bytes(width, 'little')
+        zero = (0).to_bytes(width, 'little')
+        raw = bytearray(path.read_bytes())
+
+        # find each sample's pair of stored probabilities, which the writer laid down in
+        # sample order, and raise the second of the pair to the maximum
+        starts = []
+        pos = raw.find(top + zero)
+        while pos != -1:
+            starts.append(pos)
+            pos = raw.find(top + zero, pos + 2 * width)
+        self.assertEqual(len(starts), n,
+                         f'found {len(starts)} samples to patch, expected {n}')
+
+        if which == 'all':
+            targets = starts
+        elif which == 'first':
+            targets = starts[:4]
+        else:
+            targets = starts[-4:]
+        for start in targets:
+            raw[start + width:start + 2 * width] = top
+        path.write_bytes(bytes(raw))
+        return len(targets)
+
+    def test_valid_bgen_does_not_warn_as_malformed(self):
+        ''' a well formed bgen must never be reported as malformed
+
+        The check for an over-large sum is a comparison against the remainder the decoders
+        already compute. In the general path that remainder is a float subtraction, so it
+        can land marginally below zero on a valid variant through rounding alone, and a
+        naive test would warn about ordinary files at some bit depths. A false warning is
+        worse than none, since it would teach users to ignore the real one.
+        '''
+        rng = np.random.default_rng(17)
+        for bit_depth in range(1, 33):
+            with self.subTest(bit_depth=bit_depth):
+                geno = rng.dirichlet([1, 1, 1], size=25)
+                path = self.tmpdir / f'valid_{bit_depth}.bgen'
+                with BgenWriter(path, 25, samples=[f's{i}' for i in range(25)]) as bfile:
+                    bfile.add_variant('v', 'rs', '01', 10, ['A', 'C'], geno,
+                                      bit_depth=bit_depth)
+                for prop in ('probabilities', 'alt_dosage'):
+                    self.assertEqual(self._read_warnings(path, prop), [],
+                                     f'valid bgen warned at bit_depth={bit_depth} '
+                                     f'via {prop}')
+
+    def test_malformed_warning_does_not_carry_between_variants(self):
+        ''' one malformed variant must not make the valid ones look malformed too
+
+        Each variant owns its own genotype state, so the flag recording an over-large sum is
+        scoped to a single variant. This locks that in: were the flag ever moved to the file
+        or reader, one bad variant would condemn every variant read after it, and the warning
+        would stop being useful for locating the problem.
+        '''
+        n = 24
+        good = np.tile(np.array([[0.2, 0.3, 0.5]]), (n, 1))
+        # the malformed variant sits in the middle, so there are valid variants read both
+        # before and after it
+        path = self.tmpdir / 'carryover.bgen'
+        with BgenWriter(path, n, samples=[f's{i}' for i in range(n)],
+                        compression=None) as bfile:
+            for i in range(5):
+                geno = np.tile(np.array([[1.0, 0.0, 0.0]]), (n, 1)) if i == 2 else good
+                bfile.add_variant(f'var{i}', f'rs{i}', '01', i + 1, ['A', 'C'], geno,
+                                  ploidy=2, bit_depth=8)
+
+        # only var2 stores (255, 0) per sample, the valid variants store other values
+        raw = bytearray(path.read_bytes())
+        patched = 0
+        for i in range(len(raw) - 1):
+            if raw[i] == 255 and raw[i + 1] == 0:
+                raw[i + 1] = 255
+                patched += 1
+        self.assertEqual(patched, n)
+        path.write_bytes(bytes(raw))
+
+        for prop in ('probabilities', 'alt_dosage', 'minor_allele_dosage'):
+            with self.subTest(prop=prop):
+                messages = self._read_warnings(path, prop)
+                self.assertEqual(len(messages), 1,
+                                 f'expected only var2 to warn, got {messages}')
+                self.assertIn('rs2/var2', messages[0])
+
+        # and reading one valid variant repeatedly must stay quiet, even after the
+        # malformed one has been read through the same reader
+        with BgenReader(path, delay_parsing=True) as bfile:
+            variants = list(bfile)
+            variants[2].probabilities          # trips the flag
+            messages = []
+
+            class Collect(logging.Handler):
+                def emit(self, record):
+                    messages.append(record.getMessage())
+
+            handler = Collect()
+            logging.getLogger().addHandler(handler)
+            try:
+                for _ in range(3):
+                    variants[0].probabilities
+                    variants[4].probabilities
+            finally:
+                logging.getLogger().removeHandler(handler)
+            self.assertEqual([x for x in messages if 'malformed' in x], [],
+                             'a valid variant warned after a malformed one was read')
+
     def test_reading_probabilities_above_maximum(self):
         ''' check a bgen storing probabilities summing above the maximum is safe
 
