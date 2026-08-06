@@ -1,5 +1,5 @@
 import os
-from typing import Any, IO, Iterator
+from typing import Any, IO, Iterator, Optional, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -40,7 +40,7 @@ class BgenHeader:
     @property
     def nvariants(self) -> int: ...
     @property
-    def compression(self) -> str | None:
+    def compression(self) -> Optional[str]:
         ''' compression scheme - one of None, 'zlib' or 'zstd'
         '''
         ...
@@ -88,7 +88,7 @@ class BgenVar:
         '''
         ...
     @property
-    def compression(self) -> str | None:
+    def compression(self) -> Optional[str]:
         ''' compression scheme of the variant data (None, 'zlib' or 'zstd')
         '''
         ...
@@ -133,8 +133,8 @@ class BgenReader:
     ''' class to open bgen files from disk, and access variant data within
     '''
     def __new__(cls,
-                path: str | os.PathLike[str] | IO[Any],
-                sample_path: str | os.PathLike[str] = '',
+                path: Union[str, os.PathLike[str], IO[Any]],
+                sample_path: Union[str, os.PathLike[str]] = '',
                 delay_parsing: bool = False,
                 ) -> BgenReader: ...
     def __repr__(self) -> str: ...
@@ -169,8 +169,8 @@ class BgenReader:
         ...
     def fetch(self,
               chrom: str,
-              start: int | None = None,
-              stop: int | None = None,
+              start: Optional[int] = None,
+              stop: Optional[int] = None,
               ) -> Iterator[BgenVar]:
         ''' fetches all variants within a genomic region
         '''

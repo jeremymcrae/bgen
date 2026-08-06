@@ -1,5 +1,5 @@
 import os
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -11,7 +11,7 @@ class Indexer:
     '''
     conn: Any
     cur: Any
-    def __init__(self, bgen_path: str | os.PathLike[str]) -> None: ...
+    def __init__(self, bgen_path: Union[str, os.PathLike[str]]) -> None: ...
     def create_tables(self) -> None: ...
     def add_variant(self,
                     chrom: str,
@@ -27,12 +27,12 @@ class BgenWriter:
     ''' class to write bgen files to disk
     '''
     def __new__(cls,
-                path: str | os.PathLike[str],
+                path: Union[str, os.PathLike[str]],
                 n_samples: int,
-                samples: Iterable[str] | None = ...,
-                compression: str | None = 'zstd',
+                samples: Optional[Iterable[str]] = ...,
+                compression: Optional[str] = 'zstd',
                 layout: int = 2,
-                metadata: str | None = None,
+                metadata: Optional[str] = None,
                 ) -> BgenWriter: ...
     def __repr__(self) -> str: ...
     def __enter__(self) -> BgenWriter: ...
@@ -44,7 +44,7 @@ class BgenWriter:
                     pos: int,
                     alleles: Sequence[str],
                     genotypes: ArrayLike,
-                    ploidy: int | NDArray[np.integer[Any]] = 2,
+                    ploidy: Union[int, NDArray[np.integer[Any]]] = 2,
                     phased: bool = False,
                     bit_depth: int = 8,
                     ) -> None:

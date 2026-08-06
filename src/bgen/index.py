@@ -2,20 +2,21 @@
 import sqlite3
 import logging
 import os
+from typing import Optional, Union
 
 import numpy as np
 from numpy.typing import NDArray
 
 class Index:
-    def __init__(self, path: str | os.PathLike[str]) -> None:
+    def __init__(self, path: Union[str, os.PathLike[str]]) -> None:
         logging.debug(f'opening bgen index: {path}')
         self.path = str(path)
         self.conn = sqlite3.connect(self.path)
         
-        self._offsets: NDArray[np.uint64] | None = None
-        self._rsids: list[str] | None = None
-        self._chroms: list[str] | None = None
-        self._positions: list[int] | None = None
+        self._offsets: Optional[NDArray[np.uint64]] = None
+        self._rsids: Optional[list[str]] = None
+        self._chroms: Optional[list[str]] = None
+        self._positions: Optional[list[int]] = None
     
     def _query(self, query, params=()):
         ''' run a query on a cursor of its own
