@@ -18,6 +18,7 @@ class CppBgenReader {
   std::uint64_t file_size = 0;
 public:
   CppBgenReader(std::string path, std::string sample_path = "", bool delay_parsing = false);
+  void close_stream();
   std::uint64_t first_variant_offset();
   void parse_all_variants();
   Variant next_var();

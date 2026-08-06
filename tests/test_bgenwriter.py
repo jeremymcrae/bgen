@@ -1832,6 +1832,7 @@ class TestBgenWriter(unittest.TestCase):
             con.close()
         self.assertTrue(all(0 < x < 2 ** 32 for x in starts), starts)
 
+    @unittest.skipUnless(hasattr(os, 'mkfifo'), 'needs fifos, which windows lacks')
     def test_writing_to_a_pipe_reports_a_useful_error(self):
         ''' a bgen needs a seekable output, and saying so beats an iostream error
 

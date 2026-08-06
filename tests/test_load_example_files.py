@@ -159,6 +159,10 @@ class TestExampleBgens(unittest.TestCase):
                 ('tab delimited', ''.join(f'{x}\t0\n' for x in rows)),
                 ('windows line endings', ''.join(f'{x}\r\n' for x in rows)),
                 ('no trailing newline', '\n'.join(rows)),
+                # read in binary, a blank windows line is a lone carriage return, so
+                # it has to be recognised as empty rather than taken as an ID
+                ('windows blank last line', ''.join(f'{x}\r\n' for x in rows) + '\r\n'),
+                ('blank last line', ''.join(f'{x}\n' for x in rows) + '\n'),
                 ]:
             sample_path = self.folder / 'delim.sample'
             with open(sample_path, 'w', newline='') as handle:

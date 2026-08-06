@@ -70,6 +70,24 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
   }
 }
 
+/// release the operating system file handle
+///
+/// The stream is shared with every Variant taken from this reader, so dropping this
+/// reader's reference is not enough to close the file while any of those survive.
+/// Windows refuses to delete a file that is still open, so closing has to reach the
+/// handle itself. Every accessor on a Variant checks the reader is open before it
+/// reads, so none of them can reach the closed stream afterwards.
+void CppBgenReader::close_stream() {
+  if (is_stdin) {
+    // std::cin is not ours to close
+    return;
+  }
+  std::ifstream * file = dynamic_cast<std::ifstream *>(handle.get());
+  if ((file != nullptr) && file->is_open()) {
+    file->close();
+  }
+}
+
 /// byte position of the first variant in the bgen
 ///
 /// The cast matters, as header.offset is 32-bit, so the addition would wrap

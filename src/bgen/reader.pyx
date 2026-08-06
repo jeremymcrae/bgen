@@ -96,6 +96,7 @@ cdef extern from 'reader.h' namespace 'bgen':
     cdef cppclass CppBgenReader:
         # declare class constructor and methods
         CppBgenReader(string path, string sample_path, bool delay_parsing) except +
+        void close_stream() except +
         void parse_all_variants() except +
         Variant & operator[](int idx) except +
         Variant & get(int idx) except +
@@ -826,6 +827,12 @@ cdef class BgenReader:
         # pointer twice
         self.is_open.off()
         try:
+            # release the file itself, not just this reader's reference to it. Any
+            # Variant taken from this reader shares the stream and may outlive the
+            # reader, which would otherwise leave the file open, and windows will
+            # not let an open file be deleted
+            if self.thisptr != NULL:
+                self.thisptr.close_stream()
             del self.thisptr
             self.thisptr = NULL
             self.handle = None

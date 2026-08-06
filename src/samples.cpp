@@ -85,7 +85,11 @@ Samples::Samples(std::istream * handle, std::uint32_t n_samples,
 
 /// initialize from external sample file
 Samples::Samples(std::string path, std::uint32_t n_samples) {
-  std::ifstream handle(path, std::ios::in);
+  // binary, so that the byte offsets used below are the byte offsets on disk. In text
+  // mode windows folds each \r\n into one \n, which leaves tellg() and the file size
+  // counting different things, so the read below asks for more characters than the
+  // translated stream can supply and fails on every file with windows line endings
+  std::ifstream handle(path, std::ios::in | std::ios::binary);
   if (!handle) {
     throw std::invalid_argument("error with sample file: '" + path + "'");
   }
@@ -126,20 +130,21 @@ Samples::Samples(std::string path, std::uint32_t n_samples) {
   std::uint32_t idx = 0;
   std::string line;
   while (std::getline(iss, line, '\n')) {
-    // skip empty lines
-    if ((line.size() == 0) || (line[0] == 0)) {
-      // std::getline() on win32 at end of file can create string with null
-      // characters. The null character indicates the line doesn't contain an
-      // ID, even though string size might be > 0. Only affects win32.
+    // the .sample format is whitespace delimited, so take the first column, which also
+    // drops any carriage return a windows file left on the end of the line
+    std::string id = line.substr(0, line.find_first_of(" \t\r"));
+    
+    // skip empty lines. Reading in binary leaves a lone \r as the whole of a blank
+    // windows line, and std::getline() on win32 at end of file can produce a string of
+    // null characters, so test the extracted ID rather than the raw line
+    if ((id.size() == 0) || (id[0] == 0)) {
       continue;
     }
     
     if (idx >= n_samples) {
       throw std::invalid_argument("inconsistent number of samples");
     }
-    // the .sample format is whitespace delimited, so take the first column, and
-    // drop any carriage return left on the end of a line by a windows file
-    samples.push_back(line.substr(0, line.find_first_of(" \t\r")));
+    samples.push_back(id);
     idx += 1;
   }
   
