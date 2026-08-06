@@ -13,20 +13,10 @@ ROOT = Path(__file__).resolve().parent
 ZLIB_DIR = str(ROOT / 'zlib_build')
 
 EXTRA_COMPILE_ARGS = []
-EXTRA_LINK_ARGS = []
 if sys.platform == 'linux':
     EXTRA_COMPILE_ARGS += ['-std=c++11', '-O2']
 elif sys.platform == "darwin":
-    EXTRA_COMPILE_ARGS += [
-        "-stdlib=libc++",
-        "-std=c++11",
-        "-O2",
-        "-I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1",
-        "-I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
-        ]
-    EXTRA_LINK_ARGS += [
-        "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
-        ]
+    EXTRA_COMPILE_ARGS += ["-stdlib=libc++", "-std=c++11", "-O2"]
 elif sys.platform == "win32":
     EXTRA_COMPILE_ARGS += ['/std:c++14', '/O2']
 
@@ -147,7 +137,6 @@ class build_ext_subclass(build_ext):
 extensions = [
     Extension('bgen.reader',
         extra_compile_args=EXTRA_COMPILE_ARGS,
-        extra_link_args=EXTRA_LINK_ARGS,
         sources=['src/bgen/reader.pyx',
             'src/reader.cpp',
             'src/genotypes.cpp',
@@ -159,7 +148,6 @@ extensions = [
         language='c++'),
     Extension('bgen.writer',
         extra_compile_args=EXTRA_COMPILE_ARGS,
-        extra_link_args=EXTRA_LINK_ARGS,
         sources=['src/bgen/writer.pyx',
             'src/writer.cpp',
             'src/genotypes.cpp',
