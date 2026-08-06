@@ -744,7 +744,7 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
       probs[offset] = lut8[first];
       probs[offset + 1] = lut8[second];
       probs[offset + 2] = remainder_lut8(first, second);
-      idx2 += 2;
+      in += 2;
     }
   } else if (constant_ploidy & (max_probs == 2) & (bit_depth == 8)) {
     // fast path for phased data with ploidy=2, and 8 bits per probability

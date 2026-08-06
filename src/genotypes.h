@@ -58,6 +58,9 @@ public:
   int min_ploidy=0;
   int max_ploidy=0;
   int minor_idx=0;
+  // set when a sample stores probabilities summing above what the bit
+  // depth allows, which means the bgen is malformed
+  bool probs_above_max = false;
   std::unique_ptr<std::uint8_t[]> ploidy;
 private:
   void decompress();
