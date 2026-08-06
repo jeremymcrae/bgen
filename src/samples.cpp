@@ -123,7 +123,7 @@ Samples::Samples(std::string path, std::uint32_t n_samples) {
   // As above, the count cannot be trusted to size the allocation. Every ID needs at
   // least a character and a line ending, so the text read from the sample file
   // bounds how many it can hold
-  samples.reserve(std::min((std::uint64_t) n_samples, lines.size() / 2));
+  samples.reserve(std::min<std::size_t>(n_samples, lines.size() / 2));
   std::istringstream iss(lines);
   
   // run through all lines and gte the first column as sample_id
