@@ -25,6 +25,8 @@ public:
   std::string get_minor_allele();
   void probs_1d(float * probs);
   bool phased();
+  /// check for probabilities summing above bit-depth max, indicates malformed bgen
+  bool probs_above_max();
   std::shared_ptr<std::istream> handle;
   std::uint8_t * ploidy();
   std::vector<std::uint8_t> copy_data();

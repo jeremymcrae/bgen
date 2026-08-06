@@ -58,8 +58,10 @@ public:
   int min_ploidy=0;
   int max_ploidy=0;
   int minor_idx=0;
-  // set when a sample stores probabilities summing above what the bit
-  // depth allows, which means the bgen is malformed
+  // whether a sample's stored probabilities were found to sum above the maximum the bit
+  // depth can hold, which means the bgen is malformed. The final probability of a group is
+  // not stored but inferred as the remainder, so an over-large sum makes it negative. The
+  // negative values are clamped to zero.
   bool probs_above_max = false;
   std::unique_ptr<std::uint8_t[]> ploidy;
 private:

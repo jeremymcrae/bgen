@@ -121,6 +121,15 @@ void Variant::probs_1d(float * probs) {
   geno.probabilities(probs);
 }
 
+/// whether the last decode saw probabilities summing above the bit depth's maximum
+///
+/// The genotype decoders infer final probabilities from the remainder, so an over-large
+/// sum becomes negative and gets clamped. This flags the clamping, so a caller can warn
+/// about malformed bgen.
+bool Variant::probs_above_max() {
+  return geno.probs_above_max;
+}
+
 /// get dosage of the alt allele (only works for biallelic variants)
 void Variant::alt_dosage(float * dose) {
   geno.get_allele_dosage(dose, true, false);

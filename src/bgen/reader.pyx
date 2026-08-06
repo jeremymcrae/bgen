@@ -58,6 +58,7 @@ cdef extern from 'variant.h' namespace 'bgen':
         void probs_1d(float * dosage) except +
         int probs_per_sample() except +
         bool phased() except +
+        bool probs_above_max() except +
         uint8_t * ploidy() except +
         vector[uint8_t] copy_data() except +
         
@@ -370,6 +371,21 @@ cdef class BgenVar:
         cdef uint8_t[::1] arr = np.empty(size, dtype=np.uint8, order='C')
         memcpy(&arr[0], ploid, size)
         return np.asarray(arr)
+    def __warn_if_malformed(self):
+        ''' warn if the decode just done found probabilities summing above the maximum
+
+        The bgen spec has the probabilities of a sample sum to the largest value the bit
+        depth can store, and the final value of each group is not stored but inferred as
+        the remainder. Poorly encoded files can have negative remainders, so this warns if
+        it happens.
+        '''
+        if self.thisptr.probs_above_max():
+            varid = self.thisptr.varid.decode('utf8')
+            rsid = self.thisptr.rsid.decode('utf8')
+            logging.warning(f'variant {rsid}/{varid} stores genotype probabilities which '
+                            f'sum to more than the bit depth allows, so this bgen is '
+                            f'malformed. The probability inferred for the affected samples '
+                            f'is not reliable, and may be negative or clamped to zero')
     @property
     def minor_allele(self):
         ''' get the minor allele of a biallelic variant
@@ -383,6 +399,7 @@ cdef class BgenVar:
         self.__check_closed()
         cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
         self.thisptr.minor_allele_dosage(&dose[0])
+        self.__warn_if_malformed()
         return np.asarray(dose)
     @property
     def alt_dosage(self):
@@ -391,6 +408,7 @@ cdef class BgenVar:
         self.__check_closed()
         cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
         self.thisptr.alt_dosage(&dose[0])
+        self.__warn_if_malformed()
         return np.asarray(dose)
     @property
     def probabilities(self):
@@ -407,6 +425,7 @@ cdef class BgenVar:
         
         cdef float[:] arr = np.empty(size, dtype=np.float32, order='C')
         self.thisptr.probs_1d(&arr[0])
+        self.__warn_if_malformed()
         
         cdef int current = 0
         cdef int phase_width

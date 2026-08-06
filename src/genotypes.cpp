@@ -668,8 +668,14 @@ static void unphased_probs_avx2(char * uncompressed, std::uint32_t & idx,
 /// versions of this package can do so, since each probability used to be rounded
 /// independently. Clamping keeps the read inside the table, and reports the
 /// nearest representable probability of zero.
-static inline float remainder_lut8(std::uint8_t first, std::uint8_t second) {
+///
+/// Sets above_max when it clamps, so the caller can report the file as malformed. The
+/// comparison is on integers which are already in registers, so this costs nothing
+/// measurable and cannot misfire on rounding the way a float test could.
+static inline float remainder_lut8(std::uint8_t first, std::uint8_t second,
+                                   bool & above_max) {
   int idx = 255 - (int) first - (int) second;
+  above_max |= (idx < 0);
   return lut8[(idx > 0) ? idx : 0];
 }
 
@@ -743,7 +749,7 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
       std::uint8_t second = in[1];
       probs[offset] = lut8[first];
       probs[offset + 1] = lut8[second];
-      probs[offset + 2] = remainder_lut8(first, second);
+      probs[offset + 2] = remainder_lut8(first, second, probs_above_max);
       in += 2;
     }
   } else if (constant_ploidy & (max_probs == 2) & (bit_depth == 8)) {
@@ -768,6 +774,12 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
         bit_idx += bit_depth;
         remainder -= prob;
         probs[offset + x] = prob;
+      }
+      // A negative remainder means the sample's stored probabilities sum above the maximum,
+      // so the bgen is malformed. Clamp values to zero, and flag the clamping.
+      if (remainder < -1e-6f) {
+        remainder = 0.0f;
+        probs_above_max = true;
       }
       probs[offset + n_probs] = remainder;
       for (std::uint32_t x=(n_probs + 1); x<max_probs; x++) {
@@ -812,6 +824,13 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
 void Genotypes::probabilities(float * probs) {
   load_data_and_parse_header();
+  
+  // cleared per decode so the flag means "this decode saw it" rather than "some decode
+  // ever did". Every decoder which can meet the problem currently reports it, so with a
+  // Genotypes per variant there is no sequence of reads that tells the two apart. It is
+  // here so that adding a decoder which does not check cannot silently start attributing
+  // an earlier variant's problem to a later read
+  probs_above_max = false;
   
   std::uint32_t nrows;
   if (!phased) {
@@ -1097,6 +1116,13 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
     }
     
     dose[n] = ((hom * curr_ploidy) + het * half_ploidy) * factor;
+    if ((layout == 2) && ((std::uint64_t) (hom + het) > probs_mask)) {
+      // the stored probabilities of a sample must sum to at most the largest value the
+      // bit depth holds, which probs_mask also is. Layout 1 stores every probability
+      // rather than inferring the last, so it has no such constraint
+      dose[n] = curr_ploidy;
+      probs_above_max = true;
+    }
     if (layout == 1) {
       // layout1 stores hom alt probability, and all zeros indicates missingness
       hom_alt = *reinterpret_cast<const std::uint16_t* >(&uncompressed[idx + bit_idx / 8]);
@@ -1229,6 +1255,9 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
   if (n_alleles != 2) {
     throw std::invalid_argument("can't get allele dosages for non-biallelic var.");
   }
+  
+  // as in probabilities, cleared per decode rather than latched across calls
+  probs_above_max = false;
   
   // The layout 1 dosage path spots missing samples from their probabilities and
   // adds them to the list, so clear it first, or a second dosage read on the same
