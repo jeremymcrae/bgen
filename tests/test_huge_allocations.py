@@ -103,7 +103,12 @@ class TestHugeAllocations(unittest.TestCase):
     ''' check overstated lengths are rejected rather than allocated '''
 
     def setUp(self):
-        self.tmpdir = Path(tempfile.mkdtemp())
+        # TemporaryDirectory rather than mkdtemp, which never cleans up after itself
+        self.tmp = tempfile.TemporaryDirectory()
+        self.tmpdir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
 
     def _write(self, path, n_samples=4, alleles=('A', 'C'), sample_ids=True):
         ''' write a small valid bgen to corrupt a single field of '''

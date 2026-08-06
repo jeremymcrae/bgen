@@ -31,7 +31,12 @@ class TestWideVariants(unittest.TestCase):
     ''' check variants with large per sample probability counts round trip '''
 
     def setUp(self):
-        self.tmpdir = Path(tempfile.mkdtemp())
+        # TemporaryDirectory rather than mkdtemp, which never cleans up after itself
+        self.tmp = tempfile.TemporaryDirectory()
+        self.tmpdir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
 
     def _write_and_read(self, path, n_alleles, ploidy, n_samples=4, missing=()):
         ''' write a variant with the given alleles and ploidy, then read it back
