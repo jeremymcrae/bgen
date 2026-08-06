@@ -110,6 +110,9 @@ std::uint8_t * Variant::ploidy() {
   if (geno.max_probs == 0) {
     geno.load_data_and_parse_header();
   }
+  // the array is only filled on demand, since a constant ploidy variant does not otherwise
+  // need it, and filling it costs more than decoding the genotypes
+  geno.materialise_ploidy();
   return geno.ploidy.get();
 }
 

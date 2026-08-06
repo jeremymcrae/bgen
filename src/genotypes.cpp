@@ -288,6 +288,7 @@ std::uint64_t Genotypes::probability_bytes() {
     // phased data each haplotype stores n_alleles - 1 values. For an unphased
     // biallelic sample the count is ploidy + 1 genotypes less the omitted one,
     // which is just the ploidy.
+    // only reached when the ploidy varies, so the array is filled by parse_ploidy
     std::uint64_t total_ploidy = fast_ploidy_sum(ploidy.get(), n_samples);
     values = phased ? total_ploidy * ((std::uint64_t) n_alleles - 1) : total_ploidy;
   } else {
@@ -429,15 +430,20 @@ void Genotypes::load_data_and_parse_header() {
 /// ploidy state is stored in ploidy member. Missingness is stored as indices of
 /// samples This takes 100 microseconds for 500k samples. Layout 1 variants lack
 /// ploidy info, and are assigned the same ploidy for all samples.
+///
+/// When every sample shares a ploidy the array holds one value repeated, so filling it
+/// costs an allocation and a write per sample for something max_ploidy already says.
+/// That is skipped here and left to materialise_ploidy(), which the accessors call. Only
+/// the missingness scan has to happen now, since it reads the block this variant owns.
 void Genotypes::parse_ploidy() {
   if (has_ploidy) {
     return;
   }
   
   has_ploidy = true;
-  ploidy.reset(new std::uint8_t[n_samples]);
   if (layout == 1) {
-    std::memset(ploidy.get(), max_ploidy, n_samples);
+    // no per-sample ploidy is stored, so there is nothing to scan and nothing to fill
+    // beyond the constant, which materialise_ploidy handles
     return;
   }
   
@@ -446,7 +452,7 @@ void Genotypes::parse_ploidy() {
   std::uint8_t mask = 63;
   std::uint64_t mask_8 = std::uint64_t(0x8080808080808080);
   if (constant_ploidy) {
-    std::memset(ploidy.get(), max_ploidy, n_samples);
+    // the ploidy is already known from max_ploidy, so only the missingness needs reading
     for (std::uint32_t x=0; x < (n_samples - (n_samples % 8)); x += 8) {
       // Simultaneously check if any of the next 8 samples are missing by casting
       // the data for the next 8 samples to an int64, and masking out all but
@@ -468,6 +474,7 @@ void Genotypes::parse_ploidy() {
       }
     }
   } else {
+    ploidy.reset(new std::uint8_t[n_samples]);
     for (std::uint32_t x=0; x < n_samples; x++) {
       ploidy[x] = mask & uncompressed[idx + x];
       if (uncompressed[idx + x] & 0x80) {
@@ -498,6 +505,22 @@ void Genotypes::parse_ploidy() {
     }
   }
   idx += n_samples;
+}
+
+/// @brief fill the per-sample ploidy array, if it is not already filled
+///
+/// parse_ploidy leaves the array empty when every sample shares a ploidy, since the value
+/// is already in max_ploidy and filling half a million entries with it costs more than the
+/// genotype decode does. Anything which needs the array itself calls this first.
+///
+/// Loops over the cohort should read max_ploidy directly in the constant case, rather than
+/// forcing the array to be built just to read one repeated value out of it.
+void Genotypes::materialise_ploidy() {
+  if (ploidy) {
+    return;
+  }
+  ploidy.reset(new std::uint8_t[n_samples]);
+  std::memset(ploidy.get(), max_ploidy, n_samples);
 }
 
 /// parse probabilities for layout1.
@@ -892,7 +915,9 @@ int Genotypes::find_minor_allele(float * dose) {
         continue;
       }
       total += dose[n];
-      n_alleles_seen += ploidy[n];
+      // read max_ploidy directly when it is constant, rather than forcing the array
+      // to be built just to read one repeated value out of it
+      n_alleles_seen += constant_ploidy ? (std::uint64_t) max_ploidy : ploidy[n];
       n_checked += 1;
     }
     if (n_alleles_seen == 0) {
@@ -1217,6 +1242,14 @@ void Genotypes::swap_allele_dosage_simple(float * dose) {
 ///
 /// This replaces the values in the dose array with ploidy - value.
 void Genotypes::swap_allele_dosage_complex(float * dose) {
+  // reached when the ploidy varies or is not 2, so read the array only in the former case
+  if (constant_ploidy) {
+    float ploid = (float) max_ploidy;
+    for (std::uint32_t n=0; n<n_samples; n++) {
+      dose[n] = ploid - dose[n];
+    }
+    return;
+  }
   for (std::uint32_t n=0; n<n_samples; n++) {
     dose[n] = (float) (this->ploidy[n]) - dose[n];
   }

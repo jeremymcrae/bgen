@@ -64,6 +64,9 @@ public:
   // negative values are clamped to zero.
   bool probs_above_max = false;
   std::unique_ptr<std::uint8_t[]> ploidy;
+  // fills the ploidy array when every sample shares a ploidy, in which case parse_ploidy
+  // leaves it empty. Public because variant.cpp hands the array out to callers
+  void materialise_ploidy();
 private:
   void decompress();
   void parse_ploidy();
