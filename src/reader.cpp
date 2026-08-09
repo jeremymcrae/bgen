@@ -6,6 +6,33 @@
 
 namespace bgen {
 
+/// bytes the bgen stream reads at a time (even on seek)
+///
+/// A seek discards the previous buffer, and the next read refills it. Every
+/// variant seeks when starting, and by default would read 8 KB, despite only
+/// using ~50 bytes for variant metadata. Resize buffer to 512 bytes instead.
+///
+/// Reading genotypes is unaffected, since that reads > 512 bytes.
+const std::size_t STREAM_BUFFER = 512;
+
+/// an ifstream which owns the buffer it reads through
+///
+/// The buffer has to outlive the stream, and the stream outlives the reader whenever a
+/// Variant still holds it. StreamBuffer is a base class so that it is constructed
+/// before, and destroyed after, the stream itself.
+struct StreamBuffer {
+  std::vector<char> data;
+  StreamBuffer(std::size_t size) : data(size) {}
+};
+
+struct BufferedFile : private StreamBuffer, public std::ifstream {
+  BufferedFile(const std::string & path, std::size_t size) : StreamBuffer(size) {
+    // pubsetbuf only has an effect before the file is opened
+    rdbuf()->pubsetbuf(data.data(), (std::streamsize) data.size());
+    open(path, std::ios::in | std::ios::binary);
+  }
+};
+
 /// smallest number of bytes a variant can occupy in a bgen
 ///
 /// This is a deliberate underestimate of the per variant fields (the identifiers
@@ -24,7 +51,7 @@ const std::uint64_t MAX_VARIANT_RESERVE = 1 << 16;
 
 CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool delay_parsing) {
   if (path != "/dev/stdin") {
-    handle = std::make_shared<std::ifstream>(path, std::ios::in | std::ios::binary);
+    handle = std::shared_ptr<std::istream>(new BufferedFile(path, STREAM_BUFFER));
   } else {
     is_stdin = true;
     // std::cin is not ours to close, so hold it without owning it

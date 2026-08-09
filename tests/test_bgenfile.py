@@ -10,7 +10,7 @@ import warnings
 
 import numpy as np
 
-from bgen import BgenReader
+from bgen import BgenReader, BgenWriter
 
 from tests.utils import load_gen_data, can_cap_memory
 
@@ -502,6 +502,55 @@ class TestBgenReader(unittest.TestCase):
         self.assertEqual(len(bfile.samples), 500)
         self.assertEqual(bfile.samples[0], 'sample_001')
         bfile.close()
+    
+    def test_long_alleles_and_ids_parse(self):
+        ''' variant metadata must parse whatever size it comes out at
+
+        The bgen is read through a small buffer, so a long allele spans several refills.
+        These lengths step across that boundary from both sides. They pass at any buffer
+        size, since a stream refills transparently, so this is a check on long allele
+        parsing generally rather than on the buffer.
+        '''
+        n = 4
+        geno = np.array([[0.1, 0.8, 0.1]] * n)
+        samples = [f's{i}' for i in range(n)]
+        for length in [1, 400, 490, 500, 505, 510, 511, 512, 513, 520, 600, 5000]:
+            with self.subTest(length=length):
+                alleles = ['A' * length, 'G']
+                path = Path(self.tmpdir) / f'meta{length}.bgen'
+                with BgenWriter(path, n, samples=samples) as bfile:
+                    bfile.add_variant('varid', 'rsid', 'chr1', 10, alleles, geno,
+                                      bit_depth=8)
+                with BgenReader(path) as bfile:
+                    var = next(iter(bfile))
+                    self.assertEqual(var.alleles, alleles)
+                    self.assertEqual(var.rsid, 'rsid')
+                    self.assertEqual(var.varid, 'varid')
+                    self.assertEqual(var.chrom, 'chr1')
+                    self.assertEqual(var.pos, 10)
+                    # the genotypes come after the metadata, so a misplaced offset
+                    # would decode to something else
+                    np.testing.assert_allclose(var.probabilities, geno, atol=0.01)
+    
+    def test_long_identifiers_parse(self):
+        ''' long identifiers must parse, not just long alleles
+
+        Only the alleles are covered elsewhere, and the identifiers are read first, so
+        long ones need their own case.
+        '''
+        n = 4
+        geno = np.array([[0.1, 0.8, 0.1]] * n)
+        path = Path(self.tmpdir) / 'longids.bgen'
+        with BgenWriter(path, n, samples=[f's{i}' for i in range(n)]) as bfile:
+            bfile.add_variant('V' * 300, 'R' * 300, 'C' * 200, 99, ['A', 'G'], geno,
+                              bit_depth=8)
+        with BgenReader(path) as bfile:
+            var = next(iter(bfile))
+            self.assertEqual(var.varid, 'V' * 300)
+            self.assertEqual(var.rsid, 'R' * 300)
+            self.assertEqual(var.chrom, 'C' * 200)
+            self.assertEqual(var.pos, 99)
+            np.testing.assert_allclose(var.probabilities, geno, atol=0.01)
     
     def test_corrupt_variant_count(self):
         ''' an impossible variant count does not exhaust memory

@@ -548,11 +548,14 @@ cdef class BgenReader:
         if not self.is_open == True:
             raise ValueError('bgen file is closed')
         
+        cdef BgenVar var
         try:
             var = BgenVar(self.handle, self.offset, self.thisptr.header.layout,
                 self.thisptr.header.compression, self.thisptr.header.nsamples, self.is_stdin,
                 self.is_open)
-            self.offset = var.next_variant_offset
+            # read the next offset off the C++ variant, rather than through the python
+            # property, which would box it into a python int just to unbox it
+            self.offset = var.thisptr.next_variant_offset
             self.n_iterated += 1
             return var
         except IndexError:
