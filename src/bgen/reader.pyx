@@ -491,7 +491,7 @@ cdef class BgenReader:
     # variants returned by __next__ so far, to spot a truncated bgen which stops
     # short of the variant count in the header
     cdef uint64_t n_iterated
-    def __cinit__(self, path, sample_path='', bool delay_parsing=False):
+    def __cinit__(self, path, sample_path='', bool delay_parsing=True):
         if isinstance(path, Path):
             path = str(path)
         if isinstance(sample_path, Path):
