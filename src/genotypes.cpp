@@ -164,14 +164,14 @@ static void zstd_uncompress(char * input, int compressed_len, char * decompresse
   }
 }
 
-/// Read genotype data for a variant from disk and decompress.
+/// Read a variant's genotype data block from the bgen, without decompression
 ///
-/// The decompressed data is stored in the 'uncompressed' member. Decompression
-/// is handled internally by either zlib_decompress, or zstd_decompress,
-/// depending on compression scheme.
-void Genotypes::decompress() {
-  if (is_decompressed) {
-    // don't decompress if already available
+/// The buffer is padded as the decompressed buffer is, so that an uncompressed
+/// block can be handed to the parsers as it stands rather than being copied.
+void Genotypes::load_block() {
+  if (block) {
+    // the block is always allocated with padding, so it is never a null pointer
+    // after it has been read, even for a zero length block
     return;
   }
   
@@ -184,10 +184,39 @@ void Genotypes::decompress() {
     // any other error state (e.g. the failbit and eofbit left behind by a read
     // which ran to the end of the file) is recoverable, since we are about to
     // seek to a known good offset. Only safe when we can seek, so stdin keeps
-    // whatever state it is in and fails the reads below instead.
+    // whatever state it is in and fails the read below instead.
     handle->clear();
     handle->seekg(file_offset);  // about 1 microsecond
   }
+  
+  // the block length is read from the bgen, so guard the buffer size against
+  // wrapping, as for the decompressed length below
+  if (length > (UINT32_MAX - PROBS_READ_PAD)) {
+    throw std::invalid_argument("bgen genotype data claims an implausible "
+                                "length: " + std::to_string(length));
+  }
+  // hold the buffer in a unique_ptr, so a read which throws on a malformed bgen
+  // cannot leak it
+  std::unique_ptr<char[]> buffer(new char[length + PROBS_READ_PAD]);
+  std::memset(buffer.get() + length, 0, PROBS_READ_PAD);
+  if (! handle->read(buffer.get(), length)) {
+    throw std::invalid_argument("couldn't read the compressed data");
+  }
+  block = std::move(buffer);
+}
+
+/// Decompress a variant's genotype data.
+///
+/// The decompressed data is stored in the 'uncompressed' member. Decompression
+/// is handled internally by either zlib_decompress, or zstd_decompress,
+/// depending on compression scheme.
+void Genotypes::decompress() {
+  if (is_decompressed) {
+    // don't decompress if already available
+    return;
+  }
+  
+  load_block();
   
   bool decompressed_field = false;
   std::uint32_t decompressed_len = length;
@@ -197,18 +226,26 @@ void Genotypes::decompress() {
     } else if (layout == 2) {
       decompressed_field = true;
       if (length < sizeof(std::uint32_t)) {
-        // the field is part of the block, so a block this short would both read
-        // into the next variant and underflow the compressed length below
+        // the field is part of the block, so a block this short would underflow
+        // the compressed length below
         throw std::invalid_argument("bgen genotype data is too short to hold a "
                                     "decompressed length");
       }
-      if (! handle->read(reinterpret_cast<char*>(&decompressed_len), sizeof(std::uint32_t))) {
-        throw std::invalid_argument("couldn't read the compressed length");
-      }
+      std::memcpy(&decompressed_len, block.get(), sizeof(std::uint32_t));
     }
   }
   
+  if (compression == 0) {
+    // the block is the genotype data, and was padded when it was read, so hand it
+    // over as it stands rather than copying it into a second buffer
+    uncompressed = std::move(block);
+    uncompressed_len = length;
+    is_decompressed = true;
+    return;
+  }
+  
   std::uint32_t compressed_len = length - decompressed_field * 4;
+  char * compressed = block.get() + decompressed_field * 4;
   // the decompressed length is read from the bgen, so guard the buffer size
   // against wrapping. Without this a length near the 32-bit limit allocates a
   // few bytes and the padding memset below writes way past the end.
@@ -217,30 +254,25 @@ void Genotypes::decompress() {
                                 "decompressed length: " +
                                 std::to_string(decompressed_len));
   }
-  // hold the buffers in unique_ptrs, so the reads and decompression below can
-  // throw on a malformed bgen without leaking them
-  std::unique_ptr<char[]> compressed(new char[compressed_len]);
   // pad the buffer, since probabilities_layout2 reads 8 bytes at a time and the
   // read for the final probability would otherwise run off the end of the
   // genotype data. Zero the padding so those trailing bits are deterministic.
   std::unique_ptr<char[]> buffer(new char[decompressed_len + PROBS_READ_PAD]);
   std::memset(buffer.get() + decompressed_len, 0, PROBS_READ_PAD);
-  if (! handle->read(&compressed[0], compressed_len)) {
-    throw std::invalid_argument("couldn't read the compressed data");
-  }
-
-  if (compression == 0) { //no compression
-    std::memcpy(&buffer[0], &compressed[0], compressed_len);
-  } else if (compression == 1) { // zlib
-    zlib_uncompress(compressed.get(), (int) compressed_len, buffer.get(), (int) decompressed_len);  // about 2 milliseconds
+  
+  if (compression == 1) { // zlib
+    zlib_uncompress(compressed, (int) compressed_len, buffer.get(), (int) decompressed_len);  // about 2 milliseconds
   } else if (compression == 2) { // zstd
-    zstd_uncompress(compressed.get(), (int) compressed_len, buffer.get(), (int) decompressed_len);
+    zstd_uncompress(compressed, (int) compressed_len, buffer.get(), (int) decompressed_len);
   }
   // only take ownership once the data has decompressed cleanly, so a failed
-  // parse leaves no half filled buffer behind for a later call to read from
+  // parse leaves no half filled buffer behind for a later call to read from.
+  // The block is kept until then, so that a retry after a failure decompresses
+  // the same bytes rather than reading on into the next variant.
   uncompressed = std::move(buffer);
   uncompressed_len = decompressed_len;
   is_decompressed = true;
+  block.reset();
 }
 
 /// figure out the maximum number of probabilities across the individuals

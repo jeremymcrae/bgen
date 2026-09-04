@@ -46,7 +46,8 @@ public:
       length = _length;
       is_stdin = _is_stdin;
       if (is_stdin) {
-        load_data_and_parse_header();
+        // piped files cannot seek, so data block has to be read now
+        load_block();
       }
     }
   void load_data_and_parse_header();
@@ -68,6 +69,7 @@ public:
   // leaves it empty. Public because variant.cpp hands the array out to callers
   void materialise_ploidy();
 private:
+  void load_block();
   void decompress();
   void parse_ploidy();
   std::uint64_t probability_bytes();
@@ -91,6 +93,8 @@ private:
   bool is_stdin = false;
   std::uint32_t bit_depth=0;
   std::uint32_t idx=0;
+  // variant data, stored as in bgen. Only held between read and decompression
+  std::unique_ptr<char[]> block;
   std::unique_ptr<char[]> uncompressed;
   // size of the decompressed genotype block, so that the reads below can be
   // bounded by the data which is actually present. The block length comes from
