@@ -62,7 +62,6 @@ class TestBgenStream(unittest.TestCase):
         self.max_buff = 65536
         self.folder = Path(__file__).parent /  "data"
     
-    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
     def test_random_access_on_stream_names_the_real_problem(self):
         ''' picking a single variant out of a stream has to blame the stream
 
@@ -78,7 +77,7 @@ class TestBgenStream(unittest.TestCase):
         for call in calls:
             with self.subTest(call=call):
                 code = ('from bgen import BgenReader\n'
-                        'b = BgenReader("/dev/stdin")\n'
+                        'b = BgenReader("-")\n'
                         'try:\n'
                         f'    {call}\n'
                         '    print("NO ERROR")\n'
@@ -92,7 +91,6 @@ class TestBgenStream(unittest.TestCase):
                 self.assertIn('seek', message)
                 self.assertNotIn('truncated', message)
 
-    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
     def test_streaming_still_works_after_a_refused_lookup(self):
         ''' refusing a lookup must not consume the stream
 
@@ -102,7 +100,7 @@ class TestBgenStream(unittest.TestCase):
         '''
         path = self.folder / 'example.16bits.zstd.bgen'
         code = ('from bgen import BgenReader\n'
-                'b = BgenReader("/dev/stdin")\n'
+                'b = BgenReader("-")\n'
                 'try:\n'
                 '    b[0]\n'
                 'except ValueError:\n'
@@ -113,7 +111,6 @@ class TestBgenStream(unittest.TestCase):
                          msg=proc.stderr.decode('utf8', 'replace'))
         self.assertEqual(proc.stdout.decode('utf8').strip(), '199')
 
-    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
     def test_streaming_a_second_bgen_in_one_process(self):
         ''' one process must be able to stream more than one bgen
 
@@ -126,15 +123,19 @@ class TestBgenStream(unittest.TestCase):
         path = self.folder / 'example.16bits.zstd.bgen'
         code = ('import os\n'
                 'import subprocess\n'
+                'import sys\n'
                 'from bgen import BgenReader\n'
                 f'path = {str(path)!r}\n'
+                'copy = "import shutil, sys\\n"\\\n'
+                '       "shutil.copyfileobj(open(sys.argv[1], \'rb\'), sys.stdout.buffer)"\n'
                 'def stream(stop_early):\n'
-                '    feeder = subprocess.Popen(["cat", path], stdout=subprocess.PIPE)\n'
+                '    feeder = subprocess.Popen([sys.executable, "-c", copy, path],\n'
+                '                              stdout=subprocess.PIPE)\n'
                 '    saved = os.dup(0)\n'
                 '    try:\n'
                 '        os.dup2(feeder.stdout.fileno(), 0)\n'
                 '        rsids = []\n'
-                '        with BgenReader("/dev/stdin") as bfile:\n'
+                '        with BgenReader("-") as bfile:\n'
                 '            for var in bfile:\n'
                 '                rsids.append(var.rsid)\n'
                 '                if stop_early:\n'
@@ -156,7 +157,6 @@ class TestBgenStream(unittest.TestCase):
                          msg=proc.stderr.decode('utf8', 'replace'))
         self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
 
-    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
     def test_truncated_stream_does_not_blame_seeking(self):
         ''' a stream that really is short must not be blamed on seeking
 
@@ -168,7 +168,7 @@ class TestBgenStream(unittest.TestCase):
         path = self.folder / 'example.16bits.zstd.bgen'
         data = path.read_bytes()
         code = ('from bgen import BgenReader\n'
-                'b = BgenReader("/dev/stdin")\n'
+                'b = BgenReader("-")\n'
                 'try:\n'
                 '    print(len(list(b)))\n'
                 'except ValueError as e:\n'
@@ -180,6 +180,7 @@ class TestBgenStream(unittest.TestCase):
         self.assertNotEqual(message, '199')
         self.assertNotIn('seek', message)
 
+    def test_streamed_bgen_parses_every_variant(self):
         ''' check we can parse all variants of a bgen from stdin
         
         Anything which needs every variant at once (rsids, varids, chroms,
@@ -190,7 +191,7 @@ class TestBgenStream(unittest.TestCase):
         '''
         path = self.folder / 'example.16bits.zstd.bgen'
         code = ('from bgen import BgenReader\n'
-                'b = BgenReader("/dev/stdin")\n'
+                'b = BgenReader("-")\n'
                 'assert len(b.rsids()) == 199\n'
                 'assert len(b.positions()) == 199\n'
                 'print("ok")\n')
@@ -199,7 +200,6 @@ class TestBgenStream(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, msg=proc.stderr.decode('utf8', 'replace'))
         self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
     
-    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
     @unittest.skipUnless(HAS_RLIMIT, 'needs RLIMIT_AS to cap memory')
     def test_streamed_bgen_corrupt_sample_count(self):
         ''' a corrupt sample count on stdin must not size an allocation
@@ -224,7 +224,7 @@ class TestBgenStream(unittest.TestCase):
         code = ('from bgen import BgenReader\n'
                 + CAP_AFTER_IMPORT +
                 'try:\n'
-                '    BgenReader("/dev/stdin")\n'
+                '    BgenReader("-")\n'
                 'except ValueError:\n'
                 '    print("ok")\n')
         proc = run_piped(code, data)
@@ -232,7 +232,6 @@ class TestBgenStream(unittest.TestCase):
                          msg=proc.stderr.decode('utf8', 'replace'))
         self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
     
-    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
     @unittest.skipUnless(HAS_RLIMIT, 'needs RLIMIT_AS to cap memory')
     def test_streamed_bgen_corrupt_variant_count(self):
         ''' a corrupt variant count on stdin must not size an allocation
@@ -259,7 +258,7 @@ class TestBgenStream(unittest.TestCase):
                         'try:\n'
                         # the reserve happens when the variants are parsed, which is
                         # what asking for the rsids does
-                        '    BgenReader("/dev/stdin").rsids()\n'
+                        '    BgenReader("-").rsids()\n'
                         'except ValueError:\n'
                         '    print("ok")\n')
                 proc = run_piped(code, data)
@@ -267,7 +266,6 @@ class TestBgenStream(unittest.TestCase):
                                  msg=proc.stderr.decode('utf8', 'replace'))
                 self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
     
-    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
     def test_streamed_bgen_with_many_variants(self):
         ''' a streamed bgen with more variants than the reserve cap still reads
         
@@ -287,7 +285,7 @@ class TestBgenStream(unittest.TestCase):
                                       pos=idx + 1, alleles=['A', 'C'],
                                       genotypes=genotypes, bit_depth=8)
             code = ('from bgen import BgenReader\n'
-                    'b = BgenReader("/dev/stdin")\n'
+                    'b = BgenReader("-")\n'
                     'ids = b.rsids()\n'
                     f'assert len(ids) == {nvariants}, len(ids)\n'
                     f'assert ids == [f"rs{{i}}" for i in range({nvariants})], "ids differ"\n'
@@ -297,7 +295,6 @@ class TestBgenStream(unittest.TestCase):
                          msg=proc.stderr.decode('utf8', 'replace'))
         self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
     
-    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
     def test_streamed_bgen_sample_block_length_mismatch(self):
         ''' a bad sample block length is caught on a stream as well as a file
         
@@ -315,7 +312,7 @@ class TestBgenStream(unittest.TestCase):
                 struct.pack_into('<I', data, at, block_length + delta)
                 code = ('from bgen import BgenReader\n'
                         'try:\n'
-                        '    BgenReader("/dev/stdin", delay_parsing=True)\n'
+                        '    BgenReader("-", delay_parsing=True)\n'
                         '    print("accepted")\n'
                         'except ValueError:\n'
                         '    print("rejected")\n')
@@ -324,7 +321,6 @@ class TestBgenStream(unittest.TestCase):
                                  msg=proc.stderr.decode('utf8', 'replace'))
                 self.assertEqual(proc.stdout.decode('utf8').strip(), 'rejected')
     
-    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
     def test_streamed_bgen_with_many_samples(self):
         ''' a streamed bgen with more samples than the reserve cap still reads
         
@@ -342,7 +338,7 @@ class TestBgenStream(unittest.TestCase):
         data = struct.pack('<IIII', header_length + len(block), header_length, 0, n)
         data += b'bgen' + struct.pack('<I', flags) + block
         code = ('from bgen import BgenReader\n'
-                'b = BgenReader("/dev/stdin")\n'
+                'b = BgenReader("-")\n'
                 's = b.samples\n'
                 f'assert len(s) == {n}, len(s)\n'
                 'assert s[0] == "sample_0"\n'
