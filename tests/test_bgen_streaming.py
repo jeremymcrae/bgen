@@ -114,6 +114,49 @@ class TestBgenStream(unittest.TestCase):
         self.assertEqual(proc.stdout.decode('utf8').strip(), '199')
 
     @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
+    def test_streaming_a_second_bgen_in_one_process(self):
+        ''' one process must be able to stream more than one bgen
+
+        The reader used to hold std::cin, so the eofbit from a stream read to the end
+        made the next reader see an empty file, and the bytes a reader buffered but
+        never used were left for the next one to read as its own. Stopping early
+        covers the second case. Each read gets its own pipe, since a reader buffers
+        ahead and cannot leave a shared one positioned for the next.
+        '''
+        path = self.folder / 'example.16bits.zstd.bgen'
+        code = ('import os\n'
+                'import subprocess\n'
+                'from bgen import BgenReader\n'
+                f'path = {str(path)!r}\n'
+                'def stream(stop_early):\n'
+                '    feeder = subprocess.Popen(["cat", path], stdout=subprocess.PIPE)\n'
+                '    saved = os.dup(0)\n'
+                '    try:\n'
+                '        os.dup2(feeder.stdout.fileno(), 0)\n'
+                '        rsids = []\n'
+                '        with BgenReader("/dev/stdin") as bfile:\n'
+                '            for var in bfile:\n'
+                '                rsids.append(var.rsid)\n'
+                '                if stop_early:\n'
+                '                    break\n'
+                '        return rsids\n'
+                '    finally:\n'
+                '        os.dup2(saved, 0)\n'
+                '        os.close(saved)\n'
+                '        feeder.stdout.close()\n'
+                '        feeder.wait()\n'
+                'for stop_early in [True, False]:\n'
+                '    first = stream(stop_early)\n'
+                '    second = stream(stop_early)\n'
+                '    assert first == second, (stop_early, len(first), len(second))\n'
+                '    assert len(first) == (1 if stop_early else 199), len(first)\n'
+                'print("ok")\n')
+        proc = run_piped(code, b'')
+        self.assertEqual(proc.returncode, 0,
+                         msg=proc.stderr.decode('utf8', 'replace'))
+        self.assertEqual(proc.stdout.decode('utf8').strip(), 'ok')
+
+    @unittest.skipIf(sys.platform == "win32", "windows lacks /dev/stdin")
     def test_truncated_stream_does_not_blame_seeking(self):
         ''' a stream that really is short must not be blamed on seeking
 

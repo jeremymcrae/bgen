@@ -50,13 +50,10 @@ const std::uint64_t MIN_VARIANT_BYTES = 12;
 const std::uint64_t MAX_VARIANT_RESERVE = 1 << 16;
 
 CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool delay_parsing) {
-  if (path != "/dev/stdin") {
-    handle = std::shared_ptr<std::istream>(new BufferedFile(path, STREAM_BUFFER));
-  } else {
-    is_stdin = true;
-    // std::cin is not ours to close, so hold it without owning it
-    handle = borrowed_stream(&std::cin);
-  }
+  is_stdin = (path == "/dev/stdin");
+  // stdin is opened by path rather than held as std::cin, so that the error state and
+  // the buffered read-ahead belong to this reader alone, not to the whole process
+  handle = std::shared_ptr<std::istream>(new BufferedFile(path, STREAM_BUFFER));
   if (handle->fail()) {
     throw std::invalid_argument("error reading from '" + path + "'");
   }
@@ -105,10 +102,6 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
 /// handle itself. Every accessor on a Variant checks the reader is open before it
 /// reads, so none of them can reach the closed stream afterwards.
 void CppBgenReader::close_stream() {
-  if (is_stdin) {
-    // std::cin is not ours to close
-    return;
-  }
   std::ifstream * file = dynamic_cast<std::ifstream *>(handle.get());
   if ((file != nullptr) && file->is_open()) {
     file->close();
