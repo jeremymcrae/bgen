@@ -20,6 +20,11 @@ struct FileBuffer {
   FileBuffer(std::size_t size) : data(size) {}
 };
 
+/// a specialized system for reading files to speed up parsing variants metadata
+///
+/// Constructing a variant first seeks to the offset, then reads file data to
+/// obtain variant metadata. By default this would read 8 kb, far more than the
+/// ~50 bytes required for metadata. This reads into a buffer of 512 bytes instead.
 struct BufferedFile : private FileBuffer, public std::ifstream {
   BufferedFile(const std::string & path);
 };
@@ -34,9 +39,6 @@ public:
   void close();
 protected:
   int_type underflow() override;
-  /// read a run of bytes, going straight to the descriptor for runs longer than the
-  /// buffer, which the default would otherwise split into a read per bufferful
-  std::streamsize xsgetn(char * dest, std::streamsize n) override;
 private:
   /// read from the descriptor, giving the bytes read, 0 at the end, or -1 on error. A
   /// pipe stops at what has been written, so callers ask again on a short read
@@ -45,23 +47,19 @@ private:
   std::vector<char> data;
 };
 
-/// an istream owning the descriptor it reads and the buffer it reads through. The
-/// buffer is a base class for the same reason as FileBuffer above
-struct DescriptorBuffer {
-  DescriptorBuf buf;
-  DescriptorBuffer(int fd) : buf(fd) {}
-};
-
 // struct for opening bgen from stdin. This is more complex than it would seem,
 // since we can't use std::cin, and want it to work on windows/linux/macosx.
-struct DescriptorStream : private DescriptorBuffer, public std::istream {
-  DescriptorStream(int fd) : DescriptorBuffer(fd), std::istream(&buf) {
-    if (!buf.is_open()) {
+//
+// The buffer is a base class for the same reason as FileBuffer above, so that it is
+// constructed before, and destroyed after, the stream itself.
+struct DescriptorStream : private DescriptorBuf, public std::istream {
+  DescriptorStream(int fd) : DescriptorBuf(fd), std::istream(this) {
+    if (!is_open()) {
       setstate(std::ios::failbit);
     }
   }
   /// release the descriptor, while leaving whatever was buffered readable
-  void close() { buf.close(); }
+  using DescriptorBuf::close;
 };
 
 } // namespace bgen

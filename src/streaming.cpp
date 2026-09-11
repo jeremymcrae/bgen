@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <cerrno>
 #include <climits>
-#include <cstring>
 
 #if defined(_WIN32)
   #include <fcntl.h>
@@ -78,28 +77,6 @@ DescriptorBuf::int_type DescriptorBuf::underflow() {
     setg(data.data(), data.data(), data.data() + taken);
   }
   return traits_type::to_int_type(*gptr());
-}
-
-std::streamsize DescriptorBuf::xsgetn(char * dest, std::streamsize n) {
-  std::streamsize taken = 0;
-  while (taken < n) {
-    std::streamsize buffered = egptr() - gptr();
-    if (buffered > 0) {
-      std::streamsize used = std::min(buffered, n - taken);
-      std::memcpy(dest + taken, gptr(), (std::size_t) used);
-      gbump((int) used);
-      taken += used;
-    } else if ((n - taken) >= (std::streamsize) data.size()) {
-      std::streamsize got = fill(dest + taken, (std::size_t) (n - taken));
-      if (got <= 0) {
-        break;
-      }
-      taken += got;
-    } else if (traits_type::eq_int_type(underflow(), traits_type::eof())) {
-      break;
-    }
-  }
-  return taken;
 }
 
 std::streamsize DescriptorBuf::fill(char * dest, std::size_t n) {
