@@ -49,9 +49,7 @@ private:
 
 // struct for opening bgen from stdin. This is more complex than it would seem,
 // since we can't use std::cin, and want it to work on windows/linux/macosx.
-//
-// The buffer is a base class for the same reason as FileBuffer above, so that it is
-// constructed before, and destroyed after, the stream itself.
+// The buffer is a base class so it outlives the stream, as for FileBuffer above.
 struct DescriptorStream : private DescriptorBuf, public std::istream {
   DescriptorStream(int fd) : DescriptorBuf(fd), std::istream(this) {
     if (!is_open()) {

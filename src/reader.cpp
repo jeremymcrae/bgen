@@ -7,20 +7,12 @@
 
 namespace bgen {
 
-/// smallest number of bytes a variant can occupy in a bgen
-///
-/// This is a deliberate underestimate of the per variant fields (the identifiers
-/// and alleles all have length prefixes, and layout 1 has fewer fields), since it
-/// is only used to cap how much space is reserved up front. Undercounting just
-/// makes the reserve smaller than it could be.
+/// smallest number of bytes a variant can occupy in a bgen. This underestimates the
+/// per variant fields, which only makes the reserve it caps smaller than it could be
 const std::uint64_t MIN_VARIANT_BYTES = 12;
 
-/// most variants to reserve space for up front when the bgen's size is unknown
-///
-/// A Variant is a few hundred bytes, so reserving the claimed count asks the
-/// allocator for over a terabyte when that count is corrupt, which fails even
-/// though the pages are never touched. This is only needed for a stream, whose
-/// size cannot be measured, so growing past it costs a few reallocations.
+/// most variants to reserve space up front for a stream, whose size cannot be
+/// measured. A Variant is a few hundred bytes, so a corrupt count asks for terabytes
 const std::uint64_t MAX_VARIANT_RESERVE = 1 << 16;
 
 CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool delay_parsing) {
@@ -48,9 +40,8 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
   }
   header = Header(handle.get());
   if (header.has_sample_ids) {
-    // Reject a wildly wrong count before the sample block is even read. Samples()
-    // applies a tighter check of its own, so this is not load bearing, but it keeps
-    // the coarse failure separate from a block that merely disagrees with its IDs.
+    // Reject a wildly wrong count before the sample block is read, which keeps this
+    // coarse failure separate from a block that merely disagrees with its IDs
     if ((file_size > 0) && (header.nsamples > file_size / 2)) {
       throw std::invalid_argument("bgen has more samples than the file can hold");
     }
@@ -72,13 +63,8 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
   }
 }
 
-/// release the operating system file handle
-///
-/// The stream is shared with every Variant taken from this reader, so dropping this
-/// reader's reference is not enough to close the file while any of those survive.
-/// Windows refuses to delete a file that is still open, so closing has to reach the
-/// handle itself. Every accessor on a Variant checks the reader is open before it
-/// reads, so none of them can reach the closed stream afterwards.
+/// release the operating system file handle, which windows needs before the file can
+/// be deleted. Variants share the stream, so dropping our reference cannot do it
 void CppBgenReader::close_stream() {
   DescriptorStream * stream = dynamic_cast<DescriptorStream *>(handle.get());
   if (stream != nullptr) {
@@ -91,11 +77,8 @@ void CppBgenReader::close_stream() {
   }
 }
 
-/// byte position of the first variant in the bgen
-///
-/// The cast matters, as header.offset is 32-bit, so the addition would wrap
-/// before being widened, and a corrupt offset would then point back inside the
-/// header rather than past the end of the file.
+/// byte position of the first variant in the bgen. The cast matters, since a corrupt
+/// 32-bit header.offset would otherwise wrap back inside the header
 std::uint64_t CppBgenReader::first_variant_offset() {
   return (std::uint64_t) header.offset + 4;
 }
@@ -146,10 +129,8 @@ void CppBgenReader::parse_all_variants() {
                                 " variants, but only " + std::to_string(parsed) +
                                 " could be read");
   } catch (...) {
-    // Drop the partial list, so a later call retries and raises again, rather
-    // than finding a full sized vector and assuming the parse had finished. The
-    // variants are pushed on as they parse for the same reason - resizing up
-    // front would leave empty variants behind on failure.
+    // Drop the partial list, so a later call retries rather than finding a full
+    // sized vector and assuming the parse had finished
     variants.clear();
     throw;
   }

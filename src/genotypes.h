@@ -11,21 +11,12 @@
 
 namespace bgen {
 
-/// bytes of padding to allocate past the end of the decompressed genotype data
-///
-/// probabilities_layout2 reads 8 bytes at a time so that a probability can be
-/// extracted in a single read, even at bit depths which straddle byte
-/// boundaries. Without this padding, the read for the final probability would
-/// run past the end of the buffer.
+/// bytes of padding past the end of the decompressed genotype data, since
+/// probabilities_layout2 reads 8 bytes at a time, even for the final probability
 const std::uint32_t PROBS_READ_PAD = 8;
 
-/// genotype data for one variant, which owns its decompressed buffers
-///
-/// The buffers are held in unique_ptrs, so a Genotypes can be moved but not
-/// copied. That matters because a Variant holds one of these by value, and
-/// parse_all_variants moves Variants into a vector. Owning the buffers through
-/// raw pointers instead would let a copy duplicate them, and both copies would
-/// then free the same memory.
+/// genotype data for one variant. The unique_ptrs make it movable but not copyable, so
+/// a Variant holding one can go into a vector without two copies freeing one buffer
 class Genotypes {
 public:
   Genotypes() {}
@@ -59,10 +50,8 @@ public:
   int min_ploidy=0;
   int max_ploidy=0;
   int minor_idx=0;
-  // whether a sample's stored probabilities were found to sum above the maximum the bit
-  // depth can hold, which means the bgen is malformed. The final probability of a group is
-  // not stored but inferred as the remainder, so an over-large sum makes it negative. The
-  // negative values are clamped to zero.
+  // whether probabilities summed above the bit depth's maximum, which means the bgen is
+  // malformed. The inferred remainder goes negative there, and is clamped to zero
   bool probs_above_max = false;
   std::unique_ptr<std::uint8_t[]> ploidy;
   // fills the ploidy array when every sample shares a ploidy, in which case parse_ploidy
@@ -96,23 +85,17 @@ private:
   // variant data, stored as in bgen. Only held between read and decompression
   std::unique_ptr<char[]> block;
   std::unique_ptr<char[]> uncompressed;
-  // size of the decompressed genotype block, so that the reads below can be
-  // bounded by the data which is actually present. The block length comes from
-  // the bgen itself, so it cannot be assumed to match what the other header
-  // fields say the variant needs.
+  // size of the decompressed genotype block, which bounds the reads, since the bgen
+  // need not agree with what the other header fields say the variant needs
   std::uint32_t uncompressed_len = 0;
-  // whether the block has been checked as big enough for the variant. The check
-  // has to be remembered, since the header is only parsed once, so a caller
-  // which catches the error and asks for the probabilities again would otherwise
-  // skip straight past it to the reads which the check exists to prevent.
+  // whether the block was checked as big enough for the variant. The header parses
+  // once, so a caller which catches the error and retries would skip the check
   bool block_checked = false;
   bool is_decompressed = false;
   bool constant_ploidy=true;
   bool has_ploidy = false;
-  // whether minor_idx has been worked out for this variant. Finding it needs the
-  // dosages of the whole cohort, so the answer is kept once known, both to save
-  // repeating that and because the layout 1 dosage path appends to the missing
-  // list as it goes.
+  // whether minor_idx is known. Finding it needs the whole cohort's dosages, and the
+  // layout 1 path appends to the missing list as it goes, so it must not repeat
   bool minor_known = false;
   std::vector<std::uint32_t> missing;
 };

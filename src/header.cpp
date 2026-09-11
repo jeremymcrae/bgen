@@ -27,10 +27,8 @@ Header::Header(std::istream * handle) {
     throw std::invalid_argument("doesn't appear to be a bgen file");
   }
   
-  // The header runs from byte 4 to 4 + header_length, and the variant data
-  // starts at 4 + offset, so the header has to fit within the offset. Checking
-  // that stops a corrupt header_length from wrapping the unsigned subtraction
-  // below, or sizing a huge allocation from a 4 byte field.
+  // the header has to fit within the offset where the variants start, which stops a
+  // corrupt header_length wrapping the subtraction below, or sizing a huge allocation
   if ((header_length < 20) || (header_length > offset)) {
     throw std::invalid_argument("bgen header is the wrong length");
   }

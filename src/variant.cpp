@@ -7,10 +7,8 @@
 
 namespace bgen {
 
-/// read a fixed width value from the bgen, throwing if the read failed
-///
-/// Throws out_of_range, which surfaces in python as IndexError, so that reaching
-/// the end of the file ends iteration.
+/// read a fixed width value from the bgen, throwing out_of_range if the read failed,
+/// which surfaces in python as the IndexError that ends iteration
 template <typename T>
 static void read_checked(std::istream & handle, T & value) {
   if (!read_value(handle, value)) {
@@ -45,9 +43,8 @@ Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t & varoffse
     handle->seekg(offset);
   }
   if (handle->eof()) {
-    // check for end-of-file before reading, so we don't try to read after EOF.
-    // This is how iteration over a stdin bgen terminates, since we cannot seek
-    // back on stdin to check whether another variant follows.
+    // check for end-of-file before reading, which is how iteration over a stdin bgen
+    // terminates, since we cannot seek back to check whether another variant follows
     throw std::out_of_range("reached end of file");
   }
   if (layout == 1) {
@@ -124,11 +121,8 @@ void Variant::probs_1d(float * probs) {
   geno.probabilities(probs);
 }
 
-/// whether the last decode saw probabilities summing above the bit depth's maximum
-///
-/// The genotype decoders infer final probabilities from the remainder, so an over-large
-/// sum becomes negative and gets clamped. This flags the clamping, so a caller can warn
-/// about malformed bgen.
+/// whether the last decode saw probabilities summing above the bit depth's maximum. The
+/// decoders infer the final probability from the remainder, so an over-large sum clamps
 bool Variant::probs_above_max() {
   return geno.probs_above_max;
 }
@@ -147,16 +141,14 @@ void Variant::minor_allele_dosage(float * dose) {
 
 /// the least common of a biallelic variant's alleles
 ///
-/// Which allele is the minor one depends on the genotypes, so this reads them,
-/// rather than reporting whatever a previous dosage call happened to leave behind.
+/// Which allele is the minor one depends on the genotypes, so this reads them
 ///
 /// @return the minor allele
 std::string Variant::get_minor_allele() {
   int idx2 = geno.get_minor_idx();
   if ((idx2 < 0) || ((std::size_t) idx2 >= alleles.size())) {
-    // get_minor_idx only returns 0 or 1, and it throws for anything other than a
-    // biallelic variant, so this is unreachable. It is here so that a future
-    // change to either cannot turn into a read past the end of the alleles.
+    // unreachable, since get_minor_idx only returns 0 or 1 for a biallelic variant,
+    // but guards a future change from reading past the end of the alleles
     throw std::invalid_argument("bgen variant has no allele for the minor index");
   }
   minor_allele = alleles[idx2];

@@ -114,11 +114,10 @@ class TestBgenStream(unittest.TestCase):
     def test_streaming_a_second_bgen_in_one_process(self):
         ''' one process must be able to stream more than one bgen
 
-        The reader used to hold std::cin, so the eofbit from a stream read to the end
-        made the next reader see an empty file, and the bytes a reader buffered but
-        never used were left for the next one to read as its own. Stopping early
-        covers the second case. Each read gets its own pipe, since a reader buffers
-        ahead and cannot leave a shared one positioned for the next.
+        Each reader needs its own stream state and buffer, so reading one to the end,
+        or stopping part way through, cannot leave the next one seeing an empty or
+        misaligned bgen. Each read gets its own pipe, since a reader buffers ahead
+        and cannot leave a shared one positioned for the next.
         '''
         path = self.folder / 'example.16bits.zstd.bgen'
         code = ('import os\n'

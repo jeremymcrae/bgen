@@ -127,16 +127,10 @@ static void zlib_uncompress(char * input, int compressed_len, char * decompresse
 
 // uncompress a char array with zstd
 //
-// ZSTD_decompress allocates a decompression context, initialises it, then frees it on every
-// call. That fixed cost is independent of the block size, so for a bgen with many small
-// variants it is paid once per variant and comes to dominate: on 20000 variants of 500 samples
-// reusing one context is ~30% faster, against ~7% on 300 variants of 20000 samples.
-//
-// The context is held thread_local rather than as a file or variant member because a Genotypes
-// object exists per variant, so a member would be built and torn down just as often as before
-// and save nothing. thread_local also keeps this safe if reads are ever run from several
-// threads, which a single shared context would not be. A context carries no state between
-// independent frames, so reusing one cannot change what is decompressed.
+// ZSTD_decompress allocates and frees a context on every call, at a fixed cost which
+// dominates a bgen of many small variants (~30% faster reusing one across 20000 variants
+// of 500 samples, against ~7% across 300 variants of 20000 samples). The context is
+// thread_local, since a Genotypes exists per variant, and a shared one is not thread safe
 static ZSTD_DCtx * borrow_zstd_dctx() {
   // the unique_ptr frees the context when the thread exits
   struct Deleter {
@@ -164,10 +158,8 @@ static void zstd_uncompress(char * input, int compressed_len, char * decompresse
   }
 }
 
-/// Read a variant's genotype data block from the bgen, without decompression
-///
-/// The buffer is padded as the decompressed buffer is, so that an uncompressed
-/// block can be handed to the parsers as it stands rather than being copied.
+/// Read a variant's genotype data block from the bgen, without decompression. The
+/// block is padded like the decompressed buffer, so an uncompressed one needs no copy
 void Genotypes::load_block() {
   if (block) {
     // the block is always allocated with padding, so it is never a null pointer
@@ -246,17 +238,14 @@ void Genotypes::decompress() {
   
   std::uint32_t compressed_len = length - decompressed_field * 4;
   char * compressed = block.get() + decompressed_field * 4;
-  // the decompressed length is read from the bgen, so guard the buffer size
-  // against wrapping. Without this a length near the 32-bit limit allocates a
-  // few bytes and the padding memset below writes way past the end.
+  // the decompressed length is read from the bgen, so guard against wrapping, since a
+  // length near the 32-bit limit would allocate a few bytes then memset past the end
   if (decompressed_len > (UINT32_MAX - PROBS_READ_PAD)) {
     throw std::invalid_argument("bgen genotype data claims an implausible "
                                 "decompressed length: " +
                                 std::to_string(decompressed_len));
   }
-  // pad the buffer, since probabilities_layout2 reads 8 bytes at a time and the
-  // read for the final probability would otherwise run off the end of the
-  // genotype data. Zero the padding so those trailing bits are deterministic.
+  // zero the padding, so the trailing bits probabilities_layout2 reads are deterministic
   std::unique_ptr<char[]> buffer(new char[decompressed_len + PROBS_READ_PAD]);
   std::memset(buffer.get() + decompressed_len, 0, PROBS_READ_PAD);
   
@@ -267,8 +256,7 @@ void Genotypes::decompress() {
   }
   // only take ownership once the data has decompressed cleanly, so a failed
   // parse leaves no half filled buffer behind for a later call to read from.
-  // The block is kept until then, so that a retry after a failure decompresses
-  // the same bytes rather than reading on into the next variant.
+  // The block is kept until then, so a retry decompresses the same bytes.
   uncompressed = std::move(buffer);
   uncompressed_len = decompressed_len;
   is_decompressed = true;
@@ -293,12 +281,9 @@ std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
 
 /// @brief number of bytes the packed probability data needs for this variant
 ///
-/// Every sample stores all but one probability per group, at bit_depth bits
-/// each, so the total is a bit count rounded up to whole bytes. Phased data
-/// stores a group per haplotype, so the count scales with each sample's ploidy.
-///
-/// This is computed in 64-bit, since the per sample counts come from the file
-/// and so can be large enough to overflow a 32-bit total.
+/// Every sample stores all but one probability per group, at bit_depth bits each, and
+/// phased data stores a group per haplotype. The counts come from the file, so a 32-bit
+/// total could overflow
 std::uint64_t Genotypes::probability_bytes() {
   if (layout == 1) {
     // layout 1 is a fixed three 16-bit probabilities per sample, with nothing
@@ -315,19 +300,14 @@ std::uint64_t Genotypes::probability_bytes() {
     }
     values = (std::uint64_t) n_samples * groups * (per_group - 1);
   } else if (phased || (n_alleles == 2)) {
-    // Both of these come to one stored value per (haplotype x allele), so the
-    // total only needs the sum of the ploidy values, which vectorises. For
-    // phased data each haplotype stores n_alleles - 1 values. For an unphased
-    // biallelic sample the count is ploidy + 1 genotypes less the omitted one,
-    // which is just the ploidy.
-    // only reached when the ploidy varies, so the array is filled by parse_ploidy
+    // both come to one stored value per (haplotype x allele), so the total is just the
+    // sum of the ploidy values, which vectorises. parse_ploidy filled the array, since
+    // this is only reached when the ploidy varies
     std::uint64_t total_ploidy = fast_ploidy_sum(ploidy.get(), n_samples);
     values = phased ? total_ploidy * ((std::uint64_t) n_alleles - 1) : total_ploidy;
   } else {
-    // Unphased and multi-allelic with a ploidy which varies per sample, so each
-    // sample stores a different number of genotypes. parse_ploidy masks the
-    // ploidy to its low 6 bits, so the count for each of the 64 possible values
-    // can be worked out once rather than once per sample.
+    // unphased, multi-allelic and varying ploidy, so each sample stores a different
+    // number of genotypes. The ploidy is masked to 6 bits, so 64 counts cover them all
     //
     // Only fill up to max_ploidy, because higher counts cannot occur and may
     // cause problems e.g. 12 alleles at a ploidy of 63 overflows a 32-bit count
@@ -350,18 +330,11 @@ std::uint64_t Genotypes::probability_bytes() {
 
 /// @brief check the genotype block is big enough for the variant it describes
 ///
-/// The block length is stored in the bgen, and it sizes the buffer, but the
-/// fields which say how much data the variant needs (sample count, ploidy,
-/// allele count and bit depth) are stored separately. A truncated or malformed
-/// bgen can therefore describe far more probability data than it holds, and the
-/// parsing below indexes on those fields rather than on the buffer length, so
-/// without this it reads past the end of the buffer - which segfaults outright
-/// on a variant with many samples.
+/// The block length and the fields sizing the data it needs are stored separately, and
+/// the parsing indexes on those fields, so a malformed bgen would read past the buffer
 void Genotypes::check_block_size() {
-  // the accessors in variant.cpp only parse the header when max_probs is zero,
-  // so clear it if this check fails. Otherwise a rejected variant is left with a
-  // non-zero max_probs, and those accessors skip the parse and hand back data
-  // for a variant which just failed the check.
+  // the accessors in variant.cpp only parse the header when max_probs is zero, so clear
+  // it on failure, or a rejected variant hands back data on the next call
   std::uint64_t required;
   try {
     required = (std::uint64_t) idx + probability_bytes();
@@ -400,11 +373,8 @@ void Genotypes::load_data_and_parse_header() {
     max_ploidy = 2;
     bit_depth = 16;
   } else if (layout == 2) {
-    // The preamble is 10 bytes (sample count, allele count, the two ploidy
-    // bounds, the phased flag and the bit depth) plus a ploidy byte per sample.
-    // Check that much is present before reading any of it, since the reads below
-    // and in parse_ploidy are sized from the bgen header rather than from the
-    // block, and a short block would otherwise be read straight past.
+    // the preamble is 10 bytes plus a ploidy byte per sample, and the reads below are
+    // sized from the bgen header, so check it is present before reading any of it
     const std::uint64_t preamble = 10 + (std::uint64_t) n_samples;
     if (preamble > (std::uint64_t) uncompressed_len) {
       throw std::invalid_argument("bgen variant is truncated - its genotype data "
@@ -463,10 +433,8 @@ void Genotypes::load_data_and_parse_header() {
 /// samples This takes 100 microseconds for 500k samples. Layout 1 variants lack
 /// ploidy info, and are assigned the same ploidy for all samples.
 ///
-/// When every sample shares a ploidy the array holds one value repeated, so filling it
-/// costs an allocation and a write per sample for something max_ploidy already says.
-/// That is skipped here and left to materialise_ploidy(), which the accessors call. Only
-/// the missingness scan has to happen now, since it reads the block this variant owns.
+/// A constant ploidy is left for materialise_ploidy() to fill, since max_ploidy already
+/// says it. Only the missingness scan has to happen now, while the block is here
 void Genotypes::parse_ploidy() {
   if (has_ploidy) {
     return;
@@ -493,19 +461,13 @@ void Genotypes::parse_ploidy() {
         missing.push_back(x);
       }
     }
-    // The per-sample ploidy sizes the probability reads and writes, but the
-    // arrays those go into are sized from max_ploidy, so a sample outside the
-    // declared bounds would write past the end of its row - and past the end of
-    // the array for the last sample. fast_range is vectorised, so this is
-    // cheaper than tracking the range in the loop above.
+    // the ploidy sizes the probability reads, but the arrays they fill are sized from
+    // max_ploidy, so a sample outside the declared bounds writes past the end of its row
     Range range = fast_range(ploidy.get(), n_samples);
     if ((range._max > (std::uint8_t) max_ploidy) ||
         (range._min < (std::uint8_t) min_ploidy)) {
-      // this throws partway through the header parse, so idx and bit_depth are
-      // not yet set for this variant. Clear has_ploidy so a later call redoes
-      // the whole parse and fails here again, rather than taking the shortcut in
-      // load_data_and_parse_header and carrying on with a half parsed header.
-      // The missing list has to be emptied too, or that reparse doubles it up.
+      // this throws partway through the header parse, so clear the state a later call
+      // would take as parsed, or it carries on with a half parsed header
       has_ploidy = false;
       missing.clear();
       throw std::invalid_argument("bgen variant has sample ploidies from " +
@@ -521,12 +483,8 @@ void Genotypes::parse_ploidy() {
 
 /// @brief fill the per-sample ploidy array, if it is not already filled
 ///
-/// parse_ploidy leaves the array empty when every sample shares a ploidy, since the value
-/// is already in max_ploidy and filling half a million entries with it costs more than the
-/// genotype decode does. Anything which needs the array itself calls this first.
-///
-/// Loops over the cohort should read max_ploidy directly in the constant case, rather than
-/// forcing the array to be built just to read one repeated value out of it.
+/// parse_ploidy leaves it empty when every sample shares a ploidy, since filling half a
+/// million entries costs more than the decode. Prefer max_ploidy to forcing this
 void Genotypes::materialise_ploidy() {
   if (ploidy) {
     return;
@@ -627,18 +585,10 @@ static void haplotype_probs_avx2(char * uncompressed, std::uint32_t & idx,
 
 /// @brief AVX2 half of the unphased biallelic diploid 8 bit decode
 ///
-/// Writes three probabilities per sample: the two stored values and the remainder. All three
-/// come out of lut8 by gather rather than by arithmetic, because lut8 holds seven digit decimal
-/// literals which differ from value * (1.0f/255.0f) in 365 of its 511 entries. Computing the
-/// probabilities instead would be faster still, but would change every value the library
-/// returns, so the table is authoritative here.
-///
-/// Leaves n as the count of samples handled, for the scalar tail to finish.
-///
-/// Sets above_max if any sample's stored values summed above the maximum, which the clamp
-/// below would otherwise hide. Detecting that costs one bitwise or per eight samples: the
-/// remainders are accumulated before clamping, so a negative one leaves its sign bit in the
-/// accumulator, and one test after the loop reports whether any was seen.
+/// All three probabilities come out of lut8 by gather rather than arithmetic, since its
+/// seven digit literals differ from value * (1.0f/255.0f) in 365 of 511 entries, so
+/// computing them would change every value the library returns. Leaves n as the samples
+/// handled, and sets above_max if any sample's stored values summed above the maximum
 BGEN_TARGET_AVX2
 static void unphased_probs_avx2(char * uncompressed, std::uint32_t & idx,
                                 float * probs, std::uint32_t & nrows,
@@ -697,16 +647,9 @@ static void unphased_probs_avx2(char * uncompressed, std::uint32_t & idx,
 
 /// @brief look up the final probability of an unphased biallelic diploid sample
 ///
-/// The final probability is inferred as the remainder, max - first - second, but
-/// nothing stops a bgen from storing values which sum to more than the maximum,
-/// which would index before the start of the table. Files written by older
-/// versions of this package can do so, since each probability used to be rounded
-/// independently. Clamping keeps the read inside the table, and reports the
-/// nearest representable probability of zero.
-///
-/// Sets above_max when it clamps, so the caller can report the file as malformed. The
-/// comparison is on integers which are already in registers, so this costs nothing
-/// measurable and cannot misfire on rounding the way a float test could.
+/// The remainder can index before the table, since a bgen may store values summing above
+/// the maximum. Clamping keeps the read inside the table, and sets above_max, on the
+/// integers already in registers, which cannot misfire on rounding as a float test could
 static inline float remainder_lut8(std::uint8_t first, std::uint8_t second,
                                    bool & above_max) {
   int idx = 255 - (int) first - (int) second;
@@ -716,11 +659,8 @@ static inline float remainder_lut8(std::uint8_t first, std::uint8_t second,
 
 /// @brief the dosage count of an unphased biallelic diploid sample
 ///
-/// The count is first * 2 + second, which reaches 510 while the two stored values sum
-/// to no more than 255, as the bgen spec requires. Malformed or older files can break
-/// that and reach 765, so clamp to the maximum, which the SIMD paths also do. Returning
-/// the count rather than a dosage keeps the divide by 255 identical to those paths, so
-/// a sample gets the same dosage wherever it sits in the variant.
+/// Malformed files can push first * 2 + second past the 510 the spec allows, so clamp as
+/// the SIMD paths do. Returning the count keeps the divide by 255 identical to those
 static inline int dosage_count8(std::uint8_t first, std::uint8_t second,
                                 bool & above_max) {
   int count = (int) first * 2 + (int) second;
@@ -828,11 +768,8 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
   
   std::uint32_t offset;
   std::uint32_t k = (phased) ? max_ploidy : 1;  // phased data needs scaled offset
-  // Phased samples with varying ploidy occupy a row per haplotype, so a sample's
-  // offset is the ploidy of every sample before it. missing holds sample indices in
-  // ascending order, so carry that running total from one missing sample to the
-  // next, instead of re-summing from the first sample each time. Re-summing costs
-  // the sample count per missing sample, which is quadratic over the cohort.
+  // a phased sample's offset is the ploidy of every sample before it, and missing is in
+  // ascending order, so carry a running total rather than re-summing, which is quadratic
   std::uint32_t summed_to = 0;   // samples already added to haplotypes
   std::uint32_t haplotypes = 0;  // ploidy summed over those samples
   // for samples with missing data, just set values to NA
@@ -863,11 +800,8 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
 void Genotypes::probabilities(float * probs) {
   load_data_and_parse_header();
   
-  // cleared per decode so the flag means "this decode saw it" rather than "some decode
-  // ever did". Every decoder which can meet the problem currently reports it, so with a
-  // Genotypes per variant there is no sequence of reads that tells the two apart. It is
-  // here so that adding a decoder which does not check cannot silently start attributing
-  // an earlier variant's problem to a later read
+  // cleared per decode, so the flag means this decode saw it, rather than some earlier
+  // one, even if a decoder is added which does not check
   probs_above_max = false;
   
   std::uint32_t nrows;
@@ -899,20 +833,10 @@ void Genotypes::probabilities(float * probs) {
 /// full cohort. This can be 600X faster than checking the full cohort in larger
 /// populations.
 ///
-/// The frequency has to be divided by the alleles actually summed, rather than by
-/// a fixed batch size times two, since the stride covers a varying number of
-/// samples, samples carry their own ploidy, and missing samples contribute no
-/// alleles. Any of those understates the frequency and flips the comparison
-/// against 0.5 below, reporting the wrong minor allele.
-///
-/// A variant sitting at a frequency of almost exactly 0.5 never satisfies that
-/// interval, so the strides run out and every sample gets visited anyway - in steps of
-/// n_samples/100, which reads one value per cache line and defeats the prefetcher. Once
-/// enough samples have been checked for the striding to have served its purpose, the rest
-/// is finished in one sequential pass instead, which costs about half as much per sample.
-///
-/// A constant ploidy variant gathers each stride rather than walking it, which needs no
-/// per sample ploidy lookup and gives a bit identical sum.
+/// The frequency is divided by the alleles actually summed, since a stride covers a
+/// varying number of samples, each with their own ploidy, and missing ones contribute
+/// none. A variant sitting at almost exactly 0.5 never settles, so striding stops at
+/// stride_limit and the rest runs sequentially, at about half the cost per sample
 ///
 /// @param dose float array of dosages for the reference (first) allele, with
 ///     missing samples already set to nan
@@ -930,12 +854,8 @@ int Genotypes::find_minor_allele(float * dose) {
   // array which would have to be built for the purpose
   bool varies = !constant_ploidy;
   std::uint8_t fixed_ploidy = (std::uint8_t) max_ploidy;
-  // striding stops after this many samples. The interval above resolves any frequency
-  // outside roughly 0.49 to 0.51 within a few strides, so this only bites on variants
-  // sitting almost exactly at 0.5 - and for those the striding will not settle however
-  // long it runs, while costing 16 times the cache lines of a sequential pass, since each
-  // stride lands on its own line. Below the cap the strided sampling still does its job of
-  // guarding against a cohort ordered by genotype
+  // striding stops after this many samples, since only a frequency almost exactly at 0.5
+  // gets this far, and that never settles, while costing 16 times the cache lines
   std::uint64_t stride_limit = 10000;
   
   // To make sure we don't hit weird groupings of alleles in individuals, this
@@ -944,9 +864,8 @@ int Genotypes::find_minor_allele(float * dose) {
   for (std::uint32_t idx2=0; idx2<increment; idx2++) {
     if (varies) {
       for (std::uint32_t n=idx2; n<n_samples; n += increment) {
-        // a missing sample has no called alleles, so counts towards neither the
-        // total nor the alleles it is divided by. This relies on get_allele_dosage
-        // having marked it before this runs
+        // a missing sample has no called alleles, so counts towards neither the total
+        // nor the alleles it is divided by, having been marked by get_allele_dosage
         if (std::isnan(dose[n])) {
           continue;
         }
@@ -976,9 +895,8 @@ int Genotypes::find_minor_allele(float * dose) {
     }
   }
   
-  // Not resolved by sampling, so use the whole cohort. Summing from scratch keeps this
-  // independent of how far the strides above got, so the answer depends only on the
-  // dosages themselves
+  // Not resolved by sampling, so use the whole cohort. Summing from scratch keeps the
+  // answer independent of how far the strides got
   if (!varies) {
     // every callable sample carries the same ploidy, so the alleles seen follow from the
     // count of them and the sum can be vectorised
@@ -1010,21 +928,19 @@ int Genotypes::find_minor_allele(float * dose) {
 }
 
 #if defined(__x86_64__)
-// the AVX2 half of ref_dosage_fast below. Compiled for AVX2 in isolation, so it
-// is only ever entered after a runtime check for AVX2 support.
+// the AVX2 half of ref_dosage_fast below, compiled in isolation, so it is only entered
+// after a runtime check for AVX2 support
 BGEN_TARGET_AVX2
 static void ref_dosage_avx2(char * uncompressed, std::uint32_t & idx,
                             float * dose, std::uint32_t & nrows,
                             std::uint32_t & n, bool & above_max) {
   const float c = 1.0f / 255.0f;
   __m256 k = _mm256_set1_ps(c);
-  // weights for the dot product below, 2 against each homozygous count (since ploidy=2)
-  // and 1 against each heterozygous count. Little endian, so the low byte of each pair
-  // multiplies the even input byte, which holds the homozygous count
+  // weights for the dot product below, 2 against each homozygous count and 1 against
+  // each heterozygous. Little endian, so the low byte multiplies the even input byte
   __m256i weights = _mm256_set1_epi16(0x0102);
-  // the largest dosage count a valid sample can reach, first * 2 + second with the two
-  // stored values summing to no more than 255. Anything above it means the bgen stores
-  // probabilities summing above the maximum, so clamp it as the scalar path does
+  // the largest count a valid sample reaches, first * 2 + second, so anything above it
+  // means the bgen stores probabilities summing above the maximum, and gets clamped
   __m256i limit = _mm256_set1_epi16(510);
   // running maximum count, checked against the limit once the loop ends
   __m256i peak = _mm256_setzero_si256();
@@ -1036,20 +952,16 @@ static void ref_dosage_avx2(char * uncompressed, std::uint32_t & idx,
   for (; n + 16 <= nrows; n+=16) {
     initial = _mm256_loadu_si256((__m256i *) &uncompressed[idx]);
 
-    // multiply each byte by its weight and add the pairs, which both applies the
-    // ploidy and sums the two counts of a sample. Counts start as 8-bit uints and
-    // the weighted sum needs 10 bits, so the results are 16-bit ints. The inputs are
-    // unsigned and the weights positive, so the saturation this instruction applies
-    // to signed 16-bit output can never trigger
+    // multiply each byte by its weight and add the pairs, which applies the ploidy and
+    // sums a sample's two counts. The weighted sum needs 10 bits, so 16-bit results
     total = _mm256_maddubs_epi16(initial, weights);
 
     // hold the largest count seen rather than comparing every iteration, since only
     // whether any sample passed the limit matters, not which
     peak = _mm256_max_epi16(peak, total);
 
-    // clamp to the maximum, as dosage_count8 does for the scalar tail. Without this a
-    // malformed sample gives a ref dosage above the ploidy, which the swap to the alt
-    // allele turns negative
+    // clamp as dosage_count8 does, since a malformed sample would give a ref dosage
+    // above the ploidy, which the swap to the alt allele turns negative
     total = _mm256_min_epi16(total, limit);
 
     // convert each half to floats, via 32 bit ints
@@ -1107,9 +1019,8 @@ void Genotypes::ref_dosage_fast(char *uncompressed, std::uint32_t idx, float *do
     // het and hom counts into separate vector registers
     initial = vld2q_u8(buff + idx);
 
-    // widen the low half of the het counts to 16-bit uints, and add twice each hom
-    // count in the same instruction, which both applies the ploidy and sums the two
-    // counts of a sample. 16-bit because the weighted sum needs 10 bits
+    // widen the low half of the het counts and add twice each hom count in the same
+    // instruction, which applies the ploidy and sums a sample's counts, needing 10 bits
     total = vmlal_u8(vmovl_u8(vget_low_u8(initial.val[1])),
                      vget_low_u8(initial.val[0]), two);
     peak = vmaxq_u16(peak, total);
@@ -1165,10 +1076,8 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
 
   std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
   float factor = (layout == 2) ? 1.0f / (float) maxval : 1.0f / 32768;
-  // 64-bit, since a probability fills all 32 bits at the maximum bit depth, so
-  // doubling it for the two copies a diploid carries used to overflow, turning a
-  // dosage of 2.0 into 1.0. Signed keeps the conversion to a float a single
-  // instruction, and these only hold a masked probability, so are never negative.
+  // 64-bit, since a probability fills 32 bits at the maximum bit depth, and a diploid
+  // doubles it. Signed makes the float conversion one instruction, and these are masked
   std::int64_t het;
   std::int64_t hom;
   std::uint32_t hom_alt;
@@ -1184,10 +1093,8 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
       throw std::invalid_argument("cannot compute dosage with ploidy > 2");
     }
     if (curr_ploidy == 0) {
-      // a sample with no alleles has only the empty genotype, and as the final
-      // probability of a group is never stored it occupies no bytes at all.
-      // Reading one anyway would shift every later sample along, and run off the
-      // end of the block. No alleles means no dosage either.
+      // a sample with no alleles stores no probabilities at all, so reading one would
+      // shift every later sample along, and no alleles means no dosage either
       dose[n] = 0.0f;
       continue;
     }
@@ -1202,9 +1109,8 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
     
     dose[n] = ((hom * curr_ploidy) + het * half_ploidy) * factor;
     if ((layout == 2) && ((std::uint64_t) (hom + het) > probs_mask)) {
-      // the stored probabilities of a sample must sum to at most the largest value the
-      // bit depth holds, which probs_mask also is. Layout 1 stores every probability
-      // rather than inferring the last, so it has no such constraint
+      // a sample's stored probabilities must sum to at most probs_mask. Layout 1 stores
+      // every probability rather than inferring the last, so it has no such constraint
       dose[n] = curr_ploidy;
       probs_above_max = true;
     }
@@ -1252,9 +1158,8 @@ void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, f
 }
 
 #if defined(__x86_64__)
-// the AVX half of swap_allele_dosage_simple below. This only needs AVX, not
-// AVX2, and is compiled in isolation so it is only ever entered after a runtime
-// check for AVX support.
+// the AVX half of swap_allele_dosage_simple below, which only needs AVX, and is entered
+// after a runtime check for it
 BGEN_TARGET_AVX
 static void swap_dosage_avx(float * dose, std::uint32_t & n_samples,
                             std::uint32_t & n) {
@@ -1317,10 +1222,8 @@ void Genotypes::swap_allele_dosage_complex(float * dose) {
 
 /// which of a biallelic variant's two alleles is the minor one
 ///
-/// Finding this needs the dosages of the whole cohort, which get_allele_dosage
-/// works out as a side effect. Callers which only want the allele would otherwise
-/// have to ask for dosages they have no use for, so compute them into a scratch
-/// buffer here and keep the answer.
+/// Finding this needs the whole cohort's dosages, which get_allele_dosage works out as a
+/// side effect, so they go to a scratch buffer for callers which only want the allele
 ///
 /// @return index into alleles of the minor allele (0 or 1)
 int Genotypes::get_minor_idx() {
@@ -1352,9 +1255,8 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
   // as in probabilities, cleared per decode rather than latched across calls
   probs_above_max = false;
   
-  // The layout 1 dosage path spots missing samples from their probabilities and
-  // adds them to the list, so clear it first, or a second dosage read on the same
-  // variant would hold every missing sample twice over.
+  // the layout 1 dosage path appends missing samples to the list, so clear it first, or
+  // a second dosage read holds each of them twice
   if (layout == 1) {
     missing.clear();
   }
@@ -1372,10 +1274,8 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
     }
   }
   
-  // Mark the missing samples before finding the minor allele, so they are left out
-  // of the frequency - their zeroed dosages would otherwise pull it towards zero
-  // and can flip which allele looks minor. The swaps below carry nans through
-  // unchanged, since both subtract the dosage from a number.
+  // mark the missing samples before finding the minor allele, since their zeroed dosages
+  // would pull the frequency towards zero, and can flip which allele looks minor
   for (auto n: missing) {
     dose[n] = std::nanf("1");
   }

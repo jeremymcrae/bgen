@@ -33,16 +33,9 @@ static void append_bytes(std::vector<char> &buf, const void *data, std::size_t s
 
 /// @brief the current write position, or a clear error if there is not one
 ///
-/// The positions tellp() reports are written into the bgen header as the variant data
-/// offset, and handed back to python to build the .bgi index, so a wrong one silently
-/// produces a file whose index points at the wrong bytes.
-///
-/// tellp() has two ways to not give an answer, and only one of them is noisy. On a
-/// stream that has already failed it returns -1 immediately, without touching the stream
-/// state, so the exception mask has nothing to report and (std::uint64_t) -1 becomes a
-/// recorded offset of 18446744073709551615. On a healthy output that cannot seek, such as
-/// a pipe, the seek itself fails and the mask does throw, but only with "basic_ios::clear:
-/// iostream error", which does not say what went wrong.
+/// These positions become the header's variant offset and the .bgi index, so a wrong one
+/// silently misplaces every read. tellp() returns -1 on an already failed stream without
+/// tripping the exception mask, and throws an unhelpful message on a pipe
 static std::uint64_t current_position(std::ofstream &handle) {
   std::streamoff pos = -1;
   if (!handle.fail()) {
@@ -79,11 +72,8 @@ static void write_nvariants(std::ofstream &handle, std::uint32_t &offset, std::u
   write_at_offset(handle, n_variants, offset);
 }
 
-// finish the file off by writing the number of variants, and where the variant
-// data starts
-//
-// This can throw (e.g. if the disk is full), so call it explicitly to have
-// write errors reported, rather than relying on the destructor.
+// finish the file off by writing the number of variants, and where the variant data
+// starts. This can throw on a full disk, so call it rather than relying on the destructor
 void CppBgenWriter::close() {
   if (closed) { return; }
   closed = true;
@@ -134,12 +124,8 @@ void CppBgenWriter::write_header(std::string &free_data,
 
 /// @brief check a string fits the 16-bit length field the bgen stores it behind
 ///
-/// varids, rsids, chromosomes and sample IDs are all written as a two byte
-/// length followed by the characters, so anything longer than 65535 has no valid
-/// encoding. Without this the length silently wraps while the full string is
-/// still written, which leaves a file whose block lengths are self-consistent but
-/// whose fields are all read from the wrong offsets - so the bgen looks fine
-/// until something tries to read it back.
+/// The length would otherwise wrap while the whole string is still written, leaving a
+/// file which looks consistent, but whose fields all read from the wrong offsets
 static void check_length_fits(const std::string &value, const char *field) {
   if (value.size() > UINT16_MAX) {
     throw std::invalid_argument(std::string(field) + " is too long for a bgen - "
@@ -184,11 +170,8 @@ void CppBgenWriter::add_samples(std::vector<std::string> &samples) {
     handle.write(reinterpret_cast<char *>(&id_size), 2);
     handle << x;
   }
-  // The bgen stores this as a four byte field, so an offset past that has no valid
-  // encoding. Casting a larger one down wraps it, which leaves a file whose header
-  // sends readers to the wrong place for the variants, so check it in 64 bits first.
-  // The block length check above bounds the sample block alone, but the offset also
-  // carries the header, so the two together can still overflow.
+  // the offset is a four byte field, so check it in 64 bits first, since the check above
+  // bounds the sample block alone, and the header pushes the two together over
   std::uint64_t data_offset = current_position(handle) - 4;
   if (data_offset > UINT32_MAX) {
     throw std::invalid_argument("the header and sample IDs take up " +
@@ -259,10 +242,8 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
 std::uint64_t CppBgenWriter::write_variant_direct(std::vector<std::uint8_t> & data) {
   std::uint64_t var_offset = current_position(handle);
   n_variants += 1;
-  // write() rather than a std::ostreambuf_iterator, because the iterator reports a
-  // failed write only in its own state. It leaves the stream looking good, so the
-  // exception mask that covers every other write here would not see the bytes go
-  // missing, and this function would still return a plausible offset for the index.
+  // write() rather than a std::ostreambuf_iterator, which reports a failed write only in
+  // its own state, leaving the stream, and so the exception mask, none the wiser
   handle.write(reinterpret_cast<char *>(data.data()), data.size());
   return var_offset;
 }
@@ -322,20 +303,13 @@ static std::vector<char> compress(std::vector<std::uint8_t> &uncompressed, std::
   return compressed;
 }
 
-/// tolerance for genotype probabilities which sit just outside the legal range.
-///
-/// Probabilities frequently arrive after a round trip through float32, since
-/// that is what the reader hands back, and that can shift a value by a few
-/// multiples of the float32 epsilon of 1.2e-07. The error also accumulates when
-/// summing the probabilities for a sample. Values within this much of the limit
-/// are treated as legal (and are clamped when encoded), anything further out is
-/// reported as a mistake.
+/// tolerance for genotype probabilities which sit just outside the legal range, since
+/// they often arrive via the float32 the reader hands back, whose epsilon of 1.2e-07
+/// accumulates across a sample. Values within this are clamped, further out is an error
 const double PROB_TOLERANCE = 1e-6;
 
-/// @brief report an unusable genotype probability
-///
-/// Kept out of line so that the checks below stay small enough to inline into
-/// the encoding loops, since they run once per probability written.
+/// @brief report an unusable genotype probability, kept out of line so the checks below
+/// stay small enough to inline into the encoding loops
 static void raise_probability_error(double g) {
   if (std::isnan(g)) {
     throw std::invalid_argument("samples with any missing genotype must encode all "
@@ -352,11 +326,8 @@ static void raise_cumulative_error(double cumulative) {
 
 /// @brief check a genotype probability is in the range that layout 1 and 2 can encode
 ///
-/// The comparison is written as a single negated range test so that nan fails it
-/// too, rather than slipping through as it would with a plain
-/// 'g < -PROB_TOLERANCE' test. A nan here means only part of a sample is
-/// missing, since fully missing samples are spotted before this and encoded as
-/// zeroes.
+/// The negated range test also fails a nan, which here means a partly missing sample,
+/// since fully missing ones are caught before this and encoded as zeroes
 static inline void check_probability(double g) {
   if (!((g >= -PROB_TOLERANCE) && (g <= 1.0 + PROB_TOLERANCE))) {
     raise_probability_error(g);
@@ -365,12 +336,8 @@ static inline void check_probability(double g) {
 
 /// @brief check the probabilities stored for a sample do not sum above one
 ///
-/// Layout 2 leaves the last probability of each group out of the file, and the
-/// reader infers it as one minus the sum of the stored values, so a group
-/// summing above one has no valid encoding. Note this only bounds the stored
-/// values from above: probabilities which sum to less than one are still
-/// written, since the caller may legitimately be storing a partial
-/// distribution.
+/// Layout 2 infers the last probability of a group as the remainder, so a group summing
+/// above one cannot be encoded. Summing below one is left alone, as a partial distribution
 static inline void check_cumulative(double cumulative) {
   if (cumulative > 1.0 + PROB_TOLERANCE) {
     raise_cumulative_error(cumulative);
@@ -379,13 +346,9 @@ static inline void check_cumulative(double cumulative) {
 
 /// @brief round a non-negative double to the nearest integer, halves away from zero
 ///
-/// std::round is an out of line libm call on the platforms this builds for, and it sits
-/// in the innermost encode loop, once per stored probability. Truncation plus a
-/// comparison inlines to a few instructions instead. Both the truncation and the
-/// subtraction below are exact, so this avoids the usual std::floor(x + 0.5) trap where
-/// x + 0.5 rounds up in the addition and pushes the result to the wrong integer.
-///
-/// Only defined for finite non-negative x below 2^53, which is what the callers pass.
+/// std::round is an out of line libm call, and this sits in the innermost encode loop.
+/// The truncation and subtraction are exact, so this avoids the std::floor(x + 0.5) trap.
+/// Only defined for finite non-negative x below 2^53, which is what the callers pass
 static inline std::uint64_t round_nonneg(double x) {
   std::uint64_t truncated = (std::uint64_t) x;
   return truncated + (x - (double) truncated >= 0.5);
@@ -393,10 +356,8 @@ static inline std::uint64_t round_nonneg(double x) {
 
 /// @brief decide whether a sample's genotypes are all missing, rejecting a partial row
 ///
-/// Marked inline because the hot encode paths call it once per sample, for as few as three
-/// values, where the call itself costs more than the work. The nan count is deliberately
-/// kept branchless: an early exit on the first non-nan measured faster when few samples
-/// are missing but far slower around half, where the branch stops being predictable.
+/// inline, since the encode paths call this per sample, for as few as three values. The
+/// count stays branchless, as an early exit measured slower once half are missing
 static inline bool missing_genotypes(double *genotypes, std::uint32_t size) {
   std::uint32_t nan_count = 0;
   for (std::uint32_t i=0; i<size; i++) {
@@ -428,15 +389,13 @@ static std::vector<std::uint8_t> encode_layout1(
       if (missing) {
         g = 0;
       }
-      // layout 1 scales by 32768 and stores 16-bit values, so the field itself
-      // would hold values up to 2.0. Hold it to the same range as layout 2, so
-      // that the two layouts accept the same genotypes
+      // layout 1 could hold values up to 2.0, but is held to the same range as layout 2,
+      // so both accept the same genotypes
       check_probability(g);
       cumulative += g;
       check_cumulative(cumulative);
-      // check_probability allows a small negative, down to -PROB_TOLERANCE, which
-      // round_nonneg is not defined for. Such a value scales to zero anyway, which is
-      // what std::round followed by the cast to an integer used to produce
+      // check_probability allows a small negative, which round_nonneg is not defined
+      // for, and which scales to zero anyway
       double product = g * 32768;
       scaled32 = (product > 0.0) ? (std::int32_t) round_nonneg(product) : 0;
       // check the value is in bounds
@@ -454,19 +413,10 @@ static std::vector<std::uint8_t> encode_layout1(
 
 /// @brief scale a running total of probabilities into the encoded integer range
 ///
-/// Layout 2 stores all but the last probability for a sample (or for a
-/// haplotype, if phased), and the reader infers the last one as
-/// max - sum(stored), so the stored values have to sum to at most max. Scaling
-/// each probability on its own breaks that: at a bit depth of 8, two
-/// probabilities of 0.5 each round to 128, which sums to 256 when the maximum
-/// is 255, and the reader then infers a negative final probability. Scaling the
-/// running total instead means the stored values sum to round(total * max), so
-/// the constraint holds for any probabilities that sum to 1.0.
-///
-/// The bounds are applied to the double, before the cast to an integer, since a cast
-/// is only defined for values the integer type can represent. That also keeps nan and
-/// inf away from it, though check_probability and check_cumulative mean neither can
-/// arrive here in the first place.
+/// Layout 2 infers a sample's last probability as max - sum(stored), so the stored values
+/// must sum to at most max. Scaling each alone breaks that: at 8 bits two probabilities of
+/// 0.5 both round to 128, which sums past 255. The bounds go on the double, before the
+/// cast, which is only defined for values the integer type can represent
 ///
 /// @param cumulative running total of the probabilities so far, including this one
 /// @param factor scaling factor, the maximum encoded value for the bit depth. Passed by
@@ -508,10 +458,8 @@ static std::uint64_t emplace_probability(std::uint64_t value,
 {
   std::uint64_t window;
 
-  // read the full 64 bits that the caller writes back, so that the bits already
-  // in the buffer survive. At a bit depth of 32 the shifted probability can span
-  // 39 bits, so a narrower read would drop the top of it, and would blank
-  // whatever the window covers beyond the bytes it read.
+  // read the full 64 bits the caller writes back, so the bits already in the buffer
+  // survive, and a 32 bit probability shifted across 39 bits keeps its top
   std::memcpy(&window, encoded, sizeof(window));
   window |= (value << bit_remainder);
   return window;
@@ -519,9 +467,8 @@ static std::uint64_t emplace_probability(std::uint64_t value,
 
 /// @brief precompute number of probabilities per sample for every ploidy
 ///
-/// Only entries up to max_ploidy are filled. Higher ploidies cannot occur, and for a
-/// variant with many alleles they are not even representable (12 alleles at a ploidy
-/// of 63 exceeds a 32-bit count), so computing them would refuse a valid variant.
+/// Only entries up to max_ploidy are filled, since higher ones cannot occur, and are not
+/// even representable (12 alleles at a ploidy of 63 exceeds a 32-bit count)
 ///
 /// @param n_alleles allele count for the variant
 /// @param max_ploidy highest ploidy any sample has
@@ -539,9 +486,8 @@ static std::array<std::uint32_t, 64> probs_per_ploidy(int n_alleles, int max_plo
 
 /// @brief encode a range of samples of the biallelic, unphased, ploidy 2, 8 bit shape
 ///
-/// Split out from encode_biallelic_8bit so the vector paths below can hand back any batch
-/// they decline, which is how every rounding, clamping and error decision stays in one
-/// place. Encodes samples [first, last).
+/// Split out so the vector paths below can hand back any batch they decline, which keeps
+/// every rounding, clamping and error decision in one place. Encodes samples [first, last)
 ///
 /// @param out first output byte of the variant, two per sample
 /// @param flags per sample ploidy bytes, whose top bit marks a missing sample
@@ -631,14 +577,9 @@ static inline __m256d round_nonneg_avx2(__m256d x) {
 
 /// @brief encode the biallelic 8 bit shape four samples at a time
 ///
-/// Each sample is independent, so the scaling is vectorisable. The checks are not, since
-/// they throw, so instead every lane is tested for whether it is encodable, and a batch
-/// containing anything else is handed to the scalar range function, which reaches the same
-/// check in the same order and throws the identical error. The vector code therefore never
-/// decides an error, only whether it is allowed to proceed.
-///
-/// Wholly missing samples are handled here rather than deferred, since real data has plenty
-/// of them and sending those batches to the scalar loop would undo the gain.
+/// Each sample is independent, so the scaling vectorises, but the checks throw, so a batch
+/// with anything unencodable goes to the scalar range function, which reaches the same
+/// check in the same order. Missing samples are handled here, being too common to defer
 BGEN_TARGET_AVX2
 static void encode_biallelic_8bit_avx2(std::uint8_t *out, std::uint8_t *flags,
                                        std::uint32_t n_samples, double *genotypes) {
@@ -687,12 +628,8 @@ static void encode_biallelic_8bit_avx2(std::uint8_t *out, std::uint8_t *flags,
           flags[n + lane] |= 0x80;
         }
       }
-      // a missing lane must not store whatever its nan scaled to, and both its bytes are
-      // already zero in the buffer, so substitute zero as the scalar path does. Both
-      // architectures happen to reach zero without this, but by unrelated routes: x86's
-      // MAXPD returns its second operand for a NaN input, so the clamp below yields zero,
-      // whereas on aarch64 the NaN survives the clamp and FCVTZU converts it to zero. The
-      // substitution is kept rather than relying on either rule
+      // substitute zero for a missing lane, as the scalar path does, rather than relying
+      // on how each architecture happens to convert the nan
       p0 = _mm256_blendv_pd(p0, zero, all_nan);
       c1 = _mm256_blendv_pd(c1, zero, all_nan);
     }
@@ -706,9 +643,8 @@ static void encode_biallelic_8bit_avx2(std::uint8_t *out, std::uint8_t *flags,
 
     __m128i i0 = _mm256_cvttpd_epi32(v0);
     __m128i i1 = _mm256_cvttpd_epi32(_mm256_sub_pd(v1, v0));
-    // narrow to bytes, then interleave so each sample's pair of bytes ends up adjacent.
-    // The narrowing saturates, which is why a missing lane substituting zero above is
-    // enough: it stores zeroes over the zeroes the buffer already holds
+    // narrow to bytes, then interleave so each sample's pair ends up adjacent. The
+    // narrowing saturates, so a missing lane writes zeroes over zeroes
     __m128i packed = _mm_packus_epi16(_mm_packus_epi32(i0, i1), _mm_setzero_si128());
     __m128i pairs = _mm_unpacklo_epi8(packed, _mm_srli_si128(packed, 4));
     std::memcpy(out + 2 * n, &pairs, 8);
@@ -777,9 +713,7 @@ static void encode_biallelic_8bit_neon(std::uint8_t *out, std::uint8_t *flags,
         flags[n + 1] |= 0x80;
       }
       // as in the avx2 path, substitute zero so a nan lane stores the zeroes already in
-      // the buffer. Here FMAX propagates the NaN through the clamp and FCVTZU is what
-      // converts it to zero, which is a different rule to the one x86 relies on, so
-      // neither path depends on it
+      // the buffer, rather than depending on how the conversion handles a nan
       p0 = vbslq_f64(all_nan, zero, p0);
       c1 = vbslq_f64(all_nan, zero, c1);
     }
@@ -804,14 +738,9 @@ static void encode_biallelic_8bit_neon(std::uint8_t *out, std::uint8_t *flags,
 
 /// @brief encode the common case of biallelic, unphased, ploidy 2, at a bit depth of 8
 ///
-/// Almost all real data has this shape, and it lets the generic loop's per sample overhead
-/// go: there are always three probabilities in and two bytes out, the scaling factor is
-/// always 255, and the output is byte aligned so no bit offset arithmetic is needed.
-///
-/// The rounding and clamping decisions are still made by scale_cumulative, the same
-/// function the generic path uses, so there is only one definition of how a probability
-/// becomes a stored value. Only the loop structure around it is specialised, and the vector
-/// paths hand any batch they cannot encode back to that one definition.
+/// Almost all real data has this shape, which drops the generic loop's per sample
+/// overhead: three probabilities in, two bytes out, a factor of 255, and byte aligned
+/// output. scale_cumulative still decides the rounding, so only the loop is specialised
 ///
 /// @param encoded buffer to write into, already zero filled
 /// @param genotype_offset where this variant's probability bytes start
@@ -874,9 +803,8 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
   double g;
   double cumulative;
   std::uint64_t running, previous, value;
-  // counted alongside i rather than recovered as i / max_probs, which is a division by
-  // a value only known at runtime, once or twice for every sample. encode_phased
-  // already tracks the index this way
+  // counted alongside i rather than recovered as i / max_probs, which divides by a
+  // runtime value once or twice per sample
   std::uint32_t sample_idx = 0;
   for (std::uint32_t i=0; i<(n_samples*max_probs); i+= max_probs, sample_idx++) {
     if (!constant_ploidy) {
@@ -888,11 +816,8 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
     missing = missing_genotypes(&genotypes[i], n_probs);
     if (missing) {
       encoded[ploidy_offset + sample_idx] |= 0x80;
-      // Every probability of a missing sample encodes as zero: the loop below would
-      // substitute zero for each value, leaving the running total at zero, so each
-      // stored value is zero too. The buffer is zero initialised and nothing has
-      // written this sample's bits yet, so stepping over them writes the same bytes
-      // the loop would have. That also keeps the missing test out of the inner loop
+      // every probability of a missing sample encodes as zero, and the buffer is already
+      // zero here, so stepping over the sample keeps the test out of the inner loop
       bit_idx += (n_probs - 1) * bit_depth;
       continue;
     }
@@ -918,11 +843,8 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
       }
       bit_idx += bit_depth;
     }
-    // the last probability is inferred by the reader as one minus the stored
-    // values, rather than being stored itself, so check it as part of the total.
-    // Otherwise a sample whose stored values are individually fine but whose
-    // total runs over one would be written with a different final probability
-    // than the caller passed in.
+    // the reader infers the last probability rather than reading it, so check it as part
+    // of the total, or a row summing over one silently changes its final probability
     g = genotypes[i + n_probs - 1];
     check_probability(g);
     cumulative += g;
@@ -1106,10 +1028,8 @@ void CppBgenWriter::encode_genotype_data(std::uint16_t n_alleles,
   encode_genotype_data(n_alleles, genotypes, geno_len, ploidy_vector, ploidy, ploidy, phased, bit_depth);
 }
 
-// encode (and compress) a genotype block, ready for write_genotype_data()
-//
-// This never touches the file handle, so any error it raises (e.g. mismatched
-// genotype lengths, or inconsistent missingness) leaves the bgen unchanged.
+// encode (and compress) a genotype block, ready for write_genotype_data(). This never
+// touches the file handle, so an error it raises leaves the bgen unchanged
 void CppBgenWriter::encode_genotype_data(std::uint16_t n_alleles,
                                          double *genotypes,
                                          std::uint32_t geno_len,

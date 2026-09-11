@@ -8,18 +8,12 @@
 
 namespace bgen {
 
-/// most IDs to reserve space for up front
-///
-/// Reserving the full count would ask the allocator for tens of bytes per claimed
-/// sample, which a corrupt count can push past any address space limit even though
-/// the pages are never touched. Growing past this costs a few reallocations, which
-/// only bgens with more than a million samples pay.
+/// most IDs to reserve space for up front, since a corrupt count reserves tens of bytes
+/// per claimed sample. Growing past this only costs bgens over a million samples
 const std::uint64_t MAX_ID_RESERVE = 1 << 20;
 
-/// how many samples a block of this many bytes could describe
-///
-/// Each ID carries a two byte length prefix, and the block also holds the two four
-/// byte counts at its start, so this is a generous bound but a sound one.
+/// how many samples a block of this many bytes could describe. Each ID has a two byte
+/// length prefix, after the two four byte counts, so this bound is generous but sound
 static std::uint64_t samples_in_block(std::uint64_t block_length) {
   if (block_length <= 8) {
     return 0;
@@ -62,11 +56,8 @@ Samples::Samples(std::istream * handle, std::uint32_t n_samples,
   // count the bytes the IDs occupy, to compare with sample_header_length afterwards
   std::uint64_t used = 8;
   
-  // The checks above bound the count by the bytes available, but an ID costs far more
-  // in memory than the two bytes that justified counting it, so building one per
-  // claimed sample up front still amplifies the file by an order of magnitude. Reserve
-  // a bounded amount instead and grow as the IDs actually arrive, so a count that the
-  // data cannot back out only costs what was read before it ran out.
+  // an ID costs far more in memory than the two bytes which justified counting it, so
+  // reserve a bounded amount and grow as they arrive
   samples.reserve(std::min((std::uint64_t) n_samples, MAX_ID_RESERVE));
   for (std::uint32_t i=0; i<n_samples; i++) {
     samples.emplace_back();
@@ -85,10 +76,8 @@ Samples::Samples(std::istream * handle, std::uint32_t n_samples,
 
 /// initialize from external sample file
 Samples::Samples(std::string path, std::uint32_t n_samples) {
-  // binary, so that the byte offsets used below are the byte offsets on disk. In text
-  // mode windows folds each \r\n into one \n, which leaves tellg() and the file size
-  // counting different things, so the read below asks for more characters than the
-  // translated stream can supply and fails on every file with windows line endings
+  // binary, so the offsets below are the offsets on disk. In text mode windows folds
+  // \r\n into \n, so the read asks for more than the translated stream can supply
   std::ifstream handle(path, std::ios::in | std::ios::binary);
   if (!handle) {
     throw std::invalid_argument("error with sample file: '" + path + "'");
@@ -103,10 +92,8 @@ Samples::Samples(std::string path, std::uint32_t n_samples) {
   // find the file length post header, then read it all in to memory
   std::string lines;
   if (handle) {
-    // Only measure and read when the header lines were both there. On a file with
-    // fewer than two lines the stream has already failed, and tellg() then
-    // returns -1, so the size below would be meaningless. Leaving lines empty
-    // lets the sample count check report the problem.
+    // Only measure when both header lines were there, since tellg() returns -1 on a
+    // failed stream. Leaving lines empty lets the sample count check report it
     auto pos = handle.tellg();
     handle.seekg(0, std::ios::end);
     auto end_pos = handle.tellg();
@@ -155,22 +142,15 @@ Samples::Samples(std::string path, std::uint32_t n_samples) {
 
 /// initialize with integer IDs if no sample list available
 ///
-/// The IDs are not built here. Nothing has checked n_samples at this point, and
-/// no per sample data exists in the bgen to check it against, so building them
-/// now would let a corrupt count allocate arbitrarily. get_samples() checks the
-/// count against file_size when it does build them, since nothing else will:
-/// layout 2 does not repeat the sample count per variant, and a caller can ask
-/// for the IDs without reading a variant at all.
+/// The IDs wait for get_samples(), which checks the count against the file size, since
+/// nothing in the bgen can, and a corrupt count would otherwise allocate arbitrarily
 Samples::Samples(std::uint32_t n_samples, std::uint64_t _file_size) {
   n_placeholders = n_samples;
   file_size = _file_size;
 }
 
-/// sample IDs, generating placeholders on first use if the bgen had none
-///
-/// Deferring the placeholders avoids unnecessary allocation, but a caller can ask
-/// for them without reading a variant, so the count needs to be checked. The file
-/// size is a generous bound to keep a small bgen from building billions of strings.
+/// sample IDs, generating placeholders on first use if the bgen had none. The count is
+/// checked against the file size, to keep a small bgen from building billions of them
 const std::vector<std::string> & Samples::get_samples() {
   if (n_placeholders > 0) {
     if ((file_size > 0) && ((std::uint64_t) n_placeholders > file_size)) {

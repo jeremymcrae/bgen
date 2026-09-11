@@ -143,12 +143,8 @@ static double dosage_sum_avx2(float * dose, std::uint32_t & size, std::uint32_t 
   return (lanes[0] + lanes[1]) + (lanes[2] + lanes[3]);
 }
 
-// sum every stride'th dosage, skipping missing samples. Compiled for AVX2 in isolation, so
-// this is only ever entered after a runtime check for AVX2 support.
-//
-// The samples wanted are stride apart, so a plain load cannot reach them and a gather does
-// the addressing instead. Eight indices go in and eight dosages come out, which replaces
-// eight loads, eight NaN branches and eight dependent adds.
+// sum every stride'th dosage, skipping missing samples. The samples are stride apart, so
+// a gather does the addressing, taking eight at a time in place of eight NaN branches
 BGEN_TARGET_AVX2
 static double strided_sum_avx2(const float * dose, std::uint32_t count,
                                std::uint32_t start, std::uint32_t stride,
@@ -217,13 +213,8 @@ static void range_neon(std::uint8_t * x, std::uint32_t & size, size_t & i,
   max_val = std::max(max_val, vmaxvq_u8(maxs));
 }
 
-// scan 16 bytes at a time for the missingness flag.
-//
-// NEON has no equivalent of movemask, so the flags cannot be turned into a bitmask to
-// walk. Instead the maximum across the masked lanes says whether any of the 16 samples is
-// missing, which skips a clear block in one test. Missing samples are rare, so that is
-// the case worth making fast, and a block that does flag something falls back to checking
-// its bytes.
+// scan 16 bytes at a time for the missingness flag. NEON has no movemask, so the max
+// across the masked lanes tests the whole block at once, which suits missing being rare
 static void missing_scan_neon(const char * data, std::uint32_t & size, std::uint32_t & x,
                               std::vector<std::uint32_t> & missing) {
   const std::uint8_t * bytes = reinterpret_cast<const std::uint8_t *>(data);
@@ -241,10 +232,8 @@ static void missing_scan_neon(const char * data, std::uint32_t & size, std::uint
   }
 }
 
-// sum dosages into 64-bit lanes, skipping missing samples.
-//
-// The lanes are grouped and summed in the same order as the AVX2 path, so both give the
-// same total for the same input.
+// sum dosages into 64-bit lanes, skipping missing samples. The lanes are grouped as in
+// the AVX2 path, so both give the same total
 static double dosage_sum_neon(float * dose, std::uint32_t & size, std::uint32_t & i,
                               std::uint64_t & called) {
   float64x2_t acc_lo = vdupq_n_f64(0.0);
@@ -278,9 +267,8 @@ static double dosage_sum_neon(float * dose, std::uint32_t & size, std::uint32_t 
 
 /// @brief binomial coefficient C(n, k)
 ///
-/// This counts the genotypes a sample can have, so it sizes the probability arrays and
-/// the byte count a variant is checked against. Both arguments come from the file, built
-/// from the allele count and the ploidy, so they can exceed any real variant.
+/// This sizes the probability arrays, and both arguments come from the file, built from
+/// the allele count and the ploidy, so they can exceed any real variant
 ///
 /// @param n total items to choose from
 /// @param k number of items chosen
@@ -337,10 +325,8 @@ bool minor_certain(double freq, int n_checked, double z) {
 // Summing the ploidy array via numpy is more expensive than it should be, this
 // is just a quick vectorized sum to speed that up.
 //
-// The bytes are accumulated straight into 64-bit counters, so no intermediate can
-// overflow. A 32-bit accumulator could not manage that: the ploidy is at most 255
-// per person, so the lanes and the sum of the lanes both wrap partway through a
-// large cohort, and the size at which that happens depends on the ploidy values.
+// The bytes accumulate straight into 64-bit counters, since a 32-bit lane wraps
+// partway through a large cohort, at a size which depends on the ploidy values
 //
 /// @param x array of floats
 /// @param size size of array
@@ -392,13 +378,8 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
 
 /// @brief record the samples flagged as missing, in order
 ///
-/// Layout 2 stores one byte per sample, with the top bit set when the sample is missing and
-/// the low bits holding its ploidy. A variant with constant ploidy only needs the
-/// missingness out of that, so this scans for the flag without touching the ploidy.
-///
-/// Missing samples are rare, so the useful case is a stretch with none, which this clears
-/// 32 bytes at a time. A block that does flag something gets its indices straight out of
-/// the movemask result, so the data is only read once either way.
+/// Layout 2 packs missingness into the top bit of each sample's ploidy byte. Missing
+/// samples are rare, so this clears 32 bytes at a time, and only walks a flagged block
 ///
 /// @param data the ploidy byte per sample, at the start of the variant's block
 /// @param size number of samples
@@ -425,15 +406,9 @@ void fast_missing_scan(const char * data, std::uint32_t size,
 
 /// @brief sum dosages and count the callable samples, skipping missing ones
 ///
-/// find_minor_allele needs the dosage summed over the cohort, which it divides by the
-/// alleles seen. Written as a plain loop this cannot vectorise, since accumulating floats
-/// into a double is order dependent, and a branch per sample skips the missing ones.
-///
-/// Reordering the sum is safe here. Every dosage is a multiple of 1/maxval for the bit
-/// depth, so the totals come out bit identical to the ordered sum for cohorts far larger
-/// than any real one, and the caller only compares the frequency against 0.5. A missing
-/// sample is marked with NaN and is dropped by adding zero rather than by branching, since
-/// a NaN compares unequal to itself.
+/// Reordering the sum lets this vectorise, and is safe since every dosage is a multiple
+/// of 1/maxval for the bit depth, so the total stays bit identical for cohorts far larger
+/// than any real one. NaN marks a missing sample, so adding zero drops it without a branch
 ///
 /// @param dose dosages, with missing samples already set to nan
 /// @param size number of samples
@@ -466,20 +441,10 @@ double fast_dosage_sum(float * dose, std::uint32_t size, std::uint64_t & n_calle
 
 /// @brief sum every stride'th dosage, counting the callable samples
 ///
-/// find_minor_allele samples the cohort in strides before it commits to a full pass, so
-/// that a cohort ordered by genotype cannot fool the early exit. This does one such stride.
-///
-/// The reordering is safe for the same reason as fast_dosage_sum, and the result is bit
-/// identical to summing the same samples in index order.
-///
-/// The gather addresses samples as signed 32-bit byte offsets from the start of the walk,
-/// so it is only used while the span stays inside that range. Beyond it the scalar loop
-/// runs instead, which cannot happen for a cohort that fits in memory but is checked
-/// rather than assumed.
-///
-/// There is no aarch64 path here, unlike the other helpers in this file. NEON has no
-/// gather, so the four lanes have to be loaded one at a time and inserted, which measured
-/// no faster than the scalar loop it would replace.
+/// find_minor_allele samples in strides before committing to a full pass, so a cohort
+/// ordered by genotype cannot fool the early exit. Reordering is safe as in
+/// fast_dosage_sum. The gather takes signed 32-bit offsets, so a wider span falls back to
+/// the scalar loop, as does aarch64, where NEON has no gather worth the loads it needs
 ///
 /// @param dose dosages, with missing samples already set to nan
 /// @param n_samples number of samples in the cohort

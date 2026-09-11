@@ -10,10 +10,8 @@ namespace bgen {
 
 class Samples {
 public:
-  // the sample count is unsigned to match the bgen header field. Taking it as an
-  // int would turn counts above INT_MAX negative, which then becomes a huge
-  // size_t when it reaches resize(), and silently skips the loops below.
-  // file_size bounds the sample block, and is zero when the size is unknown
+  // the sample count is unsigned to match the bgen header field, since a count above
+  // INT_MAX would turn negative, then huge at resize(). file_size is zero if unknown
   Samples(std::istream * handle, std::uint32_t n_samples,
           std::uint64_t file_size=0);
   Samples(std::string path, std::uint32_t n_samples);
