@@ -1,0 +1,69 @@
+#ifndef BGEN_STREAMING_H_
+#define BGEN_STREAMING_H_
+
+#include <cstddef>
+#include <fstream>
+#include <istream>
+#include <streambuf>
+#include <string>
+#include <vector>
+
+namespace bgen {
+
+/// an ifstream which owns the buffer it reads through
+///
+/// The buffer has to outlive the stream, and the stream outlives the reader whenever a
+/// Variant still holds it. FileBuffer is a base class so that it is constructed
+/// before, and destroyed after, the stream itself.
+struct FileBuffer {
+  std::vector<char> data;
+  FileBuffer(std::size_t size) : data(size) {}
+};
+
+struct BufferedFile : private FileBuffer, public std::ifstream {
+  BufferedFile(const std::string & path);
+};
+
+/// a streambuf which reads a bgen from a file descriptor, since stdin cannot be
+/// opened by path everywhere, and std::cin belongs to the process, not to a reader
+class DescriptorBuf : public std::streambuf {
+public:
+  DescriptorBuf(int source);
+  ~DescriptorBuf() { close(); }
+  bool is_open() const { return fd >= 0; }
+  void close();
+protected:
+  int_type underflow() override;
+  /// read a run of bytes, going straight to the descriptor for runs longer than the
+  /// buffer, which the default would otherwise split into a read per bufferful
+  std::streamsize xsgetn(char * dest, std::streamsize n) override;
+private:
+  /// read from the descriptor, giving the bytes read, 0 at the end, or -1 on error. A
+  /// pipe stops at what has been written, so callers ask again on a short read
+  std::streamsize fill(char * dest, std::size_t n);
+  int fd = -1;
+  std::vector<char> data;
+};
+
+/// an istream owning the descriptor it reads and the buffer it reads through. The
+/// buffer is a base class for the same reason as FileBuffer above
+struct DescriptorBuffer {
+  DescriptorBuf buf;
+  DescriptorBuffer(int fd) : buf(fd) {}
+};
+
+// struct for opening bgen from stdin. This is more complex than it would seem,
+// since we can't use std::cin, and want it to work on windows/linux/macosx.
+struct DescriptorStream : private DescriptorBuffer, public std::istream {
+  DescriptorStream(int fd) : DescriptorBuffer(fd), std::istream(&buf) {
+    if (!buf.is_open()) {
+      setstate(std::ios::failbit);
+    }
+  }
+  /// release the descriptor, while leaving whatever was buffered readable
+  void close() { buf.close(); }
+};
+
+} // namespace bgen
+
+#endif  // BGEN_STREAMING_H_

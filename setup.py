@@ -142,6 +142,7 @@ extensions = [
             'src/genotypes.cpp',
             'src/header.cpp',
             'src/samples.cpp',
+            'src/streaming.cpp',
             'src/utils.cpp',
             'src/variant.cpp'],
         include_dirs=['src', 'src/zstd/lib', ZLIB_DIR],
