@@ -74,7 +74,7 @@ cdef extern from 'samples.h' namespace 'bgen':
     cdef cppclass Samples:
         Samples(istream * handle, int n_samples, uint64_t file_size) except +
         Samples(string path, int n_samples) except +
-        Samples(int n_samples, uint64_t file_size) except +
+        Samples(int n_samples, uint64_t file_size, uint32_t n_variants, int compression) except +
         Samples() except +
         
         # declare public methods

@@ -144,20 +144,35 @@ Samples::Samples(std::string path, std::uint32_t n_samples) {
 ///
 /// The IDs wait for get_samples(), which checks the count against the file size, since
 /// nothing in the bgen can, and a corrupt count would otherwise allocate arbitrarily
-Samples::Samples(std::uint32_t n_samples, std::uint64_t _file_size) {
+Samples::Samples(std::uint32_t n_samples, std::uint64_t _file_size,
+                 std::uint32_t _n_variants, int _compression) {
   n_placeholders = n_samples;
   file_size = _file_size;
+  n_variants = _n_variants;
+  compression = _compression;
 }
 
 /// sample IDs, generating placeholders on first use if the bgen had none. The count is
 /// checked against the file size, to keep a small bgen from building billions of them
 const std::vector<std::string> & Samples::get_samples() {
   if (n_placeholders > 0) {
-    if ((file_size > 0) && ((std::uint64_t) n_placeholders > file_size)) {
-      throw std::invalid_argument("bgen claims " + std::to_string(n_placeholders) +
-                                  " samples, which a file of " +
-                                  std::to_string(file_size) +
-                                  " bytes cannot describe");
+    if (file_size > 0) {
+      // 0-variant files hold only the header, while compressed variants can exceed
+      // 30,000:1 ratio. Cap against impossible allocations while allowing real cohorts
+      bool cannot_describe = false;
+      if (n_variants == 0) {
+        cannot_describe = (n_placeholders > 10000000);
+      } else if (compression == 0) {
+        cannot_describe = ((std::uint64_t) n_placeholders > file_size);
+      } else {
+        cannot_describe = ((std::uint64_t) n_placeholders > file_size * 35000);
+      }
+      if (cannot_describe) {
+        throw std::invalid_argument("bgen claims " + std::to_string(n_placeholders) +
+                                    " samples, which a file of " +
+                                    std::to_string(file_size) +
+                                    " bytes cannot describe");
+      }
     }
     samples.reserve(std::min((std::uint64_t) n_placeholders, MAX_ID_RESERVE));
     for (std::uint32_t i=0; i<n_placeholders; i++) {

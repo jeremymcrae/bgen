@@ -54,7 +54,7 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
     // no IDs anywhere, so nothing can bound the count here. Samples() defers
     // building the placeholder IDs until they are asked for, and checks the count
     // against the file size at that point
-    samples = Samples(header.nsamples, file_size);
+    samples = Samples(header.nsamples, file_size, header.nvariants, header.compression);
   }
   
   offset = first_variant_offset();

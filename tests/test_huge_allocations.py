@@ -214,6 +214,37 @@ class TestHugeAllocations(unittest.TestCase):
         with BgenReader(path) as bfile:
             self.assertEqual(bfile.samples, ['0', '1', '2', '3'])
 
+    def test_placeholder_sample_ids_zero_variants_large_cohort(self):
+        ''' a bgen with 0 variants can describe a large cohort without sample IDs
+
+        Some bgens can contain 0 variants in a 24-byte file while representing a 500k cohort.
+        '''
+        path = self.tmpdir / 'zero_variants.bgen'
+        with BgenWriter(path, n_samples=500000, samples=[], compression='zstd', layout=2) as bfile:
+            pass
+        with BgenReader(path) as bfile:
+            self.assertEqual(len(bfile), 0)
+            self.assertEqual(len(bfile.samples), 500000)
+            self.assertEqual(bfile.samples[0], '0')
+            self.assertEqual(bfile.samples[-1], '499999')
+
+    def test_placeholder_sample_ids_compressed_variant_exceeds_filesize(self):
+        ''' a compressed bgen can have file_size smaller than sample count
+
+        A monomorphic variant with 500k samples compresses to ~200 bytes, which is
+        smaller than the sample count.
+        '''
+        path = self.tmpdir / 'mono.bgen'
+        probs = np.zeros((500000, 3), dtype=np.float64)
+        probs[:, 0] = 1.0
+        with BgenWriter(path, n_samples=500000, samples=[], compression='zstd', layout=2) as bfile:
+            bfile.add_variant(varid='v', rsid='rs', chrom='01', pos=1,
+                              alleles=['A', 'G'], genotypes=probs)
+        self.assertLess(path.stat().st_size, 500000)
+        with BgenReader(path) as bfile:
+            self.assertEqual(len(bfile.samples), 500000)
+            self.assertEqual(len(bfile), 1)
+
 
 if __name__ == '__main__':
     unittest.main()
