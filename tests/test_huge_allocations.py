@@ -13,7 +13,12 @@ anything checks them, a file of a hundred bytes can ask for gigabytes of memory:
     can ask for the IDs without ever reading a variant, and layout 2 does not repeat the
     sample count per variant, so nothing else validates it.
 
-Both are checked here by running a child with a capped address space. Without the fix the
+  * the header's length, which sizes the free data area.
+  * the genotype block's length, and the length a compressed block decompresses to.
+    These also size the buffer for copy_data().
+  * the sample count, which sizes the array a dosage is returned in.
+
+Most are checked here by running a child with a capped address space. Without the fix the
 child dies with MemoryError or std::bad_alloc; with it, the file is rejected as malformed.
 The cap is what makes these safe to run: the point is a claim too large to serve, so
 serving it would page out the machine. It is applied after the child's imports, and sized
