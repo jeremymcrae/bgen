@@ -140,12 +140,14 @@ class TestHugeAllocations(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _write(self, path, n_samples=4, alleles=('A', 'C'), sample_ids=True):
+    def _write(self, path, n_samples=4, alleles=('A', 'C'), sample_ids=True,
+               compression=None):
         ''' write a small valid bgen to corrupt a single field of '''
         n_probs = 3
         probs = np.full((n_samples, n_probs), 1 / n_probs)
         samples = [f's{i}' for i in range(n_samples)] if sample_ids else None
-        with BgenWriter(path, n_samples, samples=samples, compression=None) as bfile:
+        with BgenWriter(path, n_samples, samples=samples,
+                        compression=compression) as bfile:
             bfile.add_variant(varid='v', rsid='rs', chrom='01', pos=1,
                               alleles=list(alleles), genotypes=probs)
         return path
@@ -201,6 +203,23 @@ class TestHugeAllocations(unittest.TestCase):
             with self.subTest(claim=claim):
                 bad = self._claim(path, offset, claim, f'block{claim}.bgen')
                 self._assert_rejected(run_capped(bad, 'iterate'))
+
+    @unittest.skipUnless(CAN_CAP, 'needs RLIMIT_AS and /proc to cap memory')
+    def test_overstated_decompressed_length_is_not_allocated(self):
+        ''' a block cannot claim to decompress to more than its bytes could expand to
+        '''
+        for compression in ['zlib', 'zstd']:
+            path = self._write(self.tmpdir / f'{compression}.bgen',
+                               compression=compression)
+            # the decompressed length follows the block length
+            offset = self._block_length_offset(path) + 4
+            for claim in [0xFFFFFFF0, 3 * 1024 * 1024 * 1024, 700 * 1024 * 1024]:
+                with self.subTest(compression=compression, claim=claim):
+                    bad = self._claim(path, offset, claim,
+                                      f'{compression}{claim}.bgen')
+                    outcome = run_capped(bad, 'iterate')
+                    self._assert_rejected(outcome)
+                    self.assertIn('implausible', outcome)
 
     @unittest.skipIf(sys.platform == 'win32', 'needs resource, to measure peak memory')
     def test_overstated_header_length_is_not_allocated(self):

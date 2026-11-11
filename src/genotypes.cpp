@@ -104,6 +104,10 @@ const float lut8[511] = {0.0000000, 0.0039216, 0.0078431, 0.0117647, 0.0156863, 
   1.9725490, 1.9764706, 1.9803922, 1.9843137, 1.9882353, 1.9921569, 1.9960784,
   2.0000000};
 
+/// upper bound on the compression ratio (zstd peaks at 32768:1, zlib at ~1032:1), to
+/// reject a corrupt decompressed length before allocating for it
+const std::uint64_t MAX_EXPANSION = 35000;
+
 /// read an integer from an unaligned offset (the memcpy compiles to a single load)
 template <typename T>
 static inline T load(const char * data) {
@@ -267,7 +271,9 @@ void Genotypes::decompress() {
   char * compressed = block.get() + decompressed_field * 4;
   // the decompressed length is read from the bgen, so guard against wrapping, since a
   // length near the 32-bit limit would allocate a few bytes then memset past the end
-  if (decompressed_len > (UINT32_MAX - PROBS_READ_PAD)) {
+  // and reject lengths beyond what the compressed bytes could expand to
+  if ((decompressed_len > (UINT32_MAX - PROBS_READ_PAD)) ||
+      (decompressed_len > (std::uint64_t) compressed_len * MAX_EXPANSION)) {
     throw std::invalid_argument("bgen genotype data claims an implausible "
                                 "decompressed length: " +
                                 std::to_string(decompressed_len));
