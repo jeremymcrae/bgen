@@ -64,7 +64,7 @@ with BgenReader(sys.stdin) as bfile:
 #### API documentation
 
 ``` py
-class BgenReader(path, sample_path='', delay_parsing=False)
+class BgenReader(path, sample_path='', delay_parsing=True)
     # opens a bgen file. If a bgenix index exists for the file, the index file
     # will be opened automatically for quicker access of specific variants.
     Arguments:
@@ -102,7 +102,7 @@ class BgenVar(handle, offset, layout, compression, n_samples):
     pos: nucleotide position variant is at
     alleles: list of alleles for variant
     is_phased: True/False for whether variant has phased genotype data
-    ploidy: list of ploidy for each sample. Samples are ordered as per BgenReader.samples
+    ploidy: 1D numpy array of ploidy for each sample, ordered as per BgenReader.samples
     minor_allele: the least common allele (for biallelic variants)
     minor_allele_dosage: 1D numpy array of minor allele dosages for each sample
     alt_dosage: 1D numpy array of alt allele dosages for each sample
@@ -117,7 +117,7 @@ class BgenVar(handle, offset, layout, compression, n_samples):
   BgenVars can be pickled e.g. pickle.dumps(var)
 
 
-class BgenWriter(path, n_samples, samples=[], compression='zstd' layout=2, metadata=None)
+class BgenWriter(path, n_samples, samples=None, compression='zstd', layout=2, metadata=None)
     # opens a bgen file to write variants to. Automatically makes a bgenix index file
     Arguments:
       path: path to write data to
@@ -125,12 +125,12 @@ class BgenWriter(path, n_samples, samples=[], compression='zstd' layout=2, metad
       samples: list of sample IDs (same length as n_samples)
       compression: compression type: None, 'zstd', or 'zlib' (default='zstd')
       layout: bgen layout format (default=2)
-      metadata: any additional metadata you want o include in the file (as str)
+      metadata: any additional metadata you want to include in the file (as str)
     
     Methods:
       add_variant_direct(variant)
         Arguments:
-            variant: BgenVar, to be directly copied from one begn file to 
+            variant: BgenVar, to be directly copied from one bgen file to 
                 another. This can be done when the new bgen file is for the same
                 set of samples as the one being read from. This is much faster
                 due to not having to decode and re-encode the genotype data.
