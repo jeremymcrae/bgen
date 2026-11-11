@@ -104,7 +104,7 @@ private:
   std::vector<std::uint32_t> missing;
 };
 
-std::uint32_t get_max_probs(int &max_ploidy, int &n_alleles, bool &phased);
+std::uint32_t get_max_probs(int max_ploidy, int n_alleles, bool phased);
 
 } // namespace bgen
 

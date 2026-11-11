@@ -254,14 +254,11 @@ void Genotypes::decompress() {
 /// @param n_alleles number of alleles for the variant
 /// @param phased whether the genotypes are phased
 /// @return integer for maximum number of possible probabilites per sample
-std::uint32_t get_max_probs(int & max_ploidy, int & n_alleles, bool & phased) {
-  std::uint32_t max_probs;
+std::uint32_t get_max_probs(int max_ploidy, int n_alleles, bool phased) {
   if (phased) {
-    max_probs = n_alleles;
-  } else {
-    max_probs = n_choose_k(max_ploidy + n_alleles - 1, n_alleles - 1);
+    return n_alleles;
   }
-  return max_probs;
+  return n_choose_k(max_ploidy + n_alleles - 1, n_alleles - 1);
 }
 
 /// @brief number of bytes the packed probability data needs for this variant
@@ -298,8 +295,7 @@ std::uint64_t Genotypes::probability_bytes() {
     // cause problems e.g. 12 alleles at a ploidy of 63 overflows a 32-bit count
     std::uint32_t counts[64];
     for (int ploid=0; ploid <= max_ploidy; ploid++) {
-      int p = ploid;
-      std::uint32_t n_probs = get_max_probs(p, n_alleles, phased);
+      std::uint32_t n_probs = get_max_probs(ploid, n_alleles, phased);
       if (n_probs < 1) {
         throw std::invalid_argument("bgen variant stores no probabilities per sample");
       }
