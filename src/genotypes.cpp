@@ -1132,9 +1132,18 @@ void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, f
 
   std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
   float factor = (layout == 2) ? 1.0f / (float) maxval : 1.0f / 32768;
-  float prob;
+
   // NOTE: the sums below need -ffp-contract=off (see setup.py) to give the same values
   // on every architecture
+  if (constant_ploidy && (max_ploidy == 2) && (bit_depth == 8)) {
+    // fast path for a byte per haplotype, gives the same values as the loop below
+    const std::uint8_t * in = reinterpret_cast<const std::uint8_t *>(&uncompressed[idx]);
+    for (std::uint32_t n=0; n<nrows; n++) {
+      dose[n] = (float) in[2 * n] * factor + (float) in[2 * n + 1] * factor;
+    }
+    return;
+  }
+
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
   std::uint64_t bit_idx = 0;  // index position in bits
   for (std::uint32_t n=0; n<nrows; n++) {
@@ -1142,13 +1151,12 @@ void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, f
       curr_ploidy = this->ploidy[n];
     }
     
-    prob = 0;
+    float prob = 0;
     for (std::uint32_t i=0; i<curr_ploidy; i++) {
       prob += ((load<std::uint64_t>(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask) * factor;
       bit_idx += bit_depth;
     }
     dose[n] = prob;
-    
   }
 }
 
