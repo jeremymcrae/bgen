@@ -260,9 +260,10 @@ static void zlib_compress(char * input, int input_len, std::vector<char> &output
   strm.avail_out = output.size();        // size of output
   strm.next_out = (Bytef *) &output[0]; // output char array
 
-  int ret;
-  deflateInit(&strm, 6);
-  ret = deflate(&strm, Z_FINISH);
+  if (deflateInit(&strm, 6) != Z_OK) {
+    throw std::runtime_error("cannot allocate a zlib compression stream");
+  }
+  int ret = deflate(&strm, Z_FINISH);
   deflateEnd(&strm);
 
   if (ret != Z_STREAM_END) {

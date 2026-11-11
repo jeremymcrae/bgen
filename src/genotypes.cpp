@@ -124,7 +124,9 @@ static void zlib_uncompress(char * input, int compressed_len, char * decompresse
   infstream.avail_out = decompressed_len; // size of output
   infstream.next_out = (Bytef *) decompressed; // output char array
   
-  inflateInit(&infstream);
+  if (inflateInit(&infstream) != Z_OK) {
+    throw std::runtime_error("cannot allocate a zlib decompression stream");
+  }
   inflate(&infstream, Z_NO_FLUSH);
   inflateEnd(&infstream);
   
