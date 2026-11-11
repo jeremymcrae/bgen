@@ -176,7 +176,7 @@ cdef class BgenWriter:
             pass
     
     def __repr__(self):
-        return f'BgenFile("{self.path.decode("utf8")}")'
+        return f'BgenWriter("{self.path.decode("utf8")}")'
     
 
     def _check_bit_depth_fits(self, genotypes, bit_depth, rsid, varid):
