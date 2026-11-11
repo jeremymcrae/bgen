@@ -9,9 +9,7 @@ import time
 from libcpp cimport bool
 from libcpp.string cimport string
 from libcpp.vector cimport vector
-from libc.stdint cimport int8_t, int32_t, uint8_t, uint16_t, uint32_t, uint64_t
-
-from cython.operator cimport dereference as deref
+from libc.stdint cimport int32_t, uint8_t, uint16_t, uint32_t, uint64_t
 
 import numpy as np
 
@@ -21,21 +19,6 @@ _IS_WIN32 = sys.platform == 'win32'
 # step of 1/255, so two decimal places survive a round trip, and it doubles as the
 # yardstick for warning about depths that lose more than this
 DEFAULT_BIT_DEPTH = 8
-
-cdef extern from "<iostream>" namespace "std":
-    cdef cppclass ostream:
-        pass
-
-cdef extern from "<iostream>" namespace "std::ios_base":
-    cdef cppclass open_mode:
-        pass
-    cdef open_mode binary
-
-cdef extern from "<fstream>" namespace "std":
-    cdef cppclass ofstream(ostream):
-        ofstream() except +
-        ofstream(const string&) except +
-        ofstream(const string&, open_mode) except +
 
 cdef extern from 'writer.h' namespace 'bgen':
     cdef cppclass CppBgenWriter:
@@ -184,10 +167,10 @@ cdef class BgenWriter:
         [0, 1, 0]. This check permits hard-coded genotypes, and variable probabilities
         by adjusting the tolerance to the bit depth.
         '''
-        # bit depths above the default do not need checking
-        tolerance = 0.5 / (2 ** DEFAULT_BIT_DEPTH - 1)
-        if 0.5 / (2 ** bit_depth - 1) <= tolerance:
+        if bit_depth >= DEFAULT_BIT_DEPTH:
+            # only coarser depths than the default need checking
             return
+        tolerance = 0.5 / (2 ** DEFAULT_BIT_DEPTH - 1)
 
         factor = float(2 ** bit_depth - 1)
         with np.errstate(invalid='ignore'):
@@ -217,25 +200,10 @@ cdef class BgenWriter:
             raise ValueError('genotypes array must be non-empty')
         
         n_samples = genotypes.shape[0]
-        n_genos = genotypes.shape[1]
         if n_samples != self.n_samples:
             raise ValueError(f'genotypes array must have {self.n_samples} samples, not {n_samples}')
         
-        return genotypes, n_samples, n_genos
-    
-    def _make_contiguous(self, genotypes):
-        ''' make genotypes array C contiguous
-        '''
-        # convert numpy array to C contiguous for storing values on disk. numpy
-        # arrays default to C contiguous, so most won't need conversion, but
-        # some can be fortran order, e.g. if transposed
-        cdef const double[:, ::1] geno_c
-        if genotypes.flags['C_CONTIGUOUS']:
-            geno_c = genotypes
-        else:
-            geno_c = np.ascontiguousarray(genotypes)
-        
-        return geno_c
+        return genotypes
 
     def _validate_ploidy(self, ploidy, n_samples):
         ''' check the ploidy values
@@ -245,7 +213,7 @@ cdef class BgenWriter:
         
         # determine ploidy levels
         cdef int32_t min_ploidy, max_ploidy
-        cdef const uint8_t[::1] ploidy_arr = np.array([], dtype=np.uint8)
+        cdef const uint8_t[::1] ploidy_arr = None
         if np.isscalar(ploidy) and np.issubdtype(type(ploidy), np.integer):
             min_ploidy, max_ploidy = ploidy, ploidy
         elif isinstance(ploidy, np.ndarray) and np.issubdtype(ploidy.dtype, np.integer):
@@ -264,14 +232,16 @@ cdef class BgenWriter:
         
         return min_ploidy, max_ploidy, ploidy_arr
 
-    def _validate_layout1_data(self, vector[string] _alleles, uint32_t n_genos, bool phased):
+    def _validate_layout1_data(self, n_alleles, n_genos, phased):
         ''' validate layout 1 data
         '''
-        if self.layout == 1 and _alleles.size() != 2:
+        if self.layout != 1:
+            return
+        if n_alleles != 2:
             raise ValueError('layout 1 requires exactly two alleles')
-        elif self.layout == 1 and n_genos != 3:
+        elif n_genos != 3:
             raise ValueError('layout 1 requires 3 genotype probabilities per variant')
-        elif self.layout == 1 and phased:
+        elif phased:
             raise ValueError('layout 1 cannot use phased data')
 
     def add_variant(self, varid, rsid, chrom, uint32_t pos, alleles, 
@@ -313,19 +283,19 @@ cdef class BgenWriter:
         if bit_depth < 1 or bit_depth > 32:
             raise ValueError(f'bit_depth must be between 1 and 32: {bit_depth}')
         
-        # sanatize genotypes
-        cdef const double[:, ::1] geno_c
-        cdef uint32_t n_samples, n_genos
-        genotypes, n_samples, n_genos = self._validate_genotypes(genotypes)
+        # sanitise the genotypes. They are made C contiguous (e.g. a transposed array is
+        # not), since the encoder reads them through a plain pointer
+        genotypes = self._validate_genotypes(genotypes)
+        cdef uint32_t n_genos = genotypes.shape[1]
         self._check_bit_depth_fits(genotypes, bit_depth, rsid, varid)
-        geno_c = self._make_contiguous(genotypes)
+        cdef const double[:, ::1] geno_c = np.ascontiguousarray(genotypes)
     
         # validate ploidy levels
         cdef int32_t min_ploidy, max_ploidy
         cdef const uint8_t[::1] ploidy_arr
-        min_ploidy, max_ploidy, ploidy_arr = self._validate_ploidy(ploidy, n_samples)
+        min_ploidy, max_ploidy, ploidy_arr = self._validate_ploidy(ploidy, self.n_samples)
         
-        self._validate_layout1_data(_alleles, n_genos, phased)
+        self._validate_layout1_data(len(alleles), n_genos, phased)
         
         # the ploidy array is only passed on when the ploidy varies
         cdef const uint8_t * ploidy_ptr = NULL
@@ -334,7 +304,7 @@ cdef class BgenWriter:
         
         # encode the genotypes before writing anything, so that a variant with
         # invalid genotypes cannot leave a partial variant in the bgen file
-        cdef uint32_t geno_len = n_samples * n_genos
+        cdef uint32_t geno_len = self.n_samples * n_genos
         self.thisptr.encode_genotype_data(_alleles.size(), <double *> &geno_c[0, 0],
                                           geno_len, ploidy_ptr, min_ploidy, max_ploidy,
                                           phased, bit_depth)
@@ -342,7 +312,7 @@ cdef class BgenWriter:
         var_offset = self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles)
         end_offset = self.thisptr.write_genotype_data()
         
-        self.indexer.add_variant(chrom, int(pos), rsid, alleles, var_offset, 
+        self.indexer.add_variant(chrom, pos, rsid, alleles, var_offset,
                                  end_offset - var_offset)
 
     def add_variant_direct(self, variant):
@@ -372,9 +342,8 @@ cdef class BgenWriter:
         if data.shape[0] == 0:
             raise ValueError('cannot copy variant data directly: the variant is empty')
         var_offset = self.thisptr.write_variant_direct(<const char *> &data[0], data.shape[0])
-        end_offset = var_offset + len(raw)
 
-        self.indexer.add_variant(chrom, pos, rsid, alleles, var_offset, end_offset - var_offset)
+        self.indexer.add_variant(chrom, pos, rsid, alleles, var_offset, len(raw))
 
     def _check_compatible(self, variant):
         ''' check a variant's data can be copied into this file unchanged
