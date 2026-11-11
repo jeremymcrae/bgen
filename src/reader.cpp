@@ -1,6 +1,8 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "reader.h"
 #include "streaming.h"
@@ -152,23 +154,28 @@ void CppBgenReader::drop_variants(std::vector<int> indices) {
     }
   }
   
-  // sort indices in descending order, so dropping elemtns doesn't affect later items
-  std::sort(indices.rbegin(), indices.rend());
-  
-  // adjacent_find checks for duplicates without editing indices, whereas
-  // std::unique would shuffle them about before we then throw
-  if (std::adjacent_find(indices.begin(), indices.end()) != indices.end()) {
-    throw std::invalid_argument("can't drop variants with duplicate indices");
-  }
-  
+  // mark the variants to drop, checking for duplicates
+  std::vector<bool> drop(variants.size(), false);
   for (auto idx : indices) {
-    variants.erase(variants.begin() + idx);
+    if (drop[idx]) {
+      throw std::invalid_argument("can't drop variants with duplicate indices");
+    }
+    drop[idx] = true;
   }
+
+  // shift the kept variants down in one pass, which keeps them in file order
+  std::size_t kept = 0;
+  for (std::size_t i = 0; i < variants.size(); i++) {
+    if (drop[i]) {
+      continue;
+    }
+    if (kept != i) {
+      variants[kept] = std::move(variants[i]);
+    }
+    kept++;
+  }
+  variants.erase(variants.begin() + kept, variants.end());
   variants.shrink_to_fit();
-  
-  // and sort the variants again afterward
-  std::sort(variants.begin(), variants.end(),
-          [] (Variant const& a, Variant const& b) { return a.pos < b.pos; });
 }
 
 /// get all the IDs for the variants in the bgen file

@@ -671,3 +671,23 @@ class TestBgenReader(unittest.TestCase):
                 before = len(bfile)
                 bfile.drop_variants([0, 2, 5])
                 self.assertEqual(len(bfile), before - 3)
+
+    def test_drop_variants_keeps_file_order(self):
+        ''' variants left after a drop stay in file order, across chromosomes
+        '''
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
+        sites = [('1', 100), ('1', 300), ('1', 500), ('2', 50), ('2', 200), ('2', 400)]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'two_chroms.bgen'
+            with BgenWriter(path, 2) as bfile:
+                for i, (chrom, pos) in enumerate(sites):
+                    bfile.add_variant(f'v{i}', f'rs{i}', chrom, pos, ['A', 'C'], geno)
+            # without the index, indexing goes through the dropped list
+            Path(str(path) + '.bgi').unlink()
+
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', DeprecationWarning)
+                with BgenReader(path, delay_parsing=True) as bfile:
+                    bfile.drop_variants([4, 1])
+                    kept = [(bfile[i].chrom, bfile[i].pos) for i in range(len(bfile))]
+        self.assertEqual(kept, [sites[i] for i in [0, 2, 3, 5]])
