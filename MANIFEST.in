@@ -10,7 +10,9 @@ include src/*.h
 include src/*.cpp
 include src/zstd/lib/*.h
 recursive-include src/zstd/lib/ *.h
-recursive-include src/zstd/lib/ *.c
+recursive-include src/zstd/lib/common *.c
+recursive-include src/zstd/lib/compress *.c
+recursive-include src/zstd/lib/decompress *.c *.S
 include src/zlib-ng/*.h
 include src/zlib-ng/*.c
 include src/zlib-ng/CMakeLists.txt

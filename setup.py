@@ -79,9 +79,6 @@ def zstd_sources():
         (folder / 'common').glob('*.c'),
         (folder / 'compress').glob('*.c'),
         (folder / 'decompress').glob('*.c'),
-        (folder / 'dictBuilder').glob('*.c'),
-        (folder / 'deprecated').glob('*.c'),
-        (folder / 'legacy').glob('*.c'),  # TODO: drop some legacy versions
     )
     if sys.platform != 'win32':
         sources += flatten((folder / 'decompress').glob('*.S'))
