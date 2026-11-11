@@ -30,7 +30,6 @@ public:
   std::shared_ptr<std::istream> handle;
   std::uint8_t * ploidy();
   std::vector<std::uint8_t> copy_data();
-  std::string minor_allele;
   
   std::uint64_t offset = 0;
   std::uint32_t n_samples = 0;

@@ -129,13 +129,11 @@ bool Variant::probs_above_max() {
 /// get dosage of the alt allele (only works for biallelic variants)
 void Variant::alt_dosage(float * dose) {
   geno.get_allele_dosage(dose, false);
-  minor_allele = alleles[geno.minor_idx];
 }
 
 /// get dosage of the minor allele (only works for biallelic variants)
 void Variant::minor_allele_dosage(float * dose) {
   geno.get_allele_dosage(dose, true);
-  minor_allele = alleles[geno.minor_idx];
 }
 
 /// the least common of a biallelic variant's alleles
@@ -150,8 +148,7 @@ std::string Variant::get_minor_allele() {
     // but guards a future change from reading past the end of the alleles
     throw std::invalid_argument("bgen variant has no allele for the minor index");
   }
-  minor_allele = alleles[idx2];
-  return minor_allele;
+  return alleles[idx2];
 }
 
 std::vector<std::uint8_t> Variant::copy_data() {
