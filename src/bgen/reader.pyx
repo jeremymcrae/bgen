@@ -8,7 +8,7 @@ import warnings
 from libcpp cimport bool
 from libcpp.string cimport string
 from libcpp.vector cimport vector
-from libc.stdint cimport uint8_t, uint32_t, uint64_t, uintptr_t
+from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from libc.string cimport memcpy
 
 import numpy as np
@@ -23,16 +23,12 @@ NO_RANDOM_ACCESS = ('cannot pick out single variants while reading from stdin, s
                     'reach the variants in order, or read from a file instead')
 
 cdef extern from "<iostream>" namespace "std::ios_base":
-    cdef cppclass open_mode:
-        pass
-    cdef open_mode binary
     cdef cppclass iostate:
         pass
     cdef iostate badbit
 
 cdef extern from "<iostream>" namespace "std":
     cdef cppclass istream:
-        istream() except +
         void setstate(iostate state) except +
 
 cdef extern from "<memory>" namespace "std":
@@ -47,8 +43,7 @@ cdef extern from 'utils.h' namespace 'bgen':
 cdef extern from 'variant.h' namespace 'bgen':
     cdef cppclass Variant:
         # declare class constructor and methods
-        Variant(shared_ptr_istream handle, uint64_t & offset, int layout, int compression, int expected_n, bool is_stdin) except +
-        Variant() except +
+        Variant(shared_ptr_istream handle, uint64_t offset, int layout, int compression, int expected_n, bool is_stdin) except +
         void minor_allele_dosage(float * dosage) except +
         void alt_dosage(float * dosage) except +
         string get_minor_allele() except +
@@ -69,17 +64,10 @@ cdef extern from 'variant.h' namespace 'bgen':
 
 cdef extern from 'samples.h' namespace 'bgen':
     cdef cppclass Samples:
-        Samples(istream * handle, int n_samples, uint64_t file_size) except +
-        Samples(string path, int n_samples) except +
-        Samples(int n_samples, uint64_t file_size, uint32_t n_variants, int compression) except +
-        Samples() except +
-        
-        # declare public methods
         const vector[string]& get_samples() except +
 
 cdef extern from 'header.h' namespace 'bgen':
     cdef cppclass Header:
-        Header(istream * handle) except +
         Header();
         uint32_t offset
         uint32_t nvariants
@@ -126,9 +114,6 @@ cdef class IStream:
     
     def __str__(self):
         return f'std::istream at {<uint64_t>self.ptr.get()}'
-    
-    def __dealloc__(self):
-        pass
     
     def __reduce__(self):
         return (self.__class__, (<uint64_t>self.ptr.get(), ))
