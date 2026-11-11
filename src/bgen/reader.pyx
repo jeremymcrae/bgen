@@ -413,11 +413,11 @@ cdef class BgenVar:
         cdef int cols = self.thisptr.probs_per_sample()
         cdef uint32_t n_samples = self.expected_n
         cdef uint64_t size = <uint64_t> n_samples * cols
-        cdef uint8_t[::1] ploidy
+        cdef uint8_t * ploidy = NULL
         cdef bool phased = self.thisptr.phased()
         if phased:
-            ploidy = self.ploidy
-            size = fast_ploidy_sum(&ploidy[0], n_samples) * cols
+            ploidy = self.thisptr.ploidy()
+            size = fast_ploidy_sum(ploidy, n_samples) * cols
         
         cdef float[::1] arr = np.empty(size, dtype=np.float32, order='C')
         self.thisptr.probs_1d(&arr[0])
@@ -429,7 +429,7 @@ cdef class BgenVar:
         cdef size_t count
         cdef uint32_t i
         if phased:
-            ploidy_range = fast_range(&ploidy[0], n_samples)
+            ploidy_range = fast_range(ploidy, n_samples)
             max_ploidy = ploidy_range._max
             min_ploidy = ploidy_range._min
             if min_ploidy == max_ploidy:
