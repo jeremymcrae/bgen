@@ -1436,6 +1436,26 @@ class TestBgenWriter(unittest.TestCase):
             self.assertEqual(var.ploidy.tolist(), [2, 1, 2, 2])
             self.assertTrue(probs_close(geno, var.probabilities, bit_depth=8))
 
+    def test_read_only_arrays_can_be_written(self):
+        ''' read-only genotype and ploidy arrays are accepted
+        '''
+        geno = np.array([[0.5, 0.5, float('nan')], [0.2, 0.3, 0.5]] * 2)
+        geno.setflags(write=False)
+        ploidy = np.frombuffer(bytes([1, 2, 1, 2]), dtype=np.uint8)
+        self.assertFalse(ploidy.flags['WRITEABLE'])
+        path = self.tmpdir / 'readonly.bgen'
+        with BgenWriter(path, 4) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno, ploidy=ploidy)
+            bfile.add_variant('var2', 'rs2', 'chr1', 11, ['A', 'C'],
+                              np.broadcast_to(np.array([0.25, 0.5, 0.25]), (4, 3)))
+
+        with BgenReader(path) as bfile:
+            first, second = list(bfile)
+            self.assertEqual(first.ploidy.tolist(), [1, 2, 1, 2])
+            self.assertTrue(probs_close(geno, first.probabilities, bit_depth=8))
+            self.assertTrue(np.allclose(second.probabilities, [0.25, 0.5, 0.25],
+                                        atol=1 / 255))
+
     def test_add_variant_direct_mismatched_file(self):
         ''' check we reject copying variant data into an incompatible bgen
 

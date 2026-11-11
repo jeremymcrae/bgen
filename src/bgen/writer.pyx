@@ -231,7 +231,7 @@ cdef class BgenWriter:
         # convert numpy array to C contiguous for storing values on disk. numpy
         # arrays default to C contiguous, so most won't need conversion, but
         # some can be fortran order, e.g. if transposed
-        cdef double[:, ::1] geno_c
+        cdef const double[:, ::1] geno_c
         if genotypes.flags['C_CONTIGUOUS']:
             geno_c = genotypes
         else:
@@ -247,7 +247,7 @@ cdef class BgenWriter:
         
         # determine ploidy levels
         cdef int32_t min_ploidy, max_ploidy
-        cdef uint8_t[::1] ploidy_arr = np.array([], dtype=np.uint8)
+        cdef const uint8_t[::1] ploidy_arr = np.array([], dtype=np.uint8)
         if np.isscalar(ploidy) and np.issubdtype(type(ploidy), np.integer):
             min_ploidy, max_ploidy = ploidy, ploidy
         elif isinstance(ploidy, np.ndarray) and np.issubdtype(ploidy.dtype, np.integer):
@@ -316,7 +316,7 @@ cdef class BgenWriter:
             raise ValueError(f'bit_depth must be between 1 and 32: {bit_depth}')
         
         # sanatize genotypes
-        cdef double[:, ::1] geno_c
+        cdef const double[:, ::1] geno_c
         cdef uint32_t n_samples, n_genos
         genotypes, n_samples, n_genos = self._validate_genotypes(genotypes)
         self._check_bit_depth_fits(genotypes, bit_depth, rsid, varid)
@@ -324,7 +324,7 @@ cdef class BgenWriter:
     
         # validate ploidy levels
         cdef int32_t min_ploidy, max_ploidy
-        cdef uint8_t[::1] ploidy_arr
+        cdef const uint8_t[::1] ploidy_arr
         min_ploidy, max_ploidy, ploidy_arr = self._validate_ploidy(ploidy, n_samples)
         
         self._validate_layout1_data(_alleles, n_genos, phased)
@@ -333,11 +333,11 @@ cdef class BgenWriter:
         # invalid genotypes cannot leave a partial variant in the bgen file
         cdef uint32_t geno_len = n_samples * n_genos
         if min_ploidy == max_ploidy:
-            self.thisptr.encode_genotype_data(_alleles.size(), &geno_c[0, 0],
+            self.thisptr.encode_genotype_data(_alleles.size(), <double *> &geno_c[0, 0],
                                            geno_len, min_ploidy, phased, bit_depth)
         else:
-            self.thisptr.encode_genotype_data(_alleles.size(), &geno_c[0, 0],
-                                           geno_len, &ploidy_arr[0], min_ploidy, 
+            self.thisptr.encode_genotype_data(_alleles.size(), <double *> &geno_c[0, 0],
+                                           geno_len, <uint8_t *> &ploidy_arr[0], min_ploidy, 
                                            max_ploidy, phased, bit_depth)
         
         var_offset = self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles, n_samples)
