@@ -240,11 +240,16 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
 }
 
 std::uint64_t CppBgenWriter::write_variant_direct(std::vector<std::uint8_t> & data) {
+  return write_variant_direct(reinterpret_cast<const char *>(data.data()), data.size());
+}
+
+// write a variant from its raw bgen bytes
+std::uint64_t CppBgenWriter::write_variant_direct(const char * data, std::size_t size) {
   std::uint64_t var_offset = current_position(handle);
   n_variants += 1;
   // write() rather than a std::ostreambuf_iterator, which reports a failed write only in
   // its own state, leaving the stream, and so the exception mask, none the wiser
-  handle.write(reinterpret_cast<char *>(data.data()), data.size());
+  handle.write(data, size);
   return var_offset;
 }
 

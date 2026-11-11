@@ -45,6 +45,7 @@ cdef extern from 'writer.h' namespace 'bgen':
         uint64_t write_variant_header(string &varid, string &rsid, string &chrom, 
                         uint32_t &pos, vector[string] &alleles, uint32_t _n_samples) except +
         uint64_t write_variant_direct(vector[uint8_t] & data) except +
+        uint64_t write_variant_direct(const char * data, size_t size) except +
         void encode_genotype_data(uint16_t n_alleles,
                          double *genotypes, uint32_t geno_len, uint8_t ploidy,
                          bool phased, uint8_t bit_depth) except +
@@ -369,9 +370,14 @@ cdef class BgenWriter:
         pos = int(variant.pos)
         rsid = variant.rsid
         alleles = variant.alleles
-        cdef vector[uint8_t] data = variant.copy_data()
-        var_offset = self.thisptr.write_variant_direct(data)
-        end_offset = var_offset + len(data)
+        # prefer bytes, since copy_data() gives a list with an entry per byte
+        copier = getattr(variant, '_copy_bytes', None)
+        raw = copier() if copier is not None else bytes(variant.copy_data())
+        cdef const uint8_t[::1] data = raw
+        if data.shape[0] == 0:
+            raise ValueError('cannot copy variant data directly: the variant is empty')
+        var_offset = self.thisptr.write_variant_direct(<const char *> &data[0], data.shape[0])
+        end_offset = var_offset + len(raw)
 
         self.indexer.add_variant(chrom, pos, rsid, alleles, var_offset, end_offset - var_offset)
 

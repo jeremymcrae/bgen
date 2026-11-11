@@ -1,6 +1,7 @@
 #ifndef BGEN_WRITER_H_
 #define BGEN_WRITER_H_
 
+#include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <stdexcept>
@@ -50,6 +51,7 @@ public:
                                      std::vector<std::string> &alleles,
                                      std::uint32_t _n_samples);
   std::uint64_t write_variant_direct(std::vector<std::uint8_t> & data);
+  std::uint64_t write_variant_direct(const char * data, std::size_t size);
   void encode_genotype_data(std::uint16_t n_alleles,
                             double *genotypes,
                             std::uint32_t geno_len,

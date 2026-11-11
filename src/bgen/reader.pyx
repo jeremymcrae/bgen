@@ -474,6 +474,17 @@ cdef class BgenVar:
         self.__check_closed()
         cdef vector[uint8_t] data = self.thisptr.copy_data()
         return data
+    
+    def _copy_bytes(self):
+        ''' get the data on disk for the variant as bytes (copy_data() gives a list)
+        '''
+        if self.is_stdin:
+            raise ValueError('cannot copy variant data directly while reading from stdin')
+        self.__check_closed()
+        cdef vector[uint8_t] data = self.thisptr.copy_data()
+        if data.size() == 0:
+            return b''
+        return (<const char *> data.data())[:data.size()]
 
 cdef class BgenReader:
     ''' class to open bgen files from disk, and access variant data within

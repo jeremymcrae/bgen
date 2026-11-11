@@ -1417,6 +1417,33 @@ class TestBgenWriter(unittest.TestCase):
                 mask = np.isfinite(var1.probabilities)
                 self.assertTrue((var1.probabilities[mask] == var2.probabilities[mask]).all())
 
+    def test_add_variant_direct_copies_the_bytes(self):
+        ''' a direct copy gives an identical file, via bytes or via copy_data()
+        '''
+        class ListOnly:
+            ''' a variant without _copy_bytes() '''
+            def __init__(self, var):
+                self.chrom, self.pos, self.rsid = var.chrom, var.pos, var.rsid
+                self.alleles = var.alleles
+                self.copy_data = var.copy_data
+
+        source = self.tmpdir / 'source.bgen'
+        rng = np.random.default_rng(3)
+        with BgenWriter(source, 300) as bfile:
+            for i in range(5):
+                geno = rng.dirichlet([1, 1, 1], 300)
+                bfile.add_variant(f'var{i}', f'rs{i}', 'chr1', i + 1, ['A', 'C'], geno)
+
+        for wrap, name in [(lambda x: x, 'bytes.bgen'), (ListOnly, 'list.bgen')]:
+            with BgenReader(source) as bfile, \
+                    BgenWriter(self.tmpdir / name, 300) as output:
+                for var in bfile:
+                    data = var.copy_data()
+                    self.assertIsInstance(data, list)
+                    self.assertEqual(var._copy_bytes(), bytes(data))
+                    output.add_variant_direct(wrap(var))
+            self.assertEqual((self.tmpdir / name).read_bytes(), source.read_bytes())
+
     def test_ploidy_from_strided_array(self):
         ''' a non-contiguous ploidy array (e.g. a column of a table) is written correctly
         '''
