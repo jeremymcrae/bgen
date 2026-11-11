@@ -144,8 +144,6 @@ cdef class OpenStatus:
         self.status = True
     def __str__(self):
         return f'status={self.status}'
-    def __eq__(self, other):
-        return self.status == other
     def off(self):
         self.status = False
     def __reduce__(self):
