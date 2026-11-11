@@ -44,7 +44,6 @@ cdef extern from 'writer.h' namespace 'bgen':
                    uint32_t compression, uint32_t layout, vector[string] &samples) except +
         uint64_t write_variant_header(string &varid, string &rsid, string &chrom, 
                         uint32_t &pos, vector[string] &alleles, uint32_t _n_samples) except +
-        uint64_t write_variant_direct(vector[uint8_t] & data) except +
         uint64_t write_variant_direct(const char * data, size_t size) except +
         void encode_genotype_data(uint16_t n_alleles,
                          double *genotypes, uint32_t geno_len, uint8_t ploidy,

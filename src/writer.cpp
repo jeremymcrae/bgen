@@ -236,10 +236,6 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
   return var_offset;
 }
 
-std::uint64_t CppBgenWriter::write_variant_direct(std::vector<std::uint8_t> & data) {
-  return write_variant_direct(reinterpret_cast<const char *>(data.data()), data.size());
-}
-
 // write a variant from its raw bgen bytes
 std::uint64_t CppBgenWriter::write_variant_direct(const char * data, std::size_t size) {
   std::uint64_t var_offset = current_position(handle);
