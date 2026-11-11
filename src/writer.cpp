@@ -110,10 +110,12 @@ void CppBgenWriter::write_header(const std::string &free_data,
     throw std::invalid_argument("you cannot use zstd compression with layout 1");
   }
 
+  // the header is completed once the variants are written, so the output has to seek
+  current_position(handle);
+
   // the variant data follows the header, unless add_samples() moves it
   std::uint32_t header_len = 20 + free_data.size();
-  write_at_offset(handle, header_len, VARIANT_DATA_OFFSET_POS);
-  handle.seekp(4);
+  write_value(handle, header_len);  // offset of the variant data
   write_value(handle, header_len);
 
   // write zero variants for now, is fixed while closing
