@@ -424,18 +424,21 @@ cdef class BgenVar:
         cdef uint32_t n_samples = self.expected_n
         cdef uint64_t size = <uint64_t> n_samples * cols
         cdef uint8_t[::1] ploidy
-        if self.is_phased:
+        cdef bool phased = self.thisptr.phased()
+        if phased:
             ploidy = self.ploidy
             size = fast_ploidy_sum(&ploidy[0], n_samples) * cols
         
-        cdef float[:] arr = np.empty(size, dtype=np.float32, order='C')
+        cdef float[::1] arr = np.empty(size, dtype=np.float32, order='C')
         self.thisptr.probs_1d(&arr[0])
         self.__warn_if_malformed()
-        
-        cdef int current = 0
-        cdef int phase_width
+
         cdef Range ploidy_range
-        if self.is_phased:
+        cdef float[:, ::1] ragged
+        cdef uint64_t used = 0
+        cdef size_t count
+        cdef uint32_t i
+        if phased:
             ploidy_range = fast_range(&ploidy[0], n_samples)
             max_ploidy = ploidy_range._max
             min_ploidy = ploidy_range._min
@@ -444,25 +447,15 @@ cdef class BgenVar:
                 width = max_ploidy * cols
                 data = np.reshape(arr, (-1, width))
             else:
-                # phased data initially comes as one row per haploytpe. This is
-                # reshaped to concatenate haplotype data into single row. Fill
-                # in a new array from the old data row by row
-                data = np.reshape(arr, (-1, cols))
-                phase_width = data.shape[1]
-                
-                # create an empty array filled with nans
-                ragged = np.empty((len(ploidy), max_ploidy * cols), dtype=np.float32)
-                ragged.fill(np.nan)
-                
-                # fill in the empty array
-                for i, x in enumerate(ploidy):
-                    for y in range(x):
-                        start = y * phase_width
-                        end = start + phase_width
-                        ragged[i, start:end] = data[current]
-                        current += 1
-                
-                data = ragged
+                # phased data comes as one row per haplotype. Copy each sample's
+                # haplotypes into a single row, leaving nan beyond its ploidy
+                data = np.full((n_samples, max_ploidy * cols), np.nan, dtype=np.float32)
+                ragged = data
+                for i in range(n_samples):
+                    count = <size_t> ploidy[i] * cols
+                    if count > 0:
+                        memcpy(&ragged[i, 0], &arr[used], count * sizeof(float))
+                    used += count
         else:
             data = np.reshape(arr, (-1, cols))
         

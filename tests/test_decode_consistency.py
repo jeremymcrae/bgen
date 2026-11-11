@@ -117,3 +117,26 @@ class TestDecodeConsistency(unittest.TestCase):
                 for var in bfile:
                     probs = var.probabilities
                     self.assertFalse((probs < 0).any(), f'{name} {var.rsid}')
+
+    def test_phased_varying_ploidy_layout(self):
+        ''' each sample's haplotypes fill its row in order, padded with nan after them
+        '''
+        rng = np.random.default_rng(5)
+        n = 500
+        ploidy = rng.integers(0, 4, n).astype(np.uint8)
+        max_ploidy = int(ploidy.max())
+        geno = np.full((n, max_ploidy * 2), np.nan)
+        for i, p in enumerate(ploidy):
+            k = rng.integers(0, 256, p)
+            geno[i, 0:2 * p:2] = k / 255
+            geno[i, 1:2 * p:2] = 1 - k / 255
+        # mark some samples as missing
+        missing = np.nonzero(ploidy > 0)[0][:5]
+        geno[missing] = np.nan
+
+        path = self.write('ragged.bgen', geno, ploidy=ploidy, phased=True)
+        probs = self.read(path, 'probabilities')
+        self.assertEqual(probs.shape, geno.shape)
+        self.assertEqual(probs.dtype, np.float32)
+        self.assertTrue(np.array_equal(np.isnan(probs), np.isnan(geno)))
+        self.assertTrue(np.allclose(probs, geno, atol=0.5 / 255, equal_nan=True))
