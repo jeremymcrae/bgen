@@ -12,8 +12,6 @@
 namespace bgen {
 
 class Header {
-  std::uint32_t header_length = 0;
-  std::string magic;
 public:
   Header(std::istream * handle);
   Header() {}
