@@ -1110,6 +1110,8 @@ void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, f
   std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
   float factor = (layout == 2) ? 1.0f / (float) maxval : 1.0f / 32768;
   float prob;
+  // NOTE: the sums below need -ffp-contract=off (see setup.py) to give the same values
+  // on every architecture
   std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
   std::uint64_t bit_idx = 0;  // index position in bits
   for (std::uint32_t n=0; n<nrows; n++) {

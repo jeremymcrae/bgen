@@ -13,10 +13,12 @@ ROOT = Path(__file__).resolve().parent
 ZLIB_DIR = str(ROOT / 'zlib_build')
 
 EXTRA_COMPILE_ARGS = []
+# -ffp-contract=off avoids fused multiply-adds (e.g. on aarch64), so decoded floats are
+# identical across architectures
 if sys.platform == 'linux':
-    EXTRA_COMPILE_ARGS += ['-std=c++11', '-O2']
+    EXTRA_COMPILE_ARGS += ['-std=c++11', '-O2', '-ffp-contract=off']
 elif sys.platform == "darwin":
-    EXTRA_COMPILE_ARGS += ["-stdlib=libc++", "-std=c++11", "-O2"]
+    EXTRA_COMPILE_ARGS += ["-stdlib=libc++", "-std=c++11", "-O2", '-ffp-contract=off']
 elif sys.platform == "win32":
     EXTRA_COMPILE_ARGS += ['/std:c++14', '/O2']
 

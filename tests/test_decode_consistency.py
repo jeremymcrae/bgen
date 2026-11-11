@@ -2,7 +2,7 @@
 
 8-bit data has vectorised decoders, plus a scalar loop for the samples left over, and
 which runs depends on the CPU. These tests compare the paths through values any CPU
-gives.
+gives, and check exact dosages, which also depend on the -ffp-contract=off build flag.
 '''
 
 from pathlib import Path
@@ -64,3 +64,31 @@ class TestDecodeConsistency(unittest.TestCase):
             second = probs[:, [1, 3]].ravel()
             self.assertTrue(np.array_equal(first, table[k]), f'n={n}')
             self.assertTrue(np.array_equal(second, table[255 - k]), f'n={n}')
+
+    def test_phased_dosage_is_not_fused(self):
+        ''' a phased dosage is each haplotype scaled, then summed, without fusing
+        '''
+        n = 1001
+        rng = np.random.default_rng(3)
+        k = rng.integers(0, 256, (n, 2))
+        geno = np.empty((n, 4))
+        geno[:, 0] = k[:, 0] / 255
+        geno[:, 1] = 1 - k[:, 0] / 255
+        geno[:, 2] = k[:, 1] / 255
+        geno[:, 3] = 1 - k[:, 1] / 255
+        path = self.write('dosage.bgen', geno, phased=True)
+        alt = self.read(path, 'alt_dosage')
+
+        # float32 throughout, and numpy rounds after every operation, so this is exact
+        factor = np.float32(1) / np.float32(255)
+        scaled = k.astype(np.float32) * factor
+        ref = scaled[:, 0] + scaled[:, 1]
+        self.assertTrue(np.array_equal(alt, np.float32(2) - ref))
+
+        # a mix of ploidies uses the general loop, which has to give the same values
+        ploidy = np.where(np.arange(n) % 3 == 0, 1, 2).astype(np.uint8)
+        geno[ploidy == 1, 2:] = np.nan
+        path = self.write('dosage_mixed.bgen', geno, ploidy=ploidy, phased=True)
+        mixed = self.read(path, 'alt_dosage')
+        ref[ploidy == 1] = scaled[ploidy == 1, 0]
+        self.assertTrue(np.array_equal(mixed, ploidy.astype(np.float32) - ref))
