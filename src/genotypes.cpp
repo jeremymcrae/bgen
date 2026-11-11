@@ -199,24 +199,6 @@ void Genotypes::decompress() {
   
   load_block();
   
-  bool decompressed_field = false;
-  // 64-bit, since n_samples * 6 can exceed 32 bits
-  std::uint64_t decompressed_len = length;
-  if (compression != 0) {
-    if (layout == 1) {
-      decompressed_len = (std::uint64_t) n_samples * 6;
-    } else if (layout == 2) {
-      decompressed_field = true;
-      if (length < sizeof(std::uint32_t)) {
-        // the field is part of the block, so a block this short would underflow
-        // the compressed length below
-        throw std::invalid_argument("bgen genotype data is too short to hold a "
-                                    "decompressed length");
-      }
-      decompressed_len = load<std::uint32_t>(block.get());
-    }
-  }
-  
   if (compression == 0) {
     // the block is the genotype data, and was padded when it was read, so hand it
     // over as it stands rather than copying it into a second buffer
@@ -226,8 +208,23 @@ void Genotypes::decompress() {
     return;
   }
   
-  std::uint32_t compressed_len = length - decompressed_field * 4;
-  char * compressed = block.get() + decompressed_field * 4;
+  // layout 1 has a fixed size, while layout 2 stores the decompressed length ahead of
+  // the compressed data. 64-bit, since n_samples * 6 can exceed 32 bits
+  std::uint64_t decompressed_len = (std::uint64_t) n_samples * 6;
+  std::uint32_t prefix = 0;
+  if (layout == 2) {
+    prefix = sizeof(std::uint32_t);
+    if (length < prefix) {
+      // the field is part of the block, so a block this short would underflow
+      // the compressed length below
+      throw std::invalid_argument("bgen genotype data is too short to hold a "
+                                  "decompressed length");
+    }
+    decompressed_len = load<std::uint32_t>(block.get());
+  }
+
+  std::uint32_t compressed_len = length - prefix;
+  char * compressed = block.get() + prefix;
   // the decompressed length is read from the bgen, so guard against wrapping, since a
   // length near the 32-bit limit would allocate a few bytes then memset past the end
   // and reject lengths beyond what the compressed bytes could expand to
