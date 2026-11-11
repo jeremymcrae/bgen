@@ -1,5 +1,4 @@
 
-import os
 from pathlib import Path
 from setuptools import setup, Extension
 from setuptools.command.build_clib import build_clib
@@ -26,36 +25,26 @@ def flatten(*lists):
     return [str(x) for sublist in lists for x in sublist]
 
 def build_zlib():
-    ''' compile zlib code to object files for linking
+    ''' compile zlib-ng into a static library to link with
     
     Returns:
-        list of paths to compiled object code
+        list holding the path to the static library
     '''
-    prev_dir = Path.cwd()
     source_dir = ROOT / 'src' / 'zlib-ng'
-    build_dir = ROOT / 'zlib_build'
-    build_dir.mkdir(exist_ok=True)
-    os.chdir(build_dir)
-    
+    build_dir = Path(ZLIB_DIR)
     cmd = ['cmake', '-S', source_dir, '-B', build_dir,
         '-DZLIB_COMPAT=ON',
         '-DZLIB_ENABLE_TESTS=OFF',
         '-DBUILD_SHARED_LIBS=OFF',
         '-DCMAKE_C_FLAGS="-fPIC"',
     ]
-    try:
-        subprocess.run(cmd, check=True)
-        subprocess.run(['cmake', '--build', build_dir, '-v', '--config', 'Release'],
-                       check=True)
-    finally:
-        os.chdir(prev_dir)
+    subprocess.run(cmd, check=True)
+    subprocess.run(['cmake', '--build', build_dir, '-v', '--config', 'Release'],
+                   check=True)
     
-    objs = [str(build_dir / 'libz.a')]
     if sys.platform == 'win32':
-        objs = [str(build_dir / 'Release' / 'zlibstatic.lib'),
-                ]
-    
-    return str(build_dir), objs
+        return [str(build_dir / 'Release' / 'zlibstatic.lib')]
+    return [str(build_dir / 'libz.a')]
 
 def zstd_sources():
     ''' list the zstd sources to compile into a static library
@@ -128,7 +117,7 @@ class build_ext_subclass(build_ext):
             'zstd', lib_type='static')
         if not zstd.exists():
             raise RuntimeError(f'the zstd static library is missing from {zstd}')
-        _, zlib = build_zlib()
+        zlib = build_zlib()
         for ext in self.extensions:
             ext.extra_objects = [str(zstd)] + zlib
         super().build_extensions()
