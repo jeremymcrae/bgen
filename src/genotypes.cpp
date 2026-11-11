@@ -859,11 +859,7 @@ int Genotypes::find_minor_allele(float * dose) {
     return 0;
   }
   freq = total / (double) n_alleles_seen;
-  if (freq <= 0.5) {
-    return 0;
-  } else {
-    return 1;
-  }
+  return (freq <= 0.5) ? 0 : 1;
 }
 
 #if defined(__x86_64__)
@@ -1181,12 +1177,10 @@ void Genotypes::get_allele_dosage(float * dose, bool use_minor) {
     // A fast path when we know the ploidy is constant and the bit depth is 8,
     // this avoids the bit shifts/masks used in the variable bit_depth path.
     ref_dosage_fast(uncompressed.get(), idx, dose, n_samples);
+  } else if (!phased) {
+    ref_dosage_slow_unphased(uncompressed.get(), idx, dose, n_samples);
   } else {
-    if (!phased) {
-      ref_dosage_slow_unphased(uncompressed.get(), idx, dose, n_samples);
-    } else {
-      ref_dosage_slow_phased(uncompressed.get(), idx, dose, n_samples);
-    }
+    ref_dosage_slow_phased(uncompressed.get(), idx, dose, n_samples);
   }
   
   // mark the missing samples before finding the minor allele, since their zeroed dosages
