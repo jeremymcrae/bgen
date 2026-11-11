@@ -16,8 +16,7 @@ import numpy as np
 from bgen.index import Index
 
 # Random access needs to seek to a variant's offset, which a stream cannot do, so the
-# only way through a pipe is to iterate. Kept in one place because several methods hit
-# the same wall and had been describing it differently, or blaming the file instead.
+# only way through a pipe is to iterate
 NO_RANDOM_ACCESS = ('cannot pick out single variants while reading from stdin, since '
                     'that needs to seek within the bgen. Iterate over the bgen to '
                     'reach the variants in order, or read from a file instead')

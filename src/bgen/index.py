@@ -20,8 +20,7 @@ class Index:
         ''' run a query on a cursor of its own
         
         Each query needs its own cursor, since re-executing one abandons the rows
-        it had not yet handed out. fetch() yields as it steps through its results,
-        so sharing a cursor let any other query cut a fetch short partway.
+        it had not yet handed out, and fetch() yields as it steps through its results.
         '''
         if self.conn is None:
             raise ValueError('bgen index is closed')
