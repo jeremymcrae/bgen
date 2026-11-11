@@ -293,17 +293,14 @@ static void zstd_compress(const std::uint8_t * input, std::size_t input_len,
 ///
 /// Compression is handled internally by either zlib_compress, or zstd_compress,
 /// depending on compression scheme.
-static std::vector<char> compress(std::vector<std::uint8_t> &uncompressed, std::uint32_t compression) {
-  std::size_t bound;
-  if (compression == 1) { // zlib
-    bound = compressBound(uncompressed.size());
-  } else { // zstd
-    bound = ZSTD_compressBound(uncompressed.size());
-  }
-  std::vector<char> compressed(bound);
-  if (compression == 1) { // zlib
+static std::vector<char> compress(const std::vector<std::uint8_t> &uncompressed,
+                                  std::uint32_t compression) {
+  bool zlib = (compression == 1);
+  std::vector<char> compressed(zlib ? compressBound(uncompressed.size())
+                                    : ZSTD_compressBound(uncompressed.size()));
+  if (zlib) {
     zlib_compress(uncompressed.data(), uncompressed.size(), compressed);
-  } else if (compression == 2) { // zstd
+  } else {
     zstd_compress(uncompressed.data(), uncompressed.size(), compressed);
   }
   return compressed;
@@ -314,12 +311,17 @@ static std::vector<char> compress(std::vector<std::uint8_t> &uncompressed, std::
 /// accumulates across a sample. Values within this are clamped, further out is an error
 const double PROB_TOLERANCE = 1e-6;
 
+/// @brief report a sample with some, but not all, of its genotypes missing
+static void raise_partial_missing() {
+  throw std::invalid_argument("samples with any missing genotype must encode all "
+                              "as missing (i.e. float(nan))");
+}
+
 /// @brief report an unusable genotype probability, kept out of line so the checks below
 /// stay small enough to inline into the encoding loops
 static void raise_probability_error(double g) {
   if (std::isnan(g)) {
-    throw std::invalid_argument("samples with any missing genotype must encode all "
-                                "as missing (i.e. float(nan))");
+    raise_partial_missing();
   }
   throw std::invalid_argument("genotype probability must be between 0 and 1, not " +
                               std::to_string(g));
@@ -364,13 +366,13 @@ static inline std::uint64_t round_nonneg(double x) {
 ///
 /// inline, since the encode paths call this per sample, for as few as three values. The
 /// count stays branchless, as an early exit measured slower once half are missing
-static inline bool missing_genotypes(double *genotypes, std::uint32_t size) {
+static inline bool missing_genotypes(const double *genotypes, std::uint32_t size) {
   std::uint32_t nan_count = 0;
   for (std::uint32_t i=0; i<size; i++) {
     nan_count += std::isnan(genotypes[i]);
   }
   if ((nan_count > 0) && (nan_count < size)) {
-    throw std::invalid_argument("samples with any missing genotype must encode all as missing (i.e. float(nan))");
+    raise_partial_missing();
   }
   return nan_count == size;
 }
@@ -382,19 +384,12 @@ static std::vector<std::uint8_t> encode_layout1(
   std::vector<std::uint8_t> encoded(geno_len * 2 + 8);
 
   std::uint32_t i = 0;
-  std::int32_t scaled32;
-  std::uint16_t scaled;
-  bool missing;
-  double g;
-  double cumulative;
   for (std::uint32_t j=0; j < geno_len; j+=3) {
-    missing = missing_genotypes(&genotypes[j], 3);
-    cumulative = 0.0;
+    bool missing = missing_genotypes(&genotypes[j], 3);
+    double cumulative = 0.0;
     for (std::uint32_t k=0; k<3; k++) {
-      g = genotypes[j + k];
-      if (missing) {
-        g = 0;
-      }
+      // a missing sample is stored as zeroes
+      double g = missing ? 0.0 : genotypes[j + k];
       // layout 1 could hold values up to 2.0, but is held to the same range as layout 2,
       // so both accept the same genotypes
       check_probability(g);
@@ -403,12 +398,7 @@ static std::vector<std::uint8_t> encode_layout1(
       // check_probability allows a small negative, which round_nonneg is not defined
       // for, and which scales to zero anyway
       double product = g * 32768;
-      scaled32 = (product > 0.0) ? (std::int32_t) round_nonneg(product) : 0;
-      // check the value is in bounds
-      if ((scaled32 < 0) || (scaled32 > 65535)) {
-        throw std::invalid_argument("scaled genotype is out of bounds");
-      }
-      scaled = scaled32;
+      std::uint16_t scaled = (product > 0.0) ? (std::uint16_t) round_nonneg(product) : 0;
       std::memcpy(&encoded[i], &scaled, 2);
       i += 2;
     }
