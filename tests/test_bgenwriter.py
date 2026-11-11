@@ -14,7 +14,6 @@ import math
 import numpy as np
 
 from bgen import BgenReader, BgenWriter
-from bgen.index import Index
 
 def probs_close(orig, updat, bit_depth):
     ''' check if the genotype probabilities are near the original values
@@ -228,7 +227,7 @@ class TestBgenWriter(unittest.TestCase):
             for layout in layouts:
                 if compression == 'zstd' and layout == 1:
                     continue
-                path = path = self.tmpdir / f'temp_{idx}.bgen'
+                path = self.tmpdir / f'temp_{idx}.bgen'
                 idx += 1
                 with BgenWriter(path, 3, samples=['a', 'b', 'c'],
                                 compression=compression, layout=layout) as bfile:
@@ -251,7 +250,7 @@ class TestBgenWriter(unittest.TestCase):
         
         idx = 1
         for bit_depth in range(1, 33):
-            path = path = self.tmpdir / f'temp_{idx}.bgen'
+            path = self.tmpdir / f'temp_{idx}.bgen'
             idx += 1
             with BgenWriter(path, 3, samples=['a', 'b', 'c']) as bfile:
                 bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,

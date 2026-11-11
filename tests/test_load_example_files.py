@@ -2,7 +2,6 @@
 from pathlib import Path
 import unittest
 
-import numpy as np
 
 from bgen import BgenReader, BgenWriter
 
