@@ -2,12 +2,10 @@
 #define BGEN_VARIANT_H_
 
 #include <cstdint>
-#include <fstream>
+#include <istream>
 #include <memory>
 #include <string>
 #include <vector>
-#include <algorithm>
-#include <iterator>
 
 #include "genotypes.h"
 #include "utils.h"

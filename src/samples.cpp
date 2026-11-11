@@ -1,6 +1,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <fstream>
+#include <sstream>
 #include <stdexcept>
 
 #include "samples.h"

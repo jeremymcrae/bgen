@@ -1,14 +1,12 @@
 #ifndef BGEN_GENOTYPES_H_
 #define BGEN_GENOTYPES_H_
 
+#include <array>
 #include <cstdint>
-#include <fstream>
+#include <istream>
 #include <memory>
 #include <utility>
 #include <vector>
-#include <array>
-#include <string>
-#include <sstream>
 
 namespace bgen {
 

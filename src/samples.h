@@ -2,9 +2,9 @@
 #define BGEN_SAMPLES_H_
 
 #include <cstdint>
-#include <fstream>
-#include <vector>
+#include <istream>
 #include <string>
+#include <vector>
 
 namespace bgen {
 

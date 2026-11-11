@@ -1,13 +1,9 @@
 #ifndef BGEN_HEADER_H_
 #define BGEN_HEADER_H_
 
-#include <fstream>
-#include <iostream>
-#include <vector>
-#include <string>
 #include <cstdint>
-
-#include "utils.h"
+#include <istream>
+#include <string>
 
 namespace bgen {
 

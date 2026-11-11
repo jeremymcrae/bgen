@@ -1,9 +1,10 @@
 #ifndef BGEN_READER_H_
 #define BGEN_READER_H_
 
-#include <fstream>
+#include <cstdint>
+#include <istream>
 #include <memory>
-#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "header.h"

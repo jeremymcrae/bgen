@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 #include "header.h"
+#include "utils.h"
 
 namespace bgen {
 

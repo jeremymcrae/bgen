@@ -2,15 +2,11 @@
 #define BGEN_UTILS_H_
 
 #include <algorithm>
-#include <bitset>
-#include <cmath>
+#include <cstddef>
 #include <cstdint>
-#include <fstream>
 #include <istream>
-#include <map>
 #include <memory>
 #include <string>
-#include <sstream>
 #include <vector>
 
 namespace bgen {
