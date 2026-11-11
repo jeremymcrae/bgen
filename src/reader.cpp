@@ -86,9 +86,6 @@ std::uint64_t CppBgenReader::first_variant_offset() {
 }
 
 Variant CppBgenReader::next_var() {
-  if (handle->eof()) {
-    throw std::out_of_range("reached end of file");
-  }
   Variant var(handle, offset, header.layout, header.compression, header.nsamples, is_stdin);
   offset = var.next_variant_offset;
   return var;

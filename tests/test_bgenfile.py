@@ -664,3 +664,21 @@ class TestBgenReader(unittest.TestCase):
                     bfile.drop_variants([4, 1])
                     kept = [(bfile[i].chrom, bfile[i].pos) for i in range(len(bfile))]
         self.assertEqual(kept, [sites[i] for i in [0, 2, 3, 5]])
+
+    def test_lists_after_iterating_to_the_end(self):
+        ''' variant lists and indexing work after iterating a bgen which has no index
+        '''
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'no_index.bgen'
+            with BgenWriter(path, 2) as bfile:
+                for i in range(5):
+                    bfile.add_variant(f'v{i}', f'rs{i}', '1', 10 + i, ['A', 'C'], geno)
+            Path(str(path) + '.bgi').unlink()
+
+            for call, expected in [(lambda b: b.rsids(), [f'rs{i}' for i in range(5)]),
+                                   (lambda b: b.positions(), [10, 11, 12, 13, 14]),
+                                   (lambda b: b[2].rsid, 'rs2')]:
+                with BgenReader(path) as bfile:
+                    self.assertEqual(len(list(bfile)), 5)
+                    self.assertEqual(call(bfile), expected)
