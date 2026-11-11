@@ -113,7 +113,8 @@ static inline T load(const char * data) {
 }
 
 // uncompress a char array with zlib
-static void zlib_uncompress(char * input, int compressed_len, char * decompressed, int decompressed_len) {
+static void zlib_uncompress(char * input, std::uint32_t compressed_len,
+                            char * decompressed, std::uint32_t decompressed_len) {
   z_stream infstream;
   infstream.zalloc = Z_NULL;
   infstream.zfree = Z_NULL;
@@ -130,7 +131,7 @@ static void zlib_uncompress(char * input, int compressed_len, char * decompresse
   inflate(&infstream, Z_NO_FLUSH);
   inflateEnd(&infstream);
   
-  if (decompressed_len != (int) infstream.total_out) {
+  if (decompressed_len != infstream.total_out) {
     throw std::invalid_argument("zlib decompression gave data of wrong length");
   }
 }
@@ -156,14 +157,15 @@ static ZSTD_DCtx * borrow_zstd_dctx() {
   return ctx.get();
 }
 
-static void zstd_uncompress(char * input, int compressed_len, char * decompressed,  int decompressed_len) {
+static void zstd_uncompress(char * input, std::uint32_t compressed_len,
+                            char * decompressed, std::uint32_t decompressed_len) {
   std::size_t total_out = ZSTD_decompressDCtx(borrow_zstd_dctx(), decompressed,
                                               decompressed_len, input, compressed_len);
   if (ZSTD_isError(total_out)) {
     throw std::invalid_argument(std::string("zstd decompression failed: ") +
                                 ZSTD_getErrorName(total_out));
   }
-  if (decompressed_len != (int) total_out) {
+  if (total_out != decompressed_len) {
     throw std::invalid_argument("zstd decompression gave data of wrong length");
   }
 }
@@ -221,10 +223,11 @@ void Genotypes::decompress() {
   load_block();
   
   bool decompressed_field = false;
-  std::uint32_t decompressed_len = length;
+  // 64-bit, since n_samples * 6 can exceed 32 bits
+  std::uint64_t decompressed_len = length;
   if (compression != 0) {
     if (layout == 1) {
-      decompressed_len = n_samples * 6;
+      decompressed_len = (std::uint64_t) n_samples * 6;
     } else if (layout == 2) {
       decompressed_field = true;
       if (length < sizeof(std::uint32_t)) {
@@ -255,20 +258,21 @@ void Genotypes::decompress() {
                                 "decompressed length: " +
                                 std::to_string(decompressed_len));
   }
+  std::uint32_t out_len = (std::uint32_t) decompressed_len;
   // zero the padding, so the trailing bits probabilities_layout2 reads are deterministic
-  std::unique_ptr<char[]> buffer(new char[decompressed_len + PROBS_READ_PAD]);
-  std::memset(buffer.get() + decompressed_len, 0, PROBS_READ_PAD);
-  
+  std::unique_ptr<char[]> buffer(new char[out_len + PROBS_READ_PAD]);
+  std::memset(buffer.get() + out_len, 0, PROBS_READ_PAD);
+
   if (compression == 1) { // zlib
-    zlib_uncompress(compressed, (int) compressed_len, buffer.get(), (int) decompressed_len);  // about 2 milliseconds
+    zlib_uncompress(compressed, compressed_len, buffer.get(), out_len);  // about 2 milliseconds
   } else if (compression == 2) { // zstd
-    zstd_uncompress(compressed, (int) compressed_len, buffer.get(), (int) decompressed_len);
+    zstd_uncompress(compressed, compressed_len, buffer.get(), out_len);
   }
   // only take ownership once the data has decompressed cleanly, so a failed
   // parse leaves no half filled buffer behind for a later call to read from.
   // The block is kept until then, so a retry decompresses the same bytes.
   uncompressed = std::move(buffer);
-  uncompressed_len = decompressed_len;
+  uncompressed_len = out_len;
   is_decompressed = true;
   block.reset();
 }

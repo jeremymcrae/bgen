@@ -249,15 +249,20 @@ std::uint64_t CppBgenWriter::write_variant_direct(std::vector<std::uint8_t> & da
 }
 
 // compress a char array with zlib
-static void zlib_compress(char * input, int input_len, std::vector<char> &output) {
+static void zlib_compress(const std::uint8_t * input, std::size_t input_len,
+                          std::vector<char> &output) {
+  if ((input_len > UINT32_MAX) || (output.size() > UINT32_MAX)) {
+    // z_stream counts in 32-bit fields
+    throw std::invalid_argument("genotype data is too large to compress with zlib");
+  }
   z_stream strm;
   strm.zalloc = Z_NULL;
   strm.zfree = Z_NULL;
   strm.opaque = Z_NULL;
 
-  strm.avail_in = input_len;      // size of input
+  strm.avail_in = (uInt) input_len;      // size of input
   strm.next_in = (Bytef *) input; // input char array
-  strm.avail_out = output.size();        // size of output
+  strm.avail_out = (uInt) output.size();        // size of output
   strm.next_out = (Bytef *) &output[0]; // output char array
 
   if (deflateInit(&strm, 6) != Z_OK) {
@@ -274,7 +279,8 @@ static void zlib_compress(char * input, int input_len, std::vector<char> &output
 }
 
 // compress a char array with zstd
-static void zstd_compress(char *input, int input_len, std::vector<char> &output) {
+static void zstd_compress(const std::uint8_t * input, std::size_t input_len,
+                          std::vector<char> &output) {
   std::size_t total_out = ZSTD_compress(&output[0], output.size(), input, input_len, 3);
 
   if (ZSTD_isError(total_out)) {
@@ -297,9 +303,9 @@ static std::vector<char> compress(std::vector<std::uint8_t> &uncompressed, std::
   }
   std::vector<char> compressed(bound);
   if (compression == 1) { // zlib
-    zlib_compress(reinterpret_cast<char *>(&uncompressed[0]), (int)uncompressed.size(), compressed);
+    zlib_compress(uncompressed.data(), uncompressed.size(), compressed);
   } else if (compression == 2) { // zstd
-    zstd_compress(reinterpret_cast<char *>(&uncompressed[0]), (int)uncompressed.size(), compressed);
+    zstd_compress(uncompressed.data(), uncompressed.size(), compressed);
   }
   return compressed;
 }
