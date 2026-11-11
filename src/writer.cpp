@@ -361,8 +361,8 @@ static inline bool missing_genotypes(const double *genotypes, std::uint32_t size
 static std::vector<std::uint8_t> encode_layout1(
                     double *genotypes,
                     std::uint32_t geno_len) {
-  // genotypes are encoded as 16-bit uints, so resize to n_genotypes * 2
-  std::vector<std::uint8_t> encoded(geno_len * 2 + 8);
+  // genotypes are encoded as 16-bit uints
+  std::vector<std::uint8_t> encoded((std::size_t) geno_len * 2);
 
   std::uint32_t i = 0;
   for (std::uint32_t j=0; j < geno_len; j+=3) {
@@ -384,7 +384,6 @@ static std::vector<std::uint8_t> encode_layout1(
       i += 2;
     }
   }
-  encoded.resize(geno_len * 2);
   return encoded;
 }
 
