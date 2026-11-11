@@ -30,6 +30,12 @@ static void append_bytes(std::vector<char> &buf, const void *data, std::size_t s
   buf.insert(buf.end(), bytes, bytes + size);
 }
 
+// append a fixed width value to a buffer destined for the file handle
+template <typename T>
+static void append_value(std::vector<char> &buf, T value) {
+  append_bytes(buf, &value, sizeof(T));
+}
+
 // write a fixed width value
 template <typename T>
 static void write_value(std::ofstream &handle, T value) {
@@ -950,37 +956,26 @@ void CppBgenWriter::encode_genotype_data(std::uint16_t n_alleles,
                    min_ploidy, max_ploidy, phased, bit_depth);
   }
 
-  std::vector<char> compressed;
-  if (compression != 0) {
-    compressed = compress(encoded, compression);
-  }
-  std::uint32_t compressed_len = compressed.size();
-
   // assemble the block exactly as it needs to appear on disk, so that writing
   // it later is a single copy which cannot fail partway on bad input
   pending.clear();
-  std::uint32_t size;
-  if (layout == 1) {
-    if (compression != 0) {
-      append_bytes(pending, &compressed_len, 4);
+  std::uint32_t decompressed_len = encoded.size();
+  if (compression == 0) {
+    if (layout == 2) {
+      append_value(pending, decompressed_len);
     }
-  } else {
-    if (compression == 0) {
-      size = encoded.size();
-      append_bytes(pending, &size, 4);
-    } else {
-      size = compressed_len + 4;
-      append_bytes(pending, &size, 4);
-      size = encoded.size();
-      append_bytes(pending, &size, 4);
-    }
+    append_bytes(pending, encoded.data(), encoded.size());
+    return;
   }
 
-  if (compression == 0) {
-    append_bytes(pending, encoded.data(), encoded.size());
-  } else {
-    append_bytes(pending, compressed.data(), compressed.size());
+  std::vector<char> compressed = compress(encoded, compression);
+  // layout 2 stores the decompressed length inside the block, ahead of the data
+  std::uint32_t block_len = compressed.size() + ((layout == 2) ? 4 : 0);
+  append_value(pending, block_len);
+  if (layout == 2) {
+    append_value(pending, decompressed_len);
   }
+  append_bytes(pending, compressed.data(), compressed.size());
 }
 
 // write the block prepared by encode_genotype_data()
