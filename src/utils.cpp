@@ -55,7 +55,7 @@ static void range_avx2(const std::uint8_t * x, std::uint32_t size, size_t & i,
   __m256i values;
   __m256i _mins = _mm256_set1_epi8(-1);
   __m256i _maxs = _mm256_setzero_si256();
-  for (; i + 32 < size; i += 32) {
+  for (; i + 32 <= size; i += 32) {
     values = _mm256_loadu_si256((const __m256i*) &x[i]);
     _mins = _mm256_min_epu8(_mins, values);
     _maxs = _mm256_max_epu8(_maxs, values);
@@ -77,7 +77,7 @@ static void range_sse2(const std::uint8_t * x, std::uint32_t size, size_t & i,
   __m128i values;
   __m128i _mins = _mm_set1_epi8(-1);
   __m128i _maxs = _mm_setzero_si128();
-  for (; i + 16 < size; i += 16) {
+  for (; i + 16 <= size; i += 16) {
     values = _mm_loadu_si128((const __m128i*) &x[i]);
     _mins = _mm_min_epu8(_mins, values);
     _maxs = _mm_max_epu8(_maxs, values);
@@ -187,9 +187,6 @@ static std::uint64_t ploidy_sum_neon(const std::uint8_t * x, std::uint32_t size,
 // get min and max of the ploidy values with NEON
 static void range_neon(const std::uint8_t * x, std::uint32_t size, size_t & i,
                        std::uint8_t & min_val, std::uint8_t & max_val) {
-  if (i + 16 > size) {
-    return;
-  }
   uint8x16_t mins = vdupq_n_u8(255);
   uint8x16_t maxs = vdupq_n_u8(0);
   for (; i + 16 <= size; i += 16) {
