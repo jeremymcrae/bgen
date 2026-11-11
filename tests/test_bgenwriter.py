@@ -1472,6 +1472,15 @@ class TestBgenWriter(unittest.TestCase):
             self.assertTrue((bfile[0].probabilities == 1).all())
             self.assertEqual([x.rsid for x in bfile.fetch('chr1', 5, 15)], ['rs1'])
 
+    def test_unwritable_path_names_the_file(self):
+        ''' the error for a bgen which cannot be opened names the file
+        '''
+        path = self.tmpdir / 'no_such_folder' / 'out.bgen'
+        with self.assertRaises(OSError) as ctx:
+            BgenWriter(path, 3)
+        self.assertIn('out.bgen', str(ctx.exception))
+        self.assertIn('cannot open', str(ctx.exception))
+
     def test_add_variant_direct_mismatched_file(self):
         ''' check we reject copying variant data into an incompatible bgen
 

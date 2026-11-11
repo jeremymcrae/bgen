@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <fstream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace bgen {
@@ -30,6 +31,9 @@ public:
                                                   layout(_layout)
   {
     handle.open(path, std::ios::out | std::ios::binary);
+    if (!handle.is_open()) {
+      throw std::ios_base::failure("cannot open '" + path + "' for writing");
+    }
     handle.exceptions(std::ios::badbit | std::ios::failbit);
     write_header(free_data, samples);
     add_samples(samples);
