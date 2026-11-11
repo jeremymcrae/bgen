@@ -418,11 +418,7 @@ void Genotypes::parse_header() {
   check_block_size();
 }
 
-/// get ploidy state for all samples (and missingness for layout2).
-///
-/// ploidy state is stored in ploidy member. Missingness is stored as indices of
-/// samples This takes 100 microseconds for 500k samples. Layout 1 variants lack
-/// ploidy info, and are assigned the same ploidy for all samples.
+/// get the missing samples, and each sample's ploidy when it varies (layout 2 only)
 ///
 /// A constant ploidy is left for materialise_ploidy() to fill, since max_ploidy already
 /// says it. Only the missingness scan has to happen now, while the block is here
@@ -433,16 +429,13 @@ void Genotypes::parse_ploidy() {
     return;
   }
   
-  // we want to avoid parsing the ploidy states if  every sample has the same
-  // ploidy. If we have a constant ploidy, set all entries to the same value
-  std::uint8_t mask = 63;
   if (constant_ploidy) {
     // only the missingness matters, since the ploidy is known, and the scan is vectorised
     fast_missing_scan(&uncompressed[idx], n_samples, missing);
   } else {
     ploidy.reset(new std::uint8_t[n_samples]);
     for (std::uint32_t x=0; x < n_samples; x++) {
-      ploidy[x] = mask & uncompressed[idx + x];
+      ploidy[x] = uncompressed[idx + x] & 63;
       if (uncompressed[idx + x] & 0x80) {
         missing.push_back(x);
       }
