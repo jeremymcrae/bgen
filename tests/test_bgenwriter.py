@@ -1456,6 +1456,22 @@ class TestBgenWriter(unittest.TestCase):
             self.assertTrue(np.allclose(second.probabilities, [0.25, 0.5, 0.25],
                                         atol=1 / 255))
 
+    def test_single_allele_variant(self):
+        ''' a variant with one allele is written to both the bgen and its index
+        '''
+        path = self.tmpdir / 'single.bgen'
+        with BgenWriter(path, 3) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A'], np.ones((3, 1)))
+            bfile.add_variant('var2', 'rs2', 'chr1', 20, ['A', 'C'],
+                              np.full((3, 3), 1 / 3))
+
+        with BgenReader(path) as bfile:
+            self.assertEqual(len(bfile), 2)
+            self.assertEqual(bfile.rsids(), ['rs1', 'rs2'])
+            self.assertEqual(bfile[0].alleles, ['A'])
+            self.assertTrue((bfile[0].probabilities == 1).all())
+            self.assertEqual([x.rsid for x in bfile.fetch('chr1', 5, 15)], ['rs1'])
+
     def test_add_variant_direct_mismatched_file(self):
         ''' check we reject copying variant data into an incompatible bgen
 

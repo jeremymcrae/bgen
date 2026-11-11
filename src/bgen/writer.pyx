@@ -95,7 +95,8 @@ class Indexer:
     
     def add_variant(self, chrom, pos, rsid, alleles, offset, size):
         allele_1 = alleles[0]
-        allele_2 = alleles[1] if len(alleles) > 1 else None
+        # allele2 is part of the primary key, which cannot be NULL, so use '' if absent
+        allele_2 = alleles[1] if len(alleles) > 1 else ''
         query = '''INSERT INTO Variant VALUES (?, ?, ?, ?, ?, ?, ?, ?)'''
         params = (chrom, pos, rsid, len(alleles), allele_1, allele_2, offset, size)
         self.cur.execute(query, params)
