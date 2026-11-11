@@ -50,6 +50,8 @@ cdef extern from 'variant.h' namespace 'bgen':
         void probs_1d(float * dosage) except +
         int probs_per_sample() except +
         bool phased() except +
+        int min_ploidy() except +
+        int max_ploidy() except +
         bool probs_above_max() except +
         uint8_t * ploidy() except +
         vector[uint8_t] copy_data() except +
@@ -389,27 +391,32 @@ cdef class BgenVar:
         cdef uint64_t size = <uint64_t> n_samples * cols
         cdef uint8_t * ploidy = NULL
         cdef bool phased = self.thisptr.phased()
+        cdef uint32_t min_ploidy = self.thisptr.min_ploidy()
+        cdef uint32_t max_ploidy = self.thisptr.max_ploidy()
+        cdef Range ploidy_range
         if phased:
-            ploidy = self.thisptr.ploidy()
-            size = fast_ploidy_sum(ploidy, n_samples) * cols
+            if min_ploidy != max_ploidy or n_samples == 0:
+                # the bounds a bgen gives need not be tight, so measure the samples
+                ploidy = self.thisptr.ploidy()
+                ploidy_range = fast_range(ploidy, n_samples)
+                min_ploidy, max_ploidy = ploidy_range._min, ploidy_range._max
+            if min_ploidy == max_ploidy:
+                size = <uint64_t> n_samples * max_ploidy * cols
+            else:
+                size = fast_ploidy_sum(ploidy, n_samples) * cols
         
         cdef float[::1] arr = np.empty(size, dtype=np.float32, order='C')
         self.thisptr.probs_1d(&arr[0])
         self.__warn_if_malformed()
 
-        cdef Range ploidy_range
         cdef float[:, ::1] ragged
         cdef uint64_t used = 0
         cdef size_t count
         cdef uint32_t i
         if phased:
-            ploidy_range = fast_range(ploidy, n_samples)
-            max_ploidy = ploidy_range._max
-            min_ploidy = ploidy_range._min
             if min_ploidy == max_ploidy:
                 # quickly reshape probs if ploidy is constant
-                width = max_ploidy * cols
-                data = np.reshape(arr, (-1, width))
+                data = np.reshape(arr, (-1, max_ploidy * cols))
             else:
                 # phased data comes as one row per haplotype. Copy each sample's
                 # haplotypes into a single row, leaving nan beyond its ploidy

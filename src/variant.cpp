@@ -97,6 +97,18 @@ bool Variant::phased() {
   return geno.phased;
 }
 
+/// lowest ploidy the variant gives for its samples
+int Variant::min_ploidy() {
+  geno.load_data_and_parse_header();
+  return geno.min_ploidy;
+}
+
+/// highest ploidy the variant gives for its samples
+int Variant::max_ploidy() {
+  geno.load_data_and_parse_header();
+  return geno.max_ploidy;
+}
+
 std::uint8_t * Variant::ploidy() {
   geno.load_data_and_parse_header();
   // the array is only filled on demand, since a constant ploidy variant does not otherwise
