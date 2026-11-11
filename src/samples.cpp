@@ -113,7 +113,7 @@ Samples::Samples(std::string path, std::uint32_t n_samples) {
   samples.reserve(std::min<std::size_t>(n_samples, lines.size() / 2));
   std::istringstream iss(lines);
   
-  // run through all lines and gte the first column as sample_id
+  // run through all lines and get the first column as sample_id
   std::uint32_t idx = 0;
   std::string line;
   while (std::getline(iss, line, '\n')) {
