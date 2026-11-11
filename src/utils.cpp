@@ -53,12 +53,8 @@ static void range_avx2(const std::uint8_t * x, std::uint32_t size, size_t & i,
                        std::uint8_t & min_val, std::uint8_t & max_val) {
   std::array<std::uint8_t, 32> arr;
   __m256i values;
-  __m256i _mins = _mm256_set_epi8(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
-  __m256i _maxs = _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                  0, 0, 0, 0);
+  __m256i _mins = _mm256_set1_epi8(-1);
+  __m256i _maxs = _mm256_setzero_si256();
   for (; i + 32 < size; i += 32) {
     values = _mm256_loadu_si256((const __m256i*) &x[i]);
     _mins = _mm256_min_epu8(_mins, values);
@@ -79,9 +75,8 @@ static void range_sse2(const std::uint8_t * x, std::uint32_t size, size_t & i,
                        std::uint8_t & min_val, std::uint8_t & max_val) {
   std::array<std::uint8_t, 16> arr;
   __m128i values;
-  __m128i _mins = _mm_set_epi8(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                               -1, -1, -1, -1, -1);
-  __m128i _maxs = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  __m128i _mins = _mm_set1_epi8(-1);
+  __m128i _maxs = _mm_setzero_si128();
   for (; i + 16 < size; i += 16) {
     values = _mm_loadu_si128((const __m128i*) &x[i]);
     _mins = _mm_min_epu8(_mins, values);
