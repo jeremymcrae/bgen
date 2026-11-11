@@ -1,7 +1,6 @@
 
 #include <stdexcept>
-#include <cmath>
-#include <iostream>
+#include <utility>
 
 #include "variant.h"
 
@@ -36,7 +35,7 @@ static void read_checked_string(std::istream & handle, std::string & value) {
 ///  @param layout bgen layout version (1 or 2)
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
-Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, bool is_stdin) : handle(_handle) {
+Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset, int layout, int compression, int expected_n, bool is_stdin) : handle(std::move(_handle)) {
   offset = varoffset;
   if (!is_stdin) {
     handle->clear();

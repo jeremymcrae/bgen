@@ -17,7 +17,7 @@ namespace bgen {
 class Variant {
   Genotypes geno = Genotypes();
 public:
-  Variant(std::shared_ptr<std::istream> _handle, std::uint64_t & varoffset, int layout, int compression, int expected_n, bool is_stdin=false);
+  Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset, int layout, int compression, int expected_n, bool is_stdin=false);
   Variant() {}
   int probs_per_sample();
   void alt_dosage(float * dosage);

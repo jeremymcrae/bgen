@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <fstream>
 #include <memory>
+#include <utility>
 #include <vector>
 #include <array>
 #include <string>
@@ -32,7 +33,7 @@ public:
            std::uint64_t _offset,
            std::uint32_t _length,
            bool _is_stdin=false) {
-      handle = _handle;
+      handle = std::move(_handle);
       layout = lay;
       compression = compr;
       n_alleles = _n_alleles;
