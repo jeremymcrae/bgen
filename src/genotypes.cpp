@@ -341,39 +341,40 @@ std::uint64_t Genotypes::probability_bytes() {
 /// The block length and the fields sizing the data it needs are stored separately, and
 /// the parsing indexes on those fields, so a malformed bgen would read past the buffer
 void Genotypes::check_block_size() {
-  // the accessors in variant.cpp only parse the header when max_probs is zero, so clear
-  // it on failure, or a rejected variant hands back data on the next call
-  std::uint64_t required;
-  try {
-    required = (std::uint64_t) idx + probability_bytes();
-  } catch (...) {
-    max_probs = 0;
-    throw;
-  }
+  std::uint64_t required = (std::uint64_t) idx + probability_bytes();
   if (required > (std::uint64_t) uncompressed_len) {
-    max_probs = 0;
     throw std::invalid_argument("bgen variant is truncated - its genotype data "
                                 "is " + std::to_string(uncompressed_len) +
                                 " bytes, but the variant needs " +
                                 std::to_string(required));
   }
-  block_checked = true;
 }
 
 /// parse the initial data that defines the ploidy and phased status.
 ///
-/// Layout 1 doesn't store any information before the genotype probabilities,
-/// so layout 1 just receives default values.
+/// A failed parse clears its state, so a later call fails the same way, rather than
+/// decoding with a rejected header.
 void Genotypes::load_data_and_parse_header() {
   decompress();
-  if (has_ploidy) {
-    if (!block_checked) {
-      // the header was parsed on an earlier call which then failed the size
-      // check, so fail the same way rather than fall through to the reads
-      check_block_size();
-    }
+  if (header_parsed) {
     return;
   }
+  try {
+    parse_header();
+    header_parsed = true;
+  } catch (...) {
+    max_probs = 0;
+    missing.clear();
+    ploidy.reset();
+    throw;
+  }
+}
+
+/// read the fields ahead of the probabilities, and check the block can hold the variant
+///
+/// Layout 1 doesn't store any information before the genotype probabilities,
+/// so layout 1 just receives default values.
+void Genotypes::parse_header() {
   idx = 0;
   if (layout == 1) {
     phased = false;
@@ -444,11 +445,6 @@ void Genotypes::load_data_and_parse_header() {
 /// A constant ploidy is left for materialise_ploidy() to fill, since max_ploidy already
 /// says it. Only the missingness scan has to happen now, while the block is here
 void Genotypes::parse_ploidy() {
-  if (has_ploidy) {
-    return;
-  }
-  
-  has_ploidy = true;
   if (layout == 1) {
     // no per-sample ploidy is stored, so there is nothing to scan and nothing to fill
     // beyond the constant, which materialise_ploidy handles
@@ -474,10 +470,6 @@ void Genotypes::parse_ploidy() {
     Range range = fast_range(ploidy.get(), n_samples);
     if ((range._max > (std::uint8_t) max_ploidy) ||
         (range._min < (std::uint8_t) min_ploidy)) {
-      // this throws partway through the header parse, so clear the state a later call
-      // would take as parsed, or it carries on with a half parsed header
-      has_ploidy = false;
-      missing.clear();
       throw std::invalid_argument("bgen variant has sample ploidies from " +
                                   std::to_string((int) range._min) + " to " +
                                   std::to_string((int) range._max) +

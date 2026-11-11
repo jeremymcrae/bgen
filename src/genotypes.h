@@ -60,6 +60,7 @@ public:
 private:
   void load_block();
   void decompress();
+  void parse_header();
   void parse_ploidy();
   std::uint64_t probability_bytes();
   void check_block_size();
@@ -88,12 +89,10 @@ private:
   // size of the decompressed genotype block, which bounds the reads, since the bgen
   // need not agree with what the other header fields say the variant needs
   std::uint32_t uncompressed_len = 0;
-  // whether the block was checked as big enough for the variant. The header parses
-  // once, so a caller which catches the error and retries would skip the check
-  bool block_checked = false;
   bool is_decompressed = false;
   bool constant_ploidy=true;
-  bool has_ploidy = false;
+  // whether the header fields were parsed, and the block size checked
+  bool header_parsed = false;
   // whether minor_idx is known. Finding it needs the whole cohort's dosages, and the
   // layout 1 path appends to the missing list as it goes, so it must not repeat
   bool minor_known = false;

@@ -590,6 +590,36 @@ class TestMalformedGenotypes(unittest.TestCase):
                         var = next(iter(bfile))
                         self.assertEqual(len(var.probabilities), n)
 
+    def test_bad_bit_depth_raises_every_time(self):
+        ''' a bit depth outside 1 to 32 is rejected on every call, not just the first
+        '''
+        n = 50
+        accessors = ['probabilities', 'minor_allele_dosage', 'alt_dosage', 'ploidy',
+                     'is_phased', 'minor_allele']
+        ploidy = np.array([1, 2] * (n // 2), dtype=np.uint8)
+        writers = {
+            'unphased': lambda path: write_bgen(path, n),
+            'phased': lambda path: write_bgen(path, n, phased=True),
+            'varying ploidy': lambda path: write_variable_ploidy(path, n, ploidy),
+            'varying phased': lambda path: write_variable_ploidy(path, n, ploidy,
+                                                                phased=True),
+        }
+        for label, write in writers.items():
+            for depth in [0, 33, 64, 255]:
+                with self.subTest(shape=label, depth=depth):
+                    path = write(self.tmpdir / 'a.bgen')
+                    # skip the block length (4), sample count (4), allele count (2),
+                    # min and max ploidy (2), ploidy bytes (n) and phased flag (1)
+                    offset = block_offset(path) + 4 + 8 + n + 1
+                    patched(path, [(offset, '<B', depth)])
+
+                    with BgenReader(path) as bfile:
+                        var = next(iter(bfile))
+                        for _ in range(3):
+                            for name in accessors:
+                                with self.assertRaises(ValueError, msg=name):
+                                    getattr(var, name)
+
     def test_malformed_variant_does_not_stop_the_others(self):
         ''' a rejected variant leaves the rest of the file readable
 
