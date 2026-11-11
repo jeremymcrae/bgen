@@ -59,7 +59,6 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
     samples = Samples(header.nsamples, file_size, header.nvariants, header.compression);
   }
   
-  offset = first_variant_offset();
   if (!delay_parsing) {
     parse_all_variants();
   }
@@ -85,18 +84,11 @@ std::uint64_t CppBgenReader::first_variant_offset() {
   return (std::uint64_t) header.offset + 4;
 }
 
-Variant CppBgenReader::next_var() {
-  Variant var(handle, offset, header.layout, header.compression, header.nsamples, is_stdin);
-  offset = var.next_variant_offset;
-  return var;
-}
-
 /// load all variants into memory at once
 void CppBgenReader::parse_all_variants() {
   if (variants.size() == header.nvariants) {
     return;
   }
-  offset = first_variant_offset();
   variants.clear();
   // only reserve what the file could hold, since the header's count may be corrupt
   std::uint64_t n_reserve = header.nvariants;
@@ -111,9 +103,12 @@ void CppBgenReader::parse_all_variants() {
     n_reserve = std::min(n_reserve, MAX_VARIANT_RESERVE);
   }
   variants.reserve(n_reserve);
+  std::uint64_t offset = first_variant_offset();
   try {
     for (std::uint32_t idx=0; idx < header.nvariants; idx++) {
-      variants.push_back(next_var());
+      variants.emplace_back(handle, offset, header.layout, header.compression,
+                            header.nsamples, is_stdin);
+      offset = variants.back().next_variant_offset;
     }
   } catch (const std::out_of_range &) {
     // the bgen holds fewer variants than its header lists
@@ -128,9 +123,6 @@ void CppBgenReader::parse_all_variants() {
     variants.clear();
     throw;
   }
-  // finally reset the offset position to the first variant, so we can iterate
-  // over variants more easily in python
-  offset = first_variant_offset();
 }
 
 /// drop a subset of variants passed in by indexes
@@ -167,46 +159,6 @@ void CppBgenReader::drop_variants(std::vector<int> indices) {
   }
   variants.erase(variants.begin() + kept, variants.end());
   variants.shrink_to_fit();
-}
-
-/// get all the IDs for the variants in the bgen file
-std::vector<std::string> CppBgenReader::varids() {
-  parse_all_variants();
-  std::vector<std::string> varid(variants.size());
-  for (std::uint32_t x=0; x<variants.size(); x++) {
-    varid[x] = variants[x].varid;
-  }
-  return varid;
-}
-
-/// get all the rsIDs for the variants in the bgen file
-std::vector<std::string> CppBgenReader::rsids() {
-  parse_all_variants();
-  std::vector<std::string> rsid(variants.size());
-  for (std::uint32_t x=0; x<variants.size(); x++) {
-    rsid[x] = variants[x].rsid;
-  }
-  return rsid;
-}
-
-/// get all the chroms for the variants in the bgen file
-std::vector<std::string> CppBgenReader::chroms() {
-  parse_all_variants();
-  std::vector<std::string> chrom(variants.size());
-  for (std::uint32_t x=0; x<variants.size(); x++) {
-    chrom[x] = variants[x].chrom;
-  }
-  return chrom;
-}
-
-/// get all the positions for the variants in the bgen file
-std::vector<std::uint32_t> CppBgenReader::positions() {
-  parse_all_variants();
-  std::vector<std::uint32_t> position(variants.size());
-  for (std::uint32_t x=0; x<variants.size(); x++) {
-    position[x] = variants[x].pos;
-  }
-  return position;
 }
 
 } // namespace bgen

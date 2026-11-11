@@ -97,21 +97,15 @@ cdef extern from 'reader.h' namespace 'bgen':
         # declare class constructor and methods
         CppBgenReader(string path, string sample_path, bool delay_parsing) except +
         void close_stream() except +
+        uint64_t first_variant_offset()
         void parse_all_variants() except +
-        Variant & operator[](int idx) except +
-        Variant & get(int idx) except +
         void drop_variants(vector[int] indices) except +
-        vector[string] varids() except +
-        vector[string] rsids() except +
-        vector[string] chroms() except +
-        vector[uint32_t] positions() except +
         
         # declare public attributes
         shared_ptr_istream handle
         vector[Variant] variants
         Samples samples
         Header header
-        uint64_t offset
 
 cdef extern from 'utils.h' namespace 'bgen':
     cdef struct Range:
@@ -514,7 +508,7 @@ cdef class BgenReader:
         self.thisptr = new CppBgenReader(self.path, self.sample_path, self.delay_parsing)
         self.handle = wrap_stream(self.thisptr.handle)
         self.is_open = OpenStatus()
-        self.offset = self.thisptr.offset
+        self.offset = self.thisptr.first_variant_offset()
         self.n_iterated = 0
     
     def __is_from_stdin(self, bgen_path):
@@ -766,8 +760,9 @@ cdef class BgenReader:
       if self.index:
           raise ValueError("can't load varids when using an index file")
       
-      varids = self.thisptr.varids()
-      return [x.decode('utf8') for x in varids]
+      self.thisptr.parse_all_variants()
+      return [self.thisptr.variants[i].varid.decode('utf8')
+              for i in range(self.thisptr.variants.size())]
     
     def rsids(self):
       ''' get the rsIDs of all variants in the bgen file
@@ -778,8 +773,9 @@ cdef class BgenReader:
       if self.index:
           return self.index.rsids
       
-      rsids = self.thisptr.rsids()
-      return [x.decode('utf8') for x in rsids]
+      self.thisptr.parse_all_variants()
+      return [self.thisptr.variants[i].rsid.decode('utf8')
+              for i in range(self.thisptr.variants.size())]
     
     def chroms(self):
         ''' get the chromosomes of all variants in the bgen file
@@ -790,8 +786,9 @@ cdef class BgenReader:
         if self.index:
             return self.index.chroms
         
-        chroms = self.thisptr.chroms()
-        return [x.decode('utf8') for x in chroms]
+        self.thisptr.parse_all_variants()
+        return [self.thisptr.variants[i].chrom.decode('utf8')
+                for i in range(self.thisptr.variants.size())]
     
     def positions(self):
         ''' get the positions of all variants in the bgen file
@@ -802,7 +799,8 @@ cdef class BgenReader:
         if self.index:
             return self.index.positions
         
-        return self.thisptr.positions()
+        self.thisptr.parse_all_variants()
+        return [self.thisptr.variants[i].pos for i in range(self.thisptr.variants.size())]
     
     def __enter__(self):
         return self
