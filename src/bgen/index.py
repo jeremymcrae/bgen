@@ -81,6 +81,13 @@ class Index:
         '''
         return len(self._load_offsets())
     
+    def __bool__(self) -> bool:
+        ''' whether the index lists any variants, without loading every offset
+        '''
+        if self._offsets is not None:
+            return len(self._offsets) > 0
+        return len(list(self._query('SELECT 1 FROM Variant LIMIT 1'))) > 0
+    
     def offset_by_index(self, index) -> int:
         ''' get file offset of bgen variant given a variant index
         '''
