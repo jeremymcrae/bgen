@@ -98,8 +98,8 @@ cdef extern from 'utils.h' namespace 'bgen':
     cdef struct Range:
         uint8_t _min
         uint8_t _max
-    uint64_t fast_ploidy_sum(uint8_t * ploidy, uint32_t & size) except +
-    Range fast_range(uint8_t * ploidy, uint32_t & size)
+    uint64_t fast_ploidy_sum(const uint8_t * ploidy, uint32_t size) except +
+    Range fast_range(const uint8_t * ploidy, uint32_t size)
 
 cdef class IStream:
     ''' basic cython implementation of std::istream, for easy pickling

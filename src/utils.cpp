@@ -20,7 +20,7 @@ namespace bgen {
 // sum ploidy states with AVX2. Compiled for AVX2 in isolation, so that this is
 // only ever entered after a runtime check for AVX2 support.
 BGEN_TARGET_AVX2
-static std::uint64_t ploidy_sum_avx2(std::uint8_t * x, std::uint32_t & size, std::uint32_t & i) {
+static std::uint64_t ploidy_sum_avx2(const std::uint8_t * x, std::uint32_t size, std::uint32_t & i) {
   std::uint64_t arr[4];
   __m256i _sum = _mm256_setzero_si256();
   const __m256i zero = _mm256_setzero_si256();
@@ -35,7 +35,7 @@ static std::uint64_t ploidy_sum_avx2(std::uint8_t * x, std::uint32_t & size, std
 }
 
 // sum ploidy states with SSE2, which every x86_64 CPU has, for those without AVX2
-static std::uint64_t ploidy_sum_sse2(std::uint8_t * x, std::uint32_t & size, std::uint32_t & i) {
+static std::uint64_t ploidy_sum_sse2(const std::uint8_t * x, std::uint32_t size, std::uint32_t & i) {
   std::uint64_t arr[2];
   __m128i _sum = _mm_setzero_si128();
   const __m128i zero = _mm_setzero_si128();
@@ -49,7 +49,7 @@ static std::uint64_t ploidy_sum_sse2(std::uint8_t * x, std::uint32_t & size, std
 
 // get min and max of ploidy values with AVX2
 BGEN_TARGET_AVX2
-static void range_avx2(std::uint8_t * x, std::uint32_t & size, size_t & i,
+static void range_avx2(const std::uint8_t * x, std::uint32_t size, size_t & i,
                        std::uint8_t & min_val, std::uint8_t & max_val) {
   std::array<std::uint8_t, 32> arr;
   __m256i values;
@@ -75,7 +75,7 @@ static void range_avx2(std::uint8_t * x, std::uint32_t & size, size_t & i,
 }
 
 // get min and max of ploidy values with SSE2, for x86_64 CPUs without AVX2
-static void range_sse2(std::uint8_t * x, std::uint32_t & size, size_t & i,
+static void range_sse2(const std::uint8_t * x, std::uint32_t size, size_t & i,
                        std::uint8_t & min_val, std::uint8_t & max_val) {
   std::array<std::uint8_t, 16> arr;
   __m128i values;
@@ -100,7 +100,7 @@ static void range_sse2(std::uint8_t * x, std::uint32_t & size, size_t & i,
 // scan 32 bytes at a time for the missingness flag. Compiled for AVX2 in isolation, so
 // this is only ever entered after a runtime check for AVX2 support.
 BGEN_TARGET_AVX2
-static void missing_scan_avx2(const char * data, std::uint32_t & size, std::uint32_t & x,
+static void missing_scan_avx2(const char * data, std::uint32_t size, std::uint32_t & x,
                               std::vector<std::uint32_t> & missing) {
   for (; x + 32 <= size; x += 32) {
     __m256i values = _mm256_loadu_si256((const __m256i*) &data[x]);
@@ -117,7 +117,7 @@ static void missing_scan_avx2(const char * data, std::uint32_t & size, std::uint
 // sum dosages into four 64-bit lanes, skipping missing samples. Compiled for AVX2 in
 // isolation, so this is only ever entered after a runtime check for AVX2 support.
 BGEN_TARGET_AVX2
-static double dosage_sum_avx2(float * dose, std::uint32_t & size, std::uint32_t & i,
+static double dosage_sum_avx2(const float * dose, std::uint32_t size, std::uint32_t & i,
                               std::uint64_t & called) {
   __m256d acc = _mm256_setzero_pd();
   __m256i counts = _mm256_setzero_si256();
@@ -178,7 +178,7 @@ static double strided_sum_avx2(const float * dose, std::uint32_t count,
 
 // sum ploidy states with NEON. NEON is part of the aarch64 baseline, so there is no
 // runtime check to make before entering any of these.
-static std::uint64_t ploidy_sum_neon(std::uint8_t * x, std::uint32_t & size,
+static std::uint64_t ploidy_sum_neon(const std::uint8_t * x, std::uint32_t size,
                                      std::uint32_t & i) {
   uint64x2_t acc = vdupq_n_u64(0);
   for (; i + 16 <= size; i += 16) {
@@ -190,7 +190,7 @@ static std::uint64_t ploidy_sum_neon(std::uint8_t * x, std::uint32_t & size,
 }
 
 // get min and max of the ploidy values with NEON
-static void range_neon(std::uint8_t * x, std::uint32_t & size, size_t & i,
+static void range_neon(const std::uint8_t * x, std::uint32_t size, size_t & i,
                        std::uint8_t & min_val, std::uint8_t & max_val) {
   if (i + 16 > size) {
     return;
@@ -209,7 +209,7 @@ static void range_neon(std::uint8_t * x, std::uint32_t & size, size_t & i,
 
 // scan 16 bytes at a time for the missingness flag. NEON has no movemask, so the max
 // across the masked lanes tests the whole block at once, which suits missing being rare
-static void missing_scan_neon(const char * data, std::uint32_t & size, std::uint32_t & x,
+static void missing_scan_neon(const char * data, std::uint32_t size, std::uint32_t & x,
                               std::vector<std::uint32_t> & missing) {
   const std::uint8_t * bytes = reinterpret_cast<const std::uint8_t *>(data);
   const uint8x16_t flag = vdupq_n_u8(0x80);
@@ -228,7 +228,7 @@ static void missing_scan_neon(const char * data, std::uint32_t & size, std::uint
 
 // sum dosages into 64-bit lanes, skipping missing samples. The lanes are grouped as in
 // the AVX2 path, so both give the same total
-static double dosage_sum_neon(float * dose, std::uint32_t & size, std::uint32_t & i,
+static double dosage_sum_neon(const float * dose, std::uint32_t size, std::uint32_t & i,
                               std::uint64_t & called) {
   float64x2_t acc_lo = vdupq_n_f64(0.0);
   float64x2_t acc_hi = vdupq_n_f64(0.0);
@@ -322,7 +322,7 @@ bool minor_certain(double freq, std::uint64_t n_checked, double z) {
 /// @param x array of per-sample ploidy values
 /// @param size size of array
 /// @returns sum of array
-std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
+std::uint64_t fast_ploidy_sum(const std::uint8_t * x, std::uint32_t size) {
   std::uint32_t i = 0;
   std::uint64_t total = 0;
 
@@ -344,7 +344,7 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
 }
 
 // get min and max of the ploidy values in one pass
-Range fast_range(std::uint8_t * x, std::uint32_t & size) {
+Range fast_range(const std::uint8_t * x, std::uint32_t size) {
   std::uint8_t min_val = 255;
   std::uint8_t max_val = 0;
   size_t i = 0;
@@ -405,7 +405,7 @@ void fast_missing_scan(const char * data, std::uint32_t size,
 /// @param size number of samples
 /// @param n_called set to the number of samples which were not missing
 /// @return sum of the dosages of the callable samples
-double fast_dosage_sum(float * dose, std::uint32_t size, std::uint64_t & n_called) {
+double fast_dosage_sum(const float * dose, std::uint32_t size, std::uint64_t & n_called) {
   double total = 0;
   std::uint64_t called = 0;
   std::uint32_t i = 0;

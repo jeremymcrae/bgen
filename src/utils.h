@@ -80,11 +80,11 @@ struct Range {
 
 std::uint32_t n_choose_k(int n, int k);
 bool minor_certain(double freq, std::uint64_t n_checked, double z);
-std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size);
-Range fast_range(std::uint8_t * x, std::uint32_t & size);
+std::uint64_t fast_ploidy_sum(const std::uint8_t * x, std::uint32_t size);
+Range fast_range(const std::uint8_t * x, std::uint32_t size);
 void fast_missing_scan(const char * data, std::uint32_t size,
                        std::vector<std::uint32_t> & missing);
-double fast_dosage_sum(float * dose, std::uint32_t size, std::uint64_t & n_called);
+double fast_dosage_sum(const float * dose, std::uint32_t size, std::uint64_t & n_called);
 double fast_strided_sum(const float * dose, std::uint32_t n_samples, std::uint32_t start,
                         std::uint32_t stride, std::uint64_t & n_checked);
 

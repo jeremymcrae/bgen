@@ -60,15 +60,13 @@ int main() {
     // the SSE2 helpers are static and skipped on this cpu, so call them directly, then
     // finish the remainder the way fast_ploidy_sum does
     std::uint32_t i = 0;
-    std::uint32_t sz = size;
-    std::uint64_t got = ploidy_sum_sse2(x, sz, i);
+    std::uint64_t got = ploidy_sum_sse2(x, size, i);
     for (; i < size; i++) { got += x[i]; }
     if (got != want) { failures++; }
 
     std::uint8_t got_min = 255, got_max = 0;
     size_t k = 0;
-    sz = size;
-    range_sse2(x, sz, k, got_min, got_max);
+    range_sse2(x, size, k, got_min, got_max);
     for (; k < size; k++) {
       if (x[k] < got_min) { got_min = x[k]; }
       if (x[k] > got_max) { got_max = x[k]; }
@@ -76,10 +74,8 @@ int main() {
     if (got_min != want_min || got_max != want_max) { failures++; }
 
     // and the same through the public entry points, which take the avx2 path here
-    sz = size;
-    if (fast_ploidy_sum(x, sz) != want) { failures++; }
-    sz = size;
-    Range r = fast_range(x, sz);
+    if (fast_ploidy_sum(x, size) != want) { failures++; }
+    Range r = fast_range(x, size);
     if (r._min != want_min || r._max != want_max) { failures++; }
 
     munmap(region, page * 2);
@@ -116,13 +112,11 @@ int main() {
       continue;
     }
     std::uint64_t want = (std::uint64_t) size * worst;
-    std::uint32_t n = size;
-    if (fast_ploidy_sum(values.data(), n) != want) { failures++; }
+    if (fast_ploidy_sum(values.data(), size) != want) { failures++; }
 
     // the sse2 helper is skipped on a cpu with avx2, so drive it directly as well
     std::uint32_t i = 0;
-    n = size;
-    std::uint64_t got = ploidy_sum_sse2(values.data(), n, i);
+    std::uint64_t got = ploidy_sum_sse2(values.data(), size, i);
     for (; i < size; i++) { got += values[i]; }
     if (got != want) { failures++; }
   }
