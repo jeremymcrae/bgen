@@ -16,8 +16,6 @@ class CppBgenWriter {
   std::uint32_t compression;
   std::uint32_t layout;
   std::uint32_t n_variants=0;
-  std::uint32_t nvars_offset=8;
-  std::uint32_t variant_data_offset=0;
   bool closed=false;
   // genotype block (length prefixes included) held between encoding and writing
   std::vector<char> pending;

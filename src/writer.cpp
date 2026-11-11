@@ -60,29 +60,24 @@ static std::uint64_t current_position(std::ofstream &handle) {
   return (std::uint64_t) pos;
 }
 
-// write a 32-bit value at a given file offset
-static void write_at_offset(std::ofstream &handle, std::uint32_t &val, std::uint32_t offset=0) {
+// byte offsets of the header fields which are filled in once their values are known
+const std::uint32_t VARIANT_DATA_OFFSET_POS = 0;
+const std::uint32_t N_VARIANTS_POS = 8;
+
+// write a 32-bit value at a given file offset, then return to the current position
+static void write_at_offset(std::ofstream &handle, std::uint32_t val, std::uint32_t offset) {
   std::uint64_t orig_pos = current_position(handle);
   handle.seekp(offset);
   handle.write(reinterpret_cast<char *>(&val), 4);
   handle.seekp(orig_pos);
 }
 
-static void write_variants_offset(std::ofstream &handle, std::uint32_t &offset) {
-  write_at_offset(handle, offset, 0);
-}
-
-static void write_nvariants(std::ofstream &handle, std::uint32_t &offset, std::uint32_t &n_variants) {
-  write_at_offset(handle, n_variants, offset);
-}
-
-// finish the file off by writing the number of variants, and where the variant data
-// starts. This can throw on a full disk, so call it rather than relying on the destructor
+// finish the file off by writing the number of variants. This can throw on a full disk,
+// so call it rather than relying on the destructor
 void CppBgenWriter::close() {
   if (closed) { return; }
   closed = true;
-  write_variants_offset(handle, variant_data_offset);
-  write_nvariants(handle, nvars_offset, n_variants);
+  write_at_offset(handle, n_variants, N_VARIANTS_POS);
   handle.close();
 }
 
@@ -97,27 +92,27 @@ CppBgenWriter::~CppBgenWriter() {
 
 void CppBgenWriter::write_header(std::string &free_data,
                               std::vector<std::string> &samples) {
-  std::uint32_t header_len = 20 + free_data.size();
-  variant_data_offset = header_len;
-  write_variants_offset(handle, variant_data_offset);
-  handle.seekp(4);
-
-  // figure out the length of the header block
-  handle.write(reinterpret_cast<char *>(&header_len), 4);
-
-  // write zero variants for now, is fixed while closing
-  handle.write(reinterpret_cast<char *>(&n_variants), 4);
-  handle.write(reinterpret_cast<char *>(&n_samples), 4);
-  handle.write("bgen", 4);
-  write_string(handle, free_data);
-
-  // check and write flags
   if (compression > 2) {
     throw std::invalid_argument("compression flag must be 0, 1, or 2");
   }
   if ((layout < 1) || layout > 2) {
     throw std::invalid_argument("layout flag must be 1, or 2");
   }
+  if ((layout == 1) && (compression == 2)) {
+    throw std::invalid_argument("you cannot use zstd compression with layout 1");
+  }
+
+  // the variant data follows the header, unless add_samples() moves it
+  std::uint32_t header_len = 20 + free_data.size();
+  write_at_offset(handle, header_len, VARIANT_DATA_OFFSET_POS);
+  handle.seekp(4);
+  handle.write(reinterpret_cast<char *>(&header_len), 4);
+
+  // write zero variants for now, is fixed while closing
+  handle.write(reinterpret_cast<char *>(&n_variants), 4);
+  handle.write(reinterpret_cast<char *>(&n_samples), 4);
+  handle.write("bgen", 4);
+  handle.write(free_data.data(), free_data.size());
   std::uint32_t sample_id_flag = samples.size() > 0;
   std::uint32_t flags = 0;
   flags |= compression;
@@ -179,8 +174,7 @@ void CppBgenWriter::add_samples(std::vector<std::string> &samples) {
                                 std::to_string(data_offset) + " bytes, which overflows "
                                 "the bgen variant data offset field");
   }
-  variant_data_offset = (std::uint32_t) data_offset;
-  write_variants_offset(handle, variant_data_offset);
+  write_at_offset(handle, (std::uint32_t) data_offset, VARIANT_DATA_OFFSET_POS);
 }
 
 std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
@@ -989,13 +983,6 @@ void CppBgenWriter::encode_genotype_data(std::uint16_t n_alleles,
                                          bool phased,
                                          std::uint8_t bit_depth)
 {
-  if ((layout != 1) && (layout != 2)) {
-    throw std::invalid_argument("layout must be 1 or 2");
-  }
-  if ((layout == 1) && (compression == 2)) {
-    throw std::invalid_argument("you cannot use zstd compression with layout 1");
-  }
-
   std::vector<std::uint8_t> encoded;
   if (layout == 1) {
     encoded = encode_layout1(genotypes, geno_len);
