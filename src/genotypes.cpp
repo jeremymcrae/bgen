@@ -192,7 +192,7 @@ void Genotypes::load_block() {
 /// is handled internally by either zlib_decompress, or zstd_decompress,
 /// depending on compression scheme.
 void Genotypes::decompress() {
-  if (is_decompressed) {
+  if (uncompressed) {
     // don't decompress if already available
     return;
   }
@@ -204,7 +204,6 @@ void Genotypes::decompress() {
     // over as it stands rather than copying it into a second buffer
     uncompressed = std::move(block);
     uncompressed_len = length;
-    is_decompressed = true;
     return;
   }
   
@@ -249,7 +248,6 @@ void Genotypes::decompress() {
   // The block is kept until then, so a retry decompresses the same bytes.
   uncompressed = std::move(buffer);
   uncompressed_len = out_len;
-  is_decompressed = true;
   block.reset();
 }
 

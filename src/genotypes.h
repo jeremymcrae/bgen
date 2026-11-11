@@ -91,7 +91,6 @@ private:
   // size of the decompressed genotype block, which bounds the reads, since the bgen
   // need not agree with what the other header fields say the variant needs
   std::uint32_t uncompressed_len = 0;
-  bool is_decompressed = false;
   bool constant_ploidy=true;
   // whether the header fields were parsed, and the block size checked
   bool header_parsed = false;
