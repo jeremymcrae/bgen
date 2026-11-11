@@ -34,9 +34,7 @@ static std::uint64_t ploidy_sum_avx2(std::uint8_t * x, std::uint32_t & size, std
   return arr[0] + arr[1] + arr[2] + arr[3];
 }
 
-// this code is solely here to avoid a bug on macosx x86_64 when AVX2 is not
-// available. If not present, the final stage to clean up the remainder
-// segfaults. It's a mystery why.
+// sum ploidy states with SSE, for x86_64 CPUs without AVX2
 BGEN_TARGET_SSE4
 static std::uint64_t ploidy_sum_sse4(std::uint8_t * x, std::uint32_t & size, std::uint32_t & i) {
   std::uint64_t arr[2];
@@ -77,9 +75,7 @@ static void range_avx2(std::uint8_t * x, std::uint32_t & size, size_t & i,
   }
 }
 
-// this code is solely here to avoid a bug on macosx x86_64 when AVX2 is not
-// available. If not present, the final stage to clean up the remainder
-// segfaults. It's a mystery why.
+// get min and max of ploidy values with SSE, for x86_64 CPUs without AVX2
 BGEN_TARGET_SSE4
 static void range_sse4(std::uint8_t * x, std::uint32_t & size, size_t & i,
                        std::uint8_t & min_val, std::uint8_t & max_val) {
@@ -300,19 +296,16 @@ std::uint32_t n_choose_k(int n, int k) {
   return (std::uint32_t) res;
 }
 
-/// check if the minor allele is certain (to 99.9999999999999& confidence)
+/// check if the minor allele is certain, to the confidence z sets
 ///
 ///  Take the frequency, and number of individuals checked so far, and see if the
-///  99.99..(fifteen nines) confidence interval overlaps 0.5. If not, then we can
-///  be sure we've identified the minor allele, even without checking the full
-///  population.
+///  confidence interval overlaps 0.5. If not, then we can be sure we've identified
+///  the minor allele, even without checking the full population.
 ///
 ///  @param freq estimated minor allele frequency
-///  @param n_checked number of individsuals checked so far
-///  @param z standard normal deviate (eg 1.96 for 95% CI, here we use 10.0 for
-///    stronger confidence, and the fact the normal approximation for confidence
-///    intervals isn't perfect)
-///  @return True/False for whether to halt the permuations
+///  @param n_checked number of individuals checked so far
+///  @param z standard normal deviate (e.g. 1.96 for a 95% CI)
+///  @return True/False for whether to stop sampling
 bool minor_certain(double freq, std::uint64_t n_checked, double z) {
     double delta = (z * std::sqrt((freq * (1 - freq)) / (double) n_checked));
     
@@ -328,7 +321,7 @@ bool minor_certain(double freq, std::uint64_t n_checked, double z) {
 // The bytes accumulate straight into 64-bit counters, since a 32-bit lane wraps
 // partway through a large cohort, at a size which depends on the ploidy values
 //
-/// @param x array of floats
+/// @param x array of per-sample ploidy values
 /// @param size size of array
 /// @returns sum of array
 std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {

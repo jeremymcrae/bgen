@@ -123,7 +123,7 @@ void CppBgenWriter::write_header(std::string &free_data,
   flags |= layout << 2;
   flags |= sample_id_flag << 31;
   handle.write(reinterpret_cast<char *>(&flags), 4);
-  }
+}
 
 /// @brief check a string fits the 16-bit length field the bgen stores it behind
 ///
@@ -213,7 +213,6 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
   n_variants += 1;
   if (layout == 1) {
     handle.write(reinterpret_cast<char *>(&_n_samples), 4);
-    // handle << _n_samples;
   }
   std::uint16_t tmp;
   tmp = varid.size();
@@ -299,7 +298,7 @@ static void zstd_compress(const std::uint8_t * input, std::size_t input_len,
 
 /// Compress genotype data for a variant.
 ///
-/// Compression is handled internally by either zlib_decompress, or zstd_decompress,
+/// Compression is handled internally by either zlib_compress, or zstd_compress,
 /// depending on compression scheme.
 static std::vector<char> compress(std::vector<std::uint8_t> &uncompressed, std::uint32_t compression) {
   std::size_t bound;

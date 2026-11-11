@@ -972,12 +972,11 @@ static void ref_dosage_avx2(char * uncompressed, std::uint32_t & idx,
 ///
 /// Writes dosage float values to the dose member.
 ///
-/// This is optimised for 8-bit genotypes and constant_ploidy. This function
-/// pulls the homozygous minor allele genotype from the first genotype
-/// probability. See fast_dosage_minor_second() for getting dosage when the minor
-/// allele is the second allele.
+/// This is optimised for 8-bit genotypes and constant_ploidy. Each sample's dosage is
+/// twice its first (homozygous) probability plus its second (heterozygous). The caller
+/// swaps to the other allele afterwards if needed.
 ///
-/// This uses AVX2 and NEON vectorization to speed up calculations on relevant 
+/// This uses AVX2 and NEON vectorization to speed up calculations on relevant
 /// x86_64 and aarch64 hardware.
 ///
 /// @param uncompressed char array containing genotype probabilities
