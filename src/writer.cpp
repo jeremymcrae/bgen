@@ -240,7 +240,6 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
     handle.write(reinterpret_cast<char *>(&allele_size), 4);
     write_string(handle, x);
   }
-  handle.flush();
   return var_offset;
 }
 
