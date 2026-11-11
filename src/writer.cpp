@@ -1,4 +1,5 @@
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <cmath>
@@ -879,7 +880,8 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
     if (!constant_ploidy) {
       ploid = (encoded[ploidy_offset + sample_idx] &= 63);
     }
-    if (missing_genotypes(&genotypes[i], n_probs)) {
+    // a sample is missing if all of its haplotypes are, so check them together
+    if (missing_genotypes(&genotypes[i], n_probs * std::max<std::uint32_t>(ploid, 1))) {
       encoded[ploidy_offset + sample_idx] |= 0x80;
       // as in encode_unphased, step over the whole sample
       bit_idx += (std::uint64_t) ploid * (n_probs - 1) * bit_depth;

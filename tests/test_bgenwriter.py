@@ -1193,12 +1193,14 @@ class TestBgenWriter(unittest.TestCase):
         nowhere to record that just one haplotype of a sample is missing.
         '''
         path = self.tmpdir / 'temp.bgen'
-        with BgenWriter(path, 2, samples=['a', 'b']) as bfile:
-            geno = np.array([[0.5, 0.5, float('nan'), float('nan')],
-                             [0.2, 0.8, 0.5, 0.5]])
-            with self.assertRaisesRegex(ValueError, 'must encode all as missing'):
-                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
-                                  phased=True)
+        nan = float('nan')
+        # whichever haplotype is the missing one
+        for first in [[0.5, 0.5, nan, nan], [nan, nan, 0.5, 0.5]]:
+            with BgenWriter(path, 2, samples=['a', 'b']) as bfile:
+                geno = np.array([first, [0.2, 0.8, 0.5, 0.5]])
+                with self.assertRaisesRegex(ValueError, 'must encode all as missing'):
+                    bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                                      phased=True)
 
     def test_probabilities_within_rounding_tolerance(self):
         ''' check probabilities just outside 0-1 are still accepted
