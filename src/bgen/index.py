@@ -47,23 +47,16 @@ class Index:
         Yields:
             file offsets for variants within the genome region
         '''
-        if start is None and stop is None:
-            query = 'SELECT file_start_position FROM Variant WHERE chromosome=?'
-            params = (chrom, )
-        elif stop is None:
-            query = 'SELECT file_start_position FROM Variant \
-                        WHERE chromosome=? AND position >= ?'
-            params = (chrom, start)
-        elif start is None:
-            # a stop without a start needs its own query, since comparing a
-            # position against a NULL start is never true in sqlite
-            query = 'SELECT file_start_position FROM Variant \
-                        WHERE chromosome=? AND position <= ?'
-            params = (chrom, stop)
-        else:
-            query = 'SELECT file_start_position FROM Variant \
-                        WHERE chromosome=? AND position >= ? AND position <= ?'
-            params = (chrom, start, stop)
+        # only bound the ends which are given, since comparing a position against a
+        # NULL bound is never true in sqlite
+        query = 'SELECT file_start_position FROM Variant WHERE chromosome=?'
+        params = [chrom]
+        if start is not None:
+            query += ' AND position >= ?'
+            params.append(start)
+        if stop is not None:
+            query += ' AND position <= ?'
+            params.append(stop)
 
         for row in self._query(query, params):
             yield row[0]
