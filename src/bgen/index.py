@@ -84,14 +84,14 @@ class Index:
         return int(self._load_offsets()[index])
         
     def offset_by_rsid(self, rsid) -> list[int]:
-        ''' get file offset of bgen variant given a variant index
+        ''' get file offsets of the bgen variants with a given rsID
         '''
         query = "SELECT file_start_position FROM Variant WHERE rsid = ?"
         params = (rsid, )
         return [x[0] for x in self._query(query, params)]
     
     def offset_by_pos(self, pos) -> list[int]:
-        ''' get file offset of bgen variant given a variant index
+        ''' get file offsets of the bgen variants at a given position
         '''
         query = "SELECT file_start_position FROM Variant WHERE position = ?"
         params = (pos, )
