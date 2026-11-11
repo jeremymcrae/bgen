@@ -67,12 +67,12 @@ private:
   void parse_ploidy();
   std::uint64_t probability_bytes();
   void check_block_size();
-  void probabilities_layout1(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows);
-  void probabilities_layout2(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows);
-  void fast_haplotype_probs(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows);
-  void ref_dosage_fast(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows);
-  void ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows);
-  void ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows);
+  // these decode from data, the packed probabilities which follow the variant's header
+  void probabilities_layout1(const char * data, float * probs, std::uint32_t nrows);
+  void probabilities_layout2(const char * data, float * probs, std::uint32_t nrows);
+  void ref_dosage_fast(const char * data, float * dose);
+  void ref_dosage_slow_unphased(const char * data, float * dose);
+  void ref_dosage_slow_phased(const char * data, float * dose);
   void swap_allele_dosage(float * dose);
   int find_minor_allele(float * dose);
   std::shared_ptr<std::istream> handle;
