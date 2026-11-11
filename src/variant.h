@@ -13,7 +13,7 @@
 namespace bgen {
 
 class Variant {
-  Genotypes geno = Genotypes();
+  Genotypes geno;
 public:
   Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset, int layout, int compression, int expected_n, bool is_stdin=false);
   Variant() {}
