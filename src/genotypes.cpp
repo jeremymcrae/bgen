@@ -634,17 +634,6 @@ void Genotypes::fast_haplotype_probs(char * uncompressed, std::uint32_t idx, flo
 ///
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
 void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, float * probs, std::uint32_t & nrows) {
-  // get genotype/allele probabilities
-  std::uint32_t n_probs;
-  std::uint32_t max_less_1 = max_probs - 1;
-  float prob = 0;
-  float remainder;
-  
-  // define variables for parsing depths not aligned with 8 bit char array
-  float factor = 1.0 / ((float) (std::pow(2, (int) bit_depth)) - 1);
-  std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
-  std::uint64_t bit_idx = 0;  // index position in bits
-  
   if (constant_ploidy & (max_probs == 3) & (bit_depth == 8)) {
     // A fast path for one scenario: all samples have ploidy=2, with 8 bits per
     // probability. This optimises memory accesses, and avoids looping over a
@@ -678,15 +667,18 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
     if (varies) {
       ploidy_probs = probs_per_ploidy(n_alleles, max_ploidy);
     }
-    n_probs = max_less_1;
+    float factor = 1.0 / ((float) (std::pow(2, (int) bit_depth)) - 1);
+    std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
+    std::uint64_t bit_idx = 0;  // index position in bits
+    std::uint32_t n_probs = max_probs - 1;
     std::uint32_t row = 0;
     for (std::uint32_t offset=0; offset < (nrows * max_probs); offset += max_probs, row++) {
       if (varies) {
         n_probs = ploidy_probs[ploidy[row]] - 1;
       }
-      remainder = 1.0;
+      float remainder = 1.0;
       for (std::uint32_t x=0; x<n_probs; x++) {
-        prob = next_value(&uncompressed[idx], bit_idx, bit_depth, probs_mask) * factor;
+        float prob = next_value(&uncompressed[idx], bit_idx, bit_depth, probs_mask) * factor;
         remainder -= prob;
         probs[offset + x] = prob;
       }
