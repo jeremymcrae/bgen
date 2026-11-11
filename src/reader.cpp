@@ -92,19 +92,11 @@ void CppBgenReader::parse_all_variants() {
     return;
   }
   variants.clear();
-  // only reserve what the file could hold, since the header's count may be corrupt
-  std::uint64_t n_reserve = header.nvariants;
-  if (file_size > 0) {
-    std::uint64_t possible = file_size / MIN_VARIANT_BYTES + 1;
-    if (n_reserve > possible) {
-      n_reserve = possible;
-    }
-  } else {
-    // A stream cannot be seeked, so nothing here bounds the count. Cap the reserve
-    // and let the vector grow as the variants actually arrive.
-    n_reserve = std::min(n_reserve, MAX_VARIANT_RESERVE);
-  }
-  variants.reserve(n_reserve);
+  // only reserve what the file could hold, since the header's count may be corrupt. A
+  // stream cannot be measured, so its reserve is capped, and the vector grows from there
+  std::uint64_t limit = (file_size > 0) ? file_size / MIN_VARIANT_BYTES + 1
+                                        : MAX_VARIANT_RESERVE;
+  variants.reserve(std::min<std::uint64_t>(header.nvariants, limit));
   std::uint64_t offset = first_variant_offset();
   try {
     for (std::uint32_t idx=0; idx < header.nvariants; idx++) {
