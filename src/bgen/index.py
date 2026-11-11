@@ -1,4 +1,5 @@
 
+from functools import cached_property
 import sqlite3
 import logging
 import os
@@ -14,9 +15,6 @@ class Index:
         self.conn = sqlite3.connect(self.path)
         
         self._offsets: Optional[NDArray[np.uint64]] = None
-        self._rsids: Optional[list[str]] = None
-        self._chroms: Optional[list[str]] = None
-        self._positions: Optional[list[int]] = None
     
     def _query(self, query, params=()):
         ''' run a query on a cursor of its own
@@ -100,32 +98,26 @@ class Index:
         params = (pos, )
         return [x[0] for x in self._query(query, params)]
     
-    @property
-    def rsids(self):
+    @cached_property
+    def rsids(self) -> list[str]:
         ''' get rsID list for all variants in the bgen file
         '''
-        if self._rsids is None:
-            query = "SELECT rsid FROM Variant ORDER BY file_start_position"
-            self._rsids = [x[0] for x in self._query(query)]
-        return self._rsids
+        query = "SELECT rsid FROM Variant ORDER BY file_start_position"
+        return [x[0] for x in self._query(query)]
     
-    @property
-    def chroms(self):
+    @cached_property
+    def chroms(self) -> list[str]:
         ''' get chromosome list for all variants in the bgen file
         '''
-        if self._chroms is None:
-            query = "SELECT chromosome FROM Variant ORDER BY file_start_position"
-            self._chroms = [x[0] for x in self._query(query)]
-        return self._chroms
+        query = "SELECT chromosome FROM Variant ORDER BY file_start_position"
+        return [x[0] for x in self._query(query)]
     
-    @property
-    def positions(self):
+    @cached_property
+    def positions(self) -> list[int]:
         ''' get position list for all variants in the bgen file
         '''
-        if self._positions is None:
-            query = "SELECT position FROM Variant ORDER BY file_start_position"
-            self._positions = [x[0] for x in self._query(query)]
-        return self._positions
+        query = "SELECT position FROM Variant ORDER BY file_start_position"
+        return [x[0] for x in self._query(query)]
 
     def close(self):
         if sqlite3 is None:
