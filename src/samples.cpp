@@ -33,12 +33,8 @@ Samples::Samples(std::istream * handle, std::uint32_t n_samples,
   // the sample block length bounds the sample count, and is checked against the IDs
   // at the end of this function
   std::uint32_t sample_header_length;
-  if (!read_value(*handle, sample_header_length)) {
-    throw std::invalid_argument("bgen file is truncated inside the sample block");
-  }
-  
   std::uint32_t sample_n_check;
-  if (!read_value(*handle, sample_n_check)) {
+  if (!read_value(*handle, sample_header_length) || !read_value(*handle, sample_n_check)) {
     throw std::invalid_argument("bgen file is truncated inside the sample block");
   }
   if (n_samples != sample_n_check) {

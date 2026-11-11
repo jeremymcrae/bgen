@@ -29,17 +29,10 @@ Header::Header(std::istream * handle) {
     throw std::invalid_argument("bgen header is the wrong length");
   }
   
-  // read any extra data contained in the header
-  std::uint32_t size = header_length - 20;
-  if (size > 0) {
-    if (!read_string(*handle, extra, size)) {
-      throw std::invalid_argument("bgen file is truncated inside the header");
-    }
-  }
-  
-  // read flags data
+  // read any extra data contained in the header, then the flags
   std::uint32_t raw_flags;
-  if (!read_value(*handle, raw_flags)) {
+  if (!read_string(*handle, extra, header_length - 20) ||
+      !read_value(*handle, raw_flags)) {
     throw std::invalid_argument("bgen file is truncated inside the header");
   }
   compression = raw_flags & 3;
