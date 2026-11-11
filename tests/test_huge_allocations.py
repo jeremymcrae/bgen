@@ -71,6 +71,43 @@ except Exception as err:
 '''
 
 
+# open a bgen, or copy a variant's data, in a child, and report the rise in its peak
+# memory. This needs no cap, so it runs wherever resource exists. ru_maxrss is in bytes
+# on macOS, and kilobytes elsewhere
+MEASURED_CHILD = r'''
+import resource
+import sys
+from bgen import BgenReader
+path, action = sys.argv[1], sys.argv[2]
+scale = 1 if sys.platform == 'darwin' else 1024
+peak = lambda: resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+before = peak()
+try:
+    with BgenReader(path, delay_parsing=True) as bfile:
+        if action == 'copy':
+            var = next(iter(bfile))
+            before = peak()
+            var.copy_data()
+    print('DONE')
+except Exception as err:
+    print(f'{type(err).__name__} {err}')
+print(f'GREW {(peak() - before) * scale}')
+'''
+
+
+def run_measured(path, action):
+    ''' open or copy from a bgen in a child, giving its report and its growth in bytes
+    '''
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join(p for p in sys.path if p))
+    done = subprocess.run([sys.executable, '-c', MEASURED_CHILD, str(path), action],
+                          capture_output=True, text=True, env=env,
+                          timeout=CHILD_TIMEOUT)
+    if 'GREW' not in done.stdout:
+        return f'DIED rc={done.returncode} {done.stderr.strip()[-200:]}', 0
+    report, grew = done.stdout.split('GREW')
+    return report.strip(), int(grew)
+
+
 def run_capped(path, action):
     ''' read a bgen in a child whose address space is capped
 
@@ -164,6 +201,22 @@ class TestHugeAllocations(unittest.TestCase):
             with self.subTest(claim=claim):
                 bad = self._claim(path, offset, claim, f'block{claim}.bgen')
                 self._assert_rejected(run_capped(bad, 'iterate'))
+
+    @unittest.skipIf(sys.platform == 'win32', 'needs resource, to measure peak memory')
+    def test_overstated_genotype_block_is_not_copied(self):
+        ''' copy_data() rejects a block claiming more bytes than the file holds
+        '''
+        path = self._write(self.tmpdir / 'copy.bgen')
+        claim = 3 * 1024 * 1024 * 1024
+        bad = self._claim(path, self._block_length_offset(path), claim, 'copy_bad.bgen')
+        report, grew = run_measured(bad, 'copy')
+        self.assertIn('ValueError', report)
+        self.assertLess(grew, 256 * 1024 * 1024)
+
+        # an intact variant is still copied whole
+        with BgenReader(path) as bfile:
+            var = next(iter(bfile))
+            self.assertEqual(len(var.copy_data()), var.next_variant_offset - var.fileoffset)
 
     @unittest.skipUnless(CAN_CAP, 'needs RLIMIT_AS and /proc to cap memory')
     def test_overstated_allele_length_is_not_allocated(self):

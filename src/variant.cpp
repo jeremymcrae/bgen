@@ -162,11 +162,19 @@ std::vector<std::uint8_t> Variant::copy_data() {
     throw std::invalid_argument("cannot read from closed bgen file");
   }
   handle->clear();
-  std::uint32_t length = next_variant_offset - offset;
-  std::vector<std::uint8_t> data(length);
+  // 64-bit, since long alleles can take a variant past 4 GB
+  std::uint64_t length = next_variant_offset - offset;
   handle->seekg(offset);
-  if (!handle->read(reinterpret_cast<char *>(data.data()), length)) {
-    throw std::invalid_argument("could not read variant data - is the bgen truncated?");
+  // read in stages, so a corrupt length only allocates what the file can supply
+  std::vector<std::uint8_t> data;
+  std::uint64_t filled = 0;
+  while (filled < length) {
+    std::uint64_t chunk = std::min(length - filled, BLOCK_READ_CHUNK);
+    data.resize(filled + chunk);
+    if (!handle->read(reinterpret_cast<char *>(data.data() + filled), chunk)) {
+      throw std::invalid_argument("could not read variant data - is the bgen truncated?");
+    }
+    filled += chunk;
   }
   return data;
 }
