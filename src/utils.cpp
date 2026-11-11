@@ -313,8 +313,8 @@ std::uint32_t n_choose_k(int n, int k) {
 ///    stronger confidence, and the fact the normal approximation for confidence
 ///    intervals isn't perfect)
 ///  @return True/False for whether to halt the permuations
-bool minor_certain(double freq, int n_checked, double z) {
-    double delta = (z * std::sqrt((freq * (1 - freq)) / n_checked));
+bool minor_certain(double freq, std::uint64_t n_checked, double z) {
+    double delta = (z * std::sqrt((freq * (1 - freq)) / (double) n_checked));
     
     // check if the confidence interval overlaps 0.5
     return !((freq - delta < 0.5) & (freq + delta > 0.5));

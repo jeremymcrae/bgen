@@ -858,7 +858,7 @@ int Genotypes::find_minor_allele(float * dose) {
       continue;
     }
     freq = total / (double) n_alleles_seen;
-    if (minor_certain(freq, (int) n_checked, 5.0)) {
+    if (minor_certain(freq, n_checked, 5.0)) {
       return (freq <= 0.5) ? 0 : 1;
     }
     if (n_checked >= stride_limit) {
