@@ -203,6 +203,31 @@ class TestHugeAllocations(unittest.TestCase):
                 self._assert_rejected(run_capped(bad, 'iterate'))
 
     @unittest.skipIf(sys.platform == 'win32', 'needs resource, to measure peak memory')
+    def test_overstated_header_length_is_not_allocated(self):
+        ''' a header claiming more free data than the file holds is rejected
+        '''
+        path = self._write(self.tmpdir / 'header.bgen')
+        claim = 3 * 1024 * 1024 * 1024
+        data = bytearray(path.read_bytes())
+        # the offset of the first variant, then the header length
+        struct.pack_into('<II', data, 0, claim, claim)
+        bad = self.tmpdir / 'header_bad.bgen'
+        bad.write_bytes(bytes(data))
+
+        report, grew = run_measured(bad, 'open')
+        self.assertIn('ValueError', report)
+        self.assertIn('truncated', report)
+        self.assertLess(grew, 256 * 1024 * 1024)
+
+        # genuine free data still reads, including more than is read in one go
+        for size in [10, 3_000_000]:
+            good = self.tmpdir / f'meta{size}.bgen'
+            with BgenWriter(good, 2, metadata='x' * size) as bfile:
+                pass
+            with BgenReader(good) as bfile:
+                self.assertEqual(bfile.header.metadata, 'x' * size)
+
+    @unittest.skipIf(sys.platform == 'win32', 'needs resource, to measure peak memory')
     def test_overstated_genotype_block_is_not_copied(self):
         ''' copy_data() rejects a block claiming more bytes than the file holds
         '''

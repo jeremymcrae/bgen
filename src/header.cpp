@@ -36,8 +36,7 @@ Header::Header(std::istream * handle) {
   // read any extra data contained in the header
   std::uint32_t size = header_length - 20;
   if (size > 0) {
-    extra.resize(size);
-    if (!handle->read(&extra[0], size)) {
+    if (!read_string(*handle, extra, size)) {
       throw std::invalid_argument("bgen file is truncated inside the header");
     }
   }

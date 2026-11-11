@@ -46,17 +46,11 @@ inline bool read_value(std::istream & handle, T & value) {
 /// max chunk size per file read at a time for a string
 const std::size_t STRING_READ_CHUNK = 1 << 20;
 
-/// read a string prefixed by its length, and report whether the reads worked
+/// read a string of a given length, and report whether the read worked
 ///
 /// A std::istream_iterator would skip whitespace and misalign the stream, and long
 /// strings come in chunks, so a corrupt length only allocates what the file can give
-template <typename LenType>
-inline bool read_prefixed_string(std::istream & handle, std::string & value) {
-  LenType len;
-  if (!read_value(handle, len)) {
-    return false;
-  }
-  std::size_t remaining = (std::size_t) len;
+inline bool read_string(std::istream & handle, std::string & value, std::size_t remaining) {
   if (remaining <= STRING_READ_CHUNK) {
     // short enough that the claim cannot amplify much, so read it in one go
     value.resize(remaining);
@@ -73,6 +67,16 @@ inline bool read_prefixed_string(std::istream & handle, std::string & value) {
     remaining -= chunk;
   }
   return true;
+}
+
+/// read a string prefixed by its length, and report whether the reads worked
+template <typename LenType>
+inline bool read_prefixed_string(std::istream & handle, std::string & value) {
+  LenType len;
+  if (!read_value(handle, len)) {
+    return false;
+  }
+  return read_string(handle, value, (std::size_t) len);
 }
 
 struct Range {
