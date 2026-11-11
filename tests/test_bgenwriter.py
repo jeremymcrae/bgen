@@ -1417,6 +1417,25 @@ class TestBgenWriter(unittest.TestCase):
                 mask = np.isfinite(var1.probabilities)
                 self.assertTrue((var1.probabilities[mask] == var2.probabilities[mask]).all())
 
+    def test_ploidy_from_strided_array(self):
+        ''' a non-contiguous ploidy array (e.g. a column of a table) is written correctly
+        '''
+        table = np.array([[2, 1], [1, 1], [2, 1], [2, 1]], dtype=np.uint8)
+        ploidy = table[:, 0]
+        self.assertFalse(ploidy.flags['C_CONTIGUOUS'])
+        geno = np.array([[0.1, 0.3, 0.6],
+                         [0.25, 0.75, float('nan')],
+                         [0.5, 0.25, 0.25],
+                         [0.2, 0.2, 0.6]])
+        path = self.tmpdir / 'strided.bgen'
+        with BgenWriter(path, 4) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno, ploidy=ploidy)
+
+        with BgenReader(path) as bfile:
+            var = next(iter(bfile))
+            self.assertEqual(var.ploidy.tolist(), [2, 1, 2, 2])
+            self.assertTrue(probs_close(geno, var.probabilities, bit_depth=8))
+
     def test_add_variant_direct_mismatched_file(self):
         ''' check we reject copying variant data into an incompatible bgen
 

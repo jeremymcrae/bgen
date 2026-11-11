@@ -231,7 +231,7 @@ cdef class BgenWriter:
         # convert numpy array to C contiguous for storing values on disk. numpy
         # arrays default to C contiguous, so most won't need conversion, but
         # some can be fortran order, e.g. if transposed
-        cdef double[:, :] geno_c
+        cdef double[:, ::1] geno_c
         if genotypes.flags['C_CONTIGUOUS']:
             geno_c = genotypes
         else:
@@ -247,7 +247,7 @@ cdef class BgenWriter:
         
         # determine ploidy levels
         cdef int32_t min_ploidy, max_ploidy
-        cdef uint8_t[:] ploidy_arr = np.array([], dtype=np.uint8)
+        cdef uint8_t[::1] ploidy_arr = np.array([], dtype=np.uint8)
         if np.isscalar(ploidy) and np.issubdtype(type(ploidy), np.integer):
             min_ploidy, max_ploidy = ploidy, ploidy
         elif isinstance(ploidy, np.ndarray) and np.issubdtype(ploidy.dtype, np.integer):
@@ -256,7 +256,8 @@ cdef class BgenWriter:
 
             min_ploidy, max_ploidy = np.min(ploidy), np.max(ploidy)
             if min_ploidy != max_ploidy:
-                ploidy_arr = np.asarray(ploidy, dtype=np.uint8)
+                # contiguous, since the encoder reads through a plain pointer
+                ploidy_arr = np.ascontiguousarray(ploidy, dtype=np.uint8)
         else:
             raise ValueError('ploidy must be either integer, or numpy array of integers')
         
@@ -315,7 +316,7 @@ cdef class BgenWriter:
             raise ValueError(f'bit_depth must be between 1 and 32: {bit_depth}')
         
         # sanatize genotypes
-        cdef double[:, :] geno_c
+        cdef double[:, ::1] geno_c
         cdef uint32_t n_samples, n_genos
         genotypes, n_samples, n_genos = self._validate_genotypes(genotypes)
         self._check_bit_depth_fits(genotypes, bit_depth, rsid, varid)
@@ -323,7 +324,7 @@ cdef class BgenWriter:
     
         # validate ploidy levels
         cdef int32_t min_ploidy, max_ploidy
-        cdef uint8_t[:] ploidy_arr
+        cdef uint8_t[::1] ploidy_arr
         min_ploidy, max_ploidy, ploidy_arr = self._validate_ploidy(ploidy, n_samples)
         
         self._validate_layout1_data(_alleles, n_genos, phased)
