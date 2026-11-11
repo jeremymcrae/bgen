@@ -6,8 +6,6 @@
 #include <stdexcept>
 #include <vector>
 
-#include <iostream>
-
 #include "zstd/lib/zstd.h"
 #include <zlib.h>
 

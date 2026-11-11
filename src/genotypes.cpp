@@ -1,13 +1,8 @@
 
 #include <algorithm>
-#include <iterator>
 #include <stdexcept>
-#include <bitset>
 #include <cmath>
-#include <cassert>
 #include <cstring>
-
-#include <iostream>
 
 #if defined(__x86_64__)
   #include <immintrin.h>
