@@ -71,6 +71,11 @@ static inline T load(const char * data) {
   return value;
 }
 
+/// largest value which fits in bit_depth bits, which a probability of one is stored as
+static inline std::uint64_t max_value(std::uint32_t bit_depth) {
+  return (std::uint64_t(1) << bit_depth) - 1;
+}
+
 /// read the next packed value of bit_depth bits, and step the bit index past it
 static inline std::uint64_t next_value(const char * data, std::uint64_t & bit_idx,
                                        std::uint32_t bit_depth, std::uint64_t mask) {
@@ -667,8 +672,8 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
     if (varies) {
       ploidy_probs = probs_per_ploidy(n_alleles, max_ploidy);
     }
-    float factor = 1.0 / ((float) (std::pow(2, (int) bit_depth)) - 1);
-    std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
+    std::uint64_t probs_mask = max_value(bit_depth);
+    float factor = 1.0f / (float) probs_mask;
     std::uint64_t bit_idx = 0;  // index position in bits
     std::uint32_t n_probs = max_probs - 1;
     std::uint32_t row = 0;
@@ -1007,14 +1012,13 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
   std::uint32_t curr_ploidy = max_ploidy;
   std::uint32_t half_ploidy = curr_ploidy / 2;
 
-  std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
-  float factor = (layout == 2) ? 1.0f / (float) maxval : 1.0f / 32768;
+  std::uint64_t probs_mask = max_value(bit_depth);
+  float factor = (layout == 2) ? 1.0f / (float) probs_mask : 1.0f / 32768;
   // 64-bit, since a probability fills 32 bits at the maximum bit depth, and a diploid
   // doubles it. Signed makes the float conversion one instruction, and these are masked
   std::int64_t het;
   std::int64_t hom;
   std::uint32_t hom_alt;
-  std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
   std::uint64_t bit_idx = 0;  // index position in bits
   for (std::uint32_t n=0; n<nrows; n++) {
     if (!constant_ploidy) {
@@ -1068,8 +1072,8 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
 void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, float * dose, std::uint32_t nrows) {
   std::uint32_t curr_ploidy = max_ploidy;
 
-  std::uint32_t maxval = std::pow(2, (std::uint32_t) (bit_depth)) - 1;
-  float factor = (layout == 2) ? 1.0f / (float) maxval : 1.0f / 32768;
+  std::uint64_t probs_mask = max_value(bit_depth);
+  float factor = (layout == 2) ? 1.0f / (float) probs_mask : 1.0f / 32768;
 
   // NOTE: the sums below need -ffp-contract=off (see setup.py) to give the same values
   // on every architecture
@@ -1082,7 +1086,6 @@ void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, f
     return;
   }
 
-  std::uint64_t probs_mask = std::uint64_t(0xFFFFFFFFFFFFFFFF) >> (64 - bit_depth);
   std::uint64_t bit_idx = 0;  // index position in bits
   for (std::uint32_t n=0; n<nrows; n++) {
     if (!constant_ploidy) {
