@@ -1491,6 +1491,26 @@ class TestBgenWriter(unittest.TestCase):
         self.assertIn('out.bgen', str(ctx.exception))
         self.assertIn('cannot open', str(ctx.exception))
 
+    def test_path_like_objects(self):
+        ''' any os.PathLike can name a bgen or sample file, not only a str or Path
+        '''
+        class Named:
+            def __init__(self, path):
+                self.path = str(path)
+            def __fspath__(self):
+                return self.path
+
+        path = self.tmpdir / 'named.bgen'
+        geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
+        with BgenWriter(Named(path), 2) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
+
+        samples = self.tmpdir / 'named.sample'
+        samples.write_text('ID_1 ID_2 missing\n0 0 0\na a 0\nb b 0\n')
+        with BgenReader(Named(path), sample_path=Named(samples)) as bfile:
+            self.assertEqual(bfile.samples, ['a', 'b'])
+            self.assertEqual(bfile.rsids(), ['rs1'])
+
     def test_add_variant_direct_mismatched_file(self):
         ''' check we reject copying variant data into an incompatible bgen
 

@@ -1,6 +1,7 @@
 # cython: language_level=3, boundscheck=False, emit_linenums=True
 
 import logging
+import os
 from pathlib import Path
 import sys
 import warnings
@@ -454,11 +455,12 @@ cdef class BgenReader:
     # short of the variant count in the header
     cdef uint64_t n_iterated
     def __cinit__(self, path, sample_path='', bool delay_parsing=True):
-        if isinstance(path, Path):
-            path = str(path)
-        if isinstance(sample_path, Path):
-            sample_path = str(sample_path)
-        self.is_stdin = path is sys.stdin or str(path) in ('/dev/stdin', '-')
+        if path is sys.stdin:
+            path = '/dev/stdin'
+        # any path-like object can name the files
+        path = os.fspath(path)
+        sample_path = os.fspath(sample_path)
+        self.is_stdin = path in ('/dev/stdin', '-')
         if self.is_stdin:
             delay_parsing = True
             path = '/dev/stdin'

@@ -1,6 +1,7 @@
 # cython: language_level=3, boundscheck=False, emit_linenums=True
 
 import logging
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -113,8 +114,8 @@ cdef class BgenWriter:
     cdef uint32_t n_samples
     def __cinit__(self, path, uint32_t n_samples, samples=None, compression='zstd',
                   int layout=2, metadata=None):
-        if isinstance(path, Path):
-            path = str(path)
+        # any path-like object can name the file
+        path = os.fspath(path)
         
         if compression not in [None, 'zstd', 'zlib']:
             raise ValueError(f'compression type {compression} not one of zlib or zstd')
