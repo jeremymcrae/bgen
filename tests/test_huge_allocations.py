@@ -60,6 +60,10 @@ try:
     bfile = BgenReader(path, delay_parsing=True)
     if action == 'samples':
         print(f'SAMPLES {len(bfile.samples)}')
+    elif action == 'dosage':
+        for var in bfile:
+            var.minor_allele_dosage
+        print('PARSED')
     else:
         for var in bfile:
             var.probabilities
@@ -220,6 +224,16 @@ class TestHugeAllocations(unittest.TestCase):
                     outcome = run_capped(bad, 'iterate')
                     self._assert_rejected(outcome)
                     self.assertIn('implausible', outcome)
+
+    @unittest.skipUnless(CAN_CAP, 'needs RLIMIT_AS and /proc to cap memory')
+    def test_dosage_is_not_sized_from_an_unchecked_sample_count(self):
+        ''' a dosage array is not sized from a sample count the variant cannot back
+        '''
+        path = self._drop_sample_ids(self._write(self.tmpdir / 'dose.bgen'))
+        for claim in [500_000_000, 2_000_000_000]:
+            with self.subTest(claim=claim):
+                bad = self._claim(path, 12, claim, f'dose{claim}.bgen')
+                self._assert_rejected(run_capped(bad, 'dosage'))
 
     @unittest.skipIf(sys.platform == 'win32', 'needs resource, to measure peak memory')
     def test_overstated_header_length_is_not_allocated(self):

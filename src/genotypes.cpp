@@ -1223,6 +1223,8 @@ void Genotypes::swap_allele_dosage_complex(float * dose) {
 /// @return index into alleles of the minor allele (0 or 1)
 int Genotypes::get_minor_idx() {
   if (!minor_known) {
+    // parse first, to validate n_samples before it sizes the buffer
+    load_data_and_parse_header();
     std::unique_ptr<float[]> dose(new float[n_samples]);
     // this sets minor_idx, and the dosages themselves are not needed
     get_allele_dosage(dose.get(), true, false);

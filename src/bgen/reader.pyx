@@ -398,6 +398,8 @@ cdef class BgenVar:
         ''' dosage for the minor allele for a biallelic variant
         '''
         self.__check_closed()
+        # parse first, to validate the sample count before it sizes the array
+        self.thisptr.probs_per_sample()
         cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
         self.thisptr.minor_allele_dosage(&dose[0])
         self.__warn_if_malformed()
@@ -407,6 +409,8 @@ cdef class BgenVar:
         ''' dosage for the alt allele for a biallelic variant
         '''
         self.__check_closed()
+        # parse first, to validate the sample count before it sizes the array
+        self.thisptr.probs_per_sample()
         cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
         self.thisptr.alt_dosage(&dose[0])
         self.__warn_if_malformed()
