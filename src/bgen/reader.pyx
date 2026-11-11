@@ -418,7 +418,7 @@ cdef class BgenVar:
         self.__check_closed()
         cdef int cols = self.thisptr.probs_per_sample()
         cdef uint32_t n_samples = self.expected_n
-        cdef uint64_t size = n_samples * cols
+        cdef uint64_t size = <uint64_t> n_samples * cols
         cdef uint8_t[::1] ploidy
         if self.is_phased:
             ploidy = self.ploidy

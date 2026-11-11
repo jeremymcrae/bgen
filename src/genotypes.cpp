@@ -772,18 +772,23 @@ void Genotypes::probabilities(float * probs) {
   // one, even if a decoder is added which does not check
   probs_above_max = false;
   
-  std::uint32_t nrows;
+  std::uint64_t n_rows;
   if (!phased) {
-    nrows = n_samples;
+    n_rows = n_samples;
   } else {
     // phased probabilities require as many rows per sample as the ploidy
     if (constant_ploidy) {
-      nrows = n_samples * max_ploidy;
+      n_rows = (std::uint64_t) n_samples * max_ploidy;
     } else {
-      nrows = fast_ploidy_sum(ploidy.get(), n_samples);
+      n_rows = fast_ploidy_sum(ploidy.get(), n_samples);
     }
   }
-  
+  // the decoders index the output with 32-bit offsets
+  if (n_rows * max_probs > UINT32_MAX) {
+    throw std::invalid_argument("bgen variant holds more than 2^32 probabilities");
+  }
+  std::uint32_t nrows = (std::uint32_t) n_rows;
+
   if (layout == 1) {
     probabilities_layout1(uncompressed.get(), idx, probs, nrows);
   } else if (layout == 2) {
