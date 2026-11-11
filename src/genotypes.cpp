@@ -1107,65 +1107,43 @@ void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, f
 }
 
 #if defined(__x86_64__)
-// the AVX half of swap_allele_dosage_simple below, which only needs AVX, and is entered
-// after a runtime check for it
+// the AVX half of swap_allele_dosage below, which only needs AVX, and is entered after
+// a runtime check for it
 BGEN_TARGET_AVX
-static void swap_dosage_avx(float * dose, std::uint32_t & n_samples,
+static void swap_dosage_avx(float * dose, std::uint32_t n_samples, float ploidy,
                             std::uint32_t & n) {
-  __m256 k = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
-  __m256 batch;
+  __m256 k = _mm256_set1_ps(ploidy);
   for (; n + 8 < n_samples; n+=8) {
-    batch = _mm256_loadu_ps(dose + n);
-    _mm256_storeu_ps(dose + n, _mm256_sub_ps(k, batch));
+    _mm256_storeu_ps(dose + n, _mm256_sub_ps(k, _mm256_loadu_ps(dose + n)));
   }
 }
 #endif
 
 /// swap sample dosages to the opposing allele. Requires a biallelic variant.
 ///
-/// This replaces the values in the dose array with 2.0 - value.
-///
-/// This uses AVX and NEON vectorization to speed up calculations on relevant
-/// x86_64 and aarch64 hardware
-void Genotypes::swap_allele_dosage_simple(float * dose) {
-  std::uint32_t n=0;
-#if defined(__x86_64__)
-  if (__builtin_cpu_supports("avx")) {
-    swap_dosage_avx(dose, n_samples, n);
-  }
-#elif defined(__aarch64__)
-  float32x4_t k = vdupq_n_f32(2.0f);
-  float32x4_t batch;
-  for (; n + 4 < n_samples; n += 4) {
-    batch = vld1q_f32(dose + n);
-    vst1q_f32(dose + n, vsubq_f32(k, batch));
-  }
-#endif
-  for (; n + 4 < n_samples; n+=4) {
-    dose[n] = 2.0f - dose[n];
-    dose[n+1] = 2.0f - dose[n+1];
-    dose[n+2] = 2.0f - dose[n+2];
-    dose[n+3] = 2.0f - dose[n+3];
-  }
-  for (; n<n_samples; n++) {
-    dose[n] = 2.0f - dose[n];
-  }
-}
-
-/// swap sample dosages to the opposing allele. Requires a biallelic variant.
-///
-/// This replaces the values in the dose array with ploidy - value.
-void Genotypes::swap_allele_dosage_complex(float * dose) {
-  // reached when the ploidy varies or is not 2, so read the array only in the former case
-  if (constant_ploidy) {
-    float ploid = (float) max_ploidy;
+/// This replaces each value in the dose array with the sample's ploidy - value. A
+/// constant ploidy uses AVX or NEON on x86_64 and aarch64 hardware
+void Genotypes::swap_allele_dosage(float * dose) {
+  if (!constant_ploidy) {
     for (std::uint32_t n=0; n<n_samples; n++) {
-      dose[n] = ploid - dose[n];
+      dose[n] = (float) (this->ploidy[n]) - dose[n];
     }
     return;
   }
-  for (std::uint32_t n=0; n<n_samples; n++) {
-    dose[n] = (float) (this->ploidy[n]) - dose[n];
+  const float ploid = (float) max_ploidy;
+  std::uint32_t n=0;
+#if defined(__x86_64__)
+  if (__builtin_cpu_supports("avx")) {
+    swap_dosage_avx(dose, n_samples, ploid, n);
+  }
+#elif defined(__aarch64__)
+  float32x4_t k = vdupq_n_f32(ploid);
+  for (; n + 4 < n_samples; n += 4) {
+    vst1q_f32(dose + n, vsubq_f32(k, vld1q_f32(dose + n)));
+  }
+#endif
+  for (; n<n_samples; n++) {
+    dose[n] = ploid - dose[n];
   }
 }
 
@@ -1228,11 +1206,7 @@ void Genotypes::get_allele_dosage(float * dose, bool use_minor) {
   minor_idx = find_minor_allele(dose);
   minor_known = true;
   if (!use_minor || (minor_idx != 0)) {
-    if (constant_ploidy & (max_ploidy == 2)) {
-      swap_allele_dosage_simple(dose);
-    } else {
-      swap_allele_dosage_complex(dose);
-    }
+    swap_allele_dosage(dose);
   } 
 }
 
