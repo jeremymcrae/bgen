@@ -92,3 +92,28 @@ class TestDecodeConsistency(unittest.TestCase):
         mixed = self.read(path, 'alt_dosage')
         ref[ploidy == 1] = scaled[ploidy == 1, 0]
         self.assertTrue(np.array_equal(mixed, ploidy.astype(np.float32) - ref))
+
+    def test_inferred_probability_is_never_negative(self):
+        ''' the probability inferred as the remainder is never negative
+        '''
+        n = 2000
+        rng = np.random.default_rng(11)
+        for bit_depth in [9, 12, 16, 20, 31]:
+            first = rng.random(n)
+            geno = np.stack([first, 1 - first, np.zeros(n)], axis=1)
+            path = self.tmpdir / f'remainder_{bit_depth}.bgen'
+            with BgenWriter(path, n, compression=None) as bfile:
+                bfile.add_variant('v', 'rs', '1', 1, ['A', 'C'], geno,
+                                  bit_depth=bit_depth)
+            probs = self.read(path, 'probabilities')
+            self.assertTrue((probs >= 0).all(), f'bit_depth={bit_depth}: {probs.min()}')
+            # rounding can still leave it a float step above zero, but no further
+            self.assertTrue((probs[:, 2] < 1e-6).all(), f'bit_depth={bit_depth}')
+
+        # and the reference files, which are not written by this package
+        data = Path(__file__).parent / 'data'
+        for name in ['example.12bits.bgen', 'example.16bits.bgen']:
+            with BgenReader(data / name) as bfile:
+                for var in bfile:
+                    probs = var.probabilities
+                    self.assertFalse((probs < 0).any(), f'{name} {var.rsid}')

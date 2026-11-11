@@ -724,10 +724,10 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
         probs[offset + x] = prob;
       }
       // A negative remainder means the sample's stored probabilities sum above the maximum,
-      // so the bgen is malformed. Clamp values to zero, and flag the clamping.
-      if (remainder < -1e-6f) {
+      // so the bgen is malformed. Clamp to zero, and flag it unless within float rounding
+      if (remainder < 0.0f) {
+        probs_above_max |= (remainder < -1e-6f);
         remainder = 0.0f;
-        probs_above_max = true;
       }
       probs[offset + n_probs] = remainder;
       for (std::uint32_t x=(n_probs + 1); x<max_probs; x++) {
