@@ -525,70 +525,32 @@ void Genotypes::probabilities_layout1(char * uncompressed, std::uint32_t idx, fl
 }
 
 #if defined(__x86_64__)
-// the AVX2 half of fast_haplotype_probs below. Compiled for AVX2 in isolation,
-// so it is only ever entered after a runtime check for AVX2 support.
+/// @brief AVX2 half of fast_haplotype_probs below
+///
+/// Both probabilities are gathered from lut8, to match the scalar loop exactly. n
+/// counts output floats (two per haplotype), and idx counts input bytes
 BGEN_TARGET_AVX2
 static void haplotype_probs_avx2(char * uncompressed, std::uint32_t & idx,
                                  float * probs, std::uint32_t & nrows,
                                  std::uint32_t & n) {
-  const std::uint32_t c = 255;
-  const float f = 1.0 / 255.0f;
-  __m256i k = _mm256_set_epi32(c, c, c, c, c, c, c, c);
-  __m256 j = _mm256_set_ps(f, f, f, f, f, f, f, f);
+  const __m256i k255 = _mm256_set1_epi32(255);
+  const std::uint8_t * in = reinterpret_cast<const std::uint8_t *>(uncompressed + idx);
+  const std::uint32_t start = n;
+  for ( ; n + 16 <= nrows * 2; n += 16) {
+    // widen 8 stored bytes to 32-bit gather indices. The second allele is the remainder
+    __m256i first = _mm256_cvtepu8_epi32(_mm_loadl_epi64((const __m128i *) in));
+    __m256i second = _mm256_sub_epi32(k255, first);
+    __m256 p0 = _mm256_i32gather_ps(lut8, first, 4);
+    __m256 p1 = _mm256_i32gather_ps(lut8, second, 4);
 
-  __m128i initial;
-  __m256i widened, partner;
-  __m256 store_lo, store_hi;
-
-  // run through most of the samples, but make sure we stay well away from the
-  // end of the float array, so the mm_loadu doesn't attempt to load beyond
-  // the end of the array
-  for ( ; n + 32 < nrows * 2; n+=32) {
-    // load 16 values into a m128 register
-    initial = _mm_loadu_si128((const __m128i*) &uncompressed[idx]);
-
-    // expand the first 8 values to 32-bits, and get the corresponding delta
-    widened = _mm256_cvtepu8_epi32(initial);
-    partner = _mm256_sub_epi32(k, widened);
-
-    // interleave the registers to get paired values beside each other, then
-    // convert to float and multiply by inverted constant to get probability
-    store_lo = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpacklo_epi32(widened, partner)), j);
-    store_hi = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpackhi_epi32(widened, partner)), j);
-
-    // _mm256_unpacklo_epi32 interleaves values from two registers, but it
-    // does it within the top part of each m128 portion of the register
-    // we start with
-    // widened = [a1, b1, c1, d1, e1, f1, g1, h1]
-    // partner = [a2, b2, c2, d2, e2, f2, g2, h2]  # (1 - widened)
-
-    // we want to store the sequential partners e.g.
-    // [a1, a2, b1, b2, c1, c2, d1, d1]
-
-    // but _mm256_unpacklo_epi32 gives registers with mixed order
-    // [a1, a2, b1, b2, e1, e2, f1, f2]
-    // [c1, c2, d1, d2, g1, g2, h1, h2]
-    // this means we need to store the first and last four values in separate
-    // steps to ensure the correct ordering
-    _mm_storeu_ps(&probs[n], _mm256_castps256_ps128(store_lo));
-    _mm_storeu_ps(&probs[n + 4], _mm256_castps256_ps128(store_hi));
-    _mm_storeu_ps(&probs[n + 8], _mm256_extractf128_ps(store_lo, 1));
-    _mm_storeu_ps(&probs[n + 12], _mm256_extractf128_ps(store_hi, 1));
-
-    // now repeat for the other 8 values of the original register
-    widened = _mm256_cvtepu8_epi32(_mm_bsrli_si128(initial, 8));
-    partner = _mm256_sub_epi32(k, widened);
-
-    store_lo = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpacklo_epi32(widened, partner)), j);
-    store_hi = _mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_unpackhi_epi32(widened, partner)), j);
-
-    _mm_storeu_ps(&probs[n + 16], _mm256_castps256_ps128(store_lo));
-    _mm_storeu_ps(&probs[n + 20], _mm256_castps256_ps128(store_hi));
-    _mm_storeu_ps(&probs[n + 24], _mm256_extractf128_ps(store_lo, 1));
-    _mm_storeu_ps(&probs[n + 28], _mm256_extractf128_ps(store_hi, 1));
-
-    idx += 16;
+    // unpack interleaves within each 128-bit half, so recombine them to store in order
+    __m256 lo = _mm256_unpacklo_ps(p0, p1);
+    __m256 hi = _mm256_unpackhi_ps(p0, p1);
+    _mm256_storeu_ps(&probs[n], _mm256_permute2f128_ps(lo, hi, 0x20));
+    _mm256_storeu_ps(&probs[n + 8], _mm256_permute2f128_ps(lo, hi, 0x31));
+    in += 8;
   }
+  idx += (n - start) / 2;
 }
 
 /// @brief AVX2 half of the unphased biallelic diploid 8 bit decode
