@@ -68,11 +68,10 @@ Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t & varoffse
     read_checked(*handle, n_alleles);
   }
   
-  alleles.reserve(n_alleles);
-  for (int x=0; x < n_alleles; x++) {
-    std::string allele;
+  // read each allele directly into the vector
+  alleles.resize(n_alleles);
+  for (auto & allele : alleles) {
     read_checked_string<std::uint32_t>(*handle, allele);
-    alleles.push_back(allele);
   }
   
   std::uint32_t length;
