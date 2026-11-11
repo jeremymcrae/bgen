@@ -64,8 +64,8 @@ cdef extern from 'variant.h' namespace 'bgen':
         
         # declare public attributes
         string varid, rsid, chrom
-        int pos
-        long offset
+        uint32_t pos
+        uint64_t offset
         uint64_t next_variant_offset
         vector[string] alleles
         shared_ptr_istream handle
@@ -617,7 +617,7 @@ cdef class BgenReader:
         if self.index is None and self.thisptr.variants.size() == 0:
             self.thisptr.parse_all_variants()
         
-        cdef long offset
+        cdef uint64_t offset
         offset = self.index.offset_by_index(idx) if self.index else self.thisptr.variants[idx].offset
         try:
             return BgenVar(self.handle, offset, self.thisptr.header.layout,
