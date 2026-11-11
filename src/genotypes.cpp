@@ -71,6 +71,14 @@ static inline T load(const char * data) {
   return value;
 }
 
+/// read the next packed value of bit_depth bits, and step the bit index past it
+static inline std::uint64_t next_value(const char * data, std::uint64_t & bit_idx,
+                                       std::uint32_t bit_depth, std::uint64_t mask) {
+  std::uint64_t value = (load<std::uint64_t>(&data[bit_idx / 8]) >> (bit_idx % 8)) & mask;
+  bit_idx += bit_depth;
+  return value;
+}
+
 // uncompress a char array with zlib
 static void zlib_uncompress(char * input, std::uint32_t compressed_len,
                             char * decompressed, std::uint32_t decompressed_len) {
@@ -690,8 +698,7 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
       }
       remainder = 1.0;
       for (std::uint32_t x=0; x<n_probs; x++) {
-        prob = ((load<std::uint64_t>(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask) * factor ;
-        bit_idx += bit_depth;
+        prob = next_value(&uncompressed[idx], bit_idx, bit_depth, probs_mask) * factor;
         remainder -= prob;
         probs[offset + x] = prob;
       }
@@ -1044,13 +1051,11 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
       dose[n] = 0.0f;
       continue;
     }
-    hom = ((load<std::uint64_t>(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
-    bit_idx += bit_depth;
+    hom = next_value(&uncompressed[idx], bit_idx, bit_depth, probs_mask);
     
     het = 0;
     if (curr_ploidy == 2) {
-      het = ((load<std::uint64_t>(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask);
-      bit_idx += bit_depth;
+      het = next_value(&uncompressed[idx], bit_idx, bit_depth, probs_mask);
     }
     
     dose[n] = ((hom * curr_ploidy) + het * half_ploidy) * factor;
@@ -1106,8 +1111,7 @@ void Genotypes::ref_dosage_slow_phased(char * uncompressed, std::uint32_t idx, f
     
     float prob = 0;
     for (std::uint32_t i=0; i<curr_ploidy; i++) {
-      prob += ((load<std::uint64_t>(&uncompressed[idx + bit_idx / 8]) >> bit_idx % 8) & probs_mask) * factor;
-      bit_idx += bit_depth;
+      prob += next_value(&uncompressed[idx], bit_idx, bit_depth, probs_mask) * factor;
     }
     dose[n] = prob;
   }
