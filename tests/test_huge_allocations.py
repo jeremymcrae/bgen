@@ -127,6 +127,44 @@ class TestHugeAllocations(unittest.TestCase):
             offset += 2 + size
         return offset + 4 + 2
 
+    def _block_length_offset(self, path, n_alleles=2):
+        ''' byte offset of the genotype block's 4 byte length, which follows the alleles
+        '''
+        data = path.read_bytes()
+        offset = self._allele_length_offset(path)
+        for _ in range(n_alleles):
+            (size, ) = struct.unpack_from('<I', data, offset)
+            offset += 4 + size
+        return offset
+
+    def _claim(self, path, offset, claim, name):
+        ''' copy a bgen with the 4 byte field at an offset overwritten '''
+        bad = self.tmpdir / name
+        data = bytearray(path.read_bytes())
+        struct.pack_into('<I', data, offset, claim)
+        bad.write_bytes(bytes(data))
+        self.assertLess(bad.stat().st_size, 1000)
+        return bad
+
+    def _assert_rejected(self, outcome):
+        ''' the child reported a malformed file, rather than running out of memory '''
+        self.assertNotIn('MEMORY', outcome)
+        self.assertNotIn('DIED', outcome)
+        self.assertNotIn('STUCK', outcome)
+        self.assertNotIn('bad_alloc', outcome)
+        self.assertIn('ValueError', outcome)
+
+    @unittest.skipUnless(CAN_CAP, 'needs RLIMIT_AS and /proc to cap memory')
+    def test_overstated_genotype_block_is_not_allocated(self):
+        ''' a genotype block claiming more bytes than the file holds is rejected
+        '''
+        path = self._write(self.tmpdir / 'block.bgen')
+        offset = self._block_length_offset(path)
+        for claim in [0xFFFFFFF0, 3 * 1024 * 1024 * 1024, 700 * 1024 * 1024]:
+            with self.subTest(claim=claim):
+                bad = self._claim(path, offset, claim, f'block{claim}.bgen')
+                self._assert_rejected(run_capped(bad, 'iterate'))
+
     @unittest.skipUnless(CAN_CAP, 'needs RLIMIT_AS and /proc to cap memory')
     def test_overstated_allele_length_is_not_allocated(self):
         ''' an allele claiming more bytes than the file holds is rejected

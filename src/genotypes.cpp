@@ -200,12 +200,26 @@ void Genotypes::load_block() {
                                 "length: " + std::to_string(length));
   }
   // hold the buffer in a unique_ptr, so a read which throws on a malformed bgen
-  // cannot leak it
-  std::unique_ptr<char[]> buffer(new char[length + PROBS_READ_PAD]);
-  std::memset(buffer.get() + length, 0, PROBS_READ_PAD);
-  if (! handle->read(buffer.get(), length)) {
-    throw std::invalid_argument("couldn't read the compressed data");
+  // cannot leak it. Long blocks are read in stages, so a corrupt length only allocates
+  // what the file can supply
+  std::uint64_t capacity = std::min((std::uint64_t) length, BLOCK_READ_CHUNK);
+  std::unique_ptr<char[]> buffer(new char[capacity + PROBS_READ_PAD]);
+  std::uint64_t filled = 0;
+  while (true) {
+    if (! handle->read(buffer.get() + filled, capacity - filled)) {
+      throw std::invalid_argument("couldn't read the compressed data");
+    }
+    filled = capacity;
+    if (filled == length) {
+      break;
+    }
+    // grow the buffer for the next stage
+    capacity = std::min((std::uint64_t) length, capacity * 2);
+    std::unique_ptr<char[]> bigger(new char[capacity + PROBS_READ_PAD]);
+    std::memcpy(bigger.get(), buffer.get(), filled);
+    buffer = std::move(bigger);
   }
+  std::memset(buffer.get() + length, 0, PROBS_READ_PAD);
   block = std::move(buffer);
 }
 

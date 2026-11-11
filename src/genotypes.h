@@ -15,6 +15,10 @@ namespace bgen {
 /// probabilities_layout2 reads 8 bytes at a time, even for the final probability
 const std::uint32_t PROBS_READ_PAD = 8;
 
+/// max bytes of variant data read at once, so a corrupt block length only allocates what
+/// the file can supply
+const std::uint64_t BLOCK_READ_CHUNK = 1 << 24;
+
 /// genotype data for one variant. The unique_ptrs make it movable but not copyable, so
 /// a Variant holding one can go into a vector without two copies freeing one buffer
 class Genotypes {
