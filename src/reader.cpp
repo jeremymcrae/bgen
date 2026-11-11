@@ -24,9 +24,9 @@ CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool del
   // stdin is read from its descriptor rather than held as std::cin, so that the error
   // state and the buffered read-ahead belong to this reader alone
   if (is_stdin) {
-    handle = std::shared_ptr<std::istream>(new DescriptorStream(0));
+    handle = std::make_shared<DescriptorStream>(0);
   } else {
-    handle = std::shared_ptr<std::istream>(new BufferedFile(path));
+    handle = std::make_shared<BufferedFile>(path);
   }
   if (handle->fail()) {
     throw std::invalid_argument("error reading from '" + path + "'");
