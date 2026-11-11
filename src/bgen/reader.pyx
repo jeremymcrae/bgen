@@ -200,7 +200,6 @@ cdef class BgenVar:
     '''
     cdef Variant * thisptr
     cdef IStream handle
-    cdef uint64_t offset
     cdef int _layout, _compression, expected_n
     cdef bool is_stdin
     cdef OpenStatus is_open
@@ -214,7 +213,6 @@ cdef class BgenVar:
                   OpenStatus is_open,
                   ):
         self.handle = handle
-        self.offset = offset
         self._layout = layout
         self._compression = compression
         self.expected_n = expected_n
@@ -292,7 +290,7 @@ cdef class BgenVar:
         return self.thisptr.pos
     @property
     def fileoffset(self):
-        return self.offset
+        return self.thisptr.offset
     @property
     def next_variant_offset(self):
         return self.thisptr.next_variant_offset
@@ -337,7 +335,7 @@ cdef class BgenVar:
         cdef uint8_t[::1] arr = np.empty(size, dtype=np.uint8, order='C')
         memcpy(&arr[0], ploid, size)
         return np.asarray(arr)
-    def __warn_if_malformed(self):
+    cdef __warn_if_malformed(self):
         ''' warn if the decode just done found probabilities summing above the maximum
 
         The bgen spec has the probabilities of a sample sum to the largest value the bit
@@ -358,28 +356,29 @@ cdef class BgenVar:
         '''
         self.__check_closed()
         return self.thisptr.get_minor_allele().decode('utf8')
+    cdef _dosage(self, bint minor):
+        ''' dosage for the minor allele, or else the alt allele, of a biallelic variant
+        '''
+        self.__check_closed()
+        # parse first, to validate the sample count before it sizes the array
+        self.thisptr.probs_per_sample()
+        cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
+        if minor:
+            self.thisptr.minor_allele_dosage(&dose[0])
+        else:
+            self.thisptr.alt_dosage(&dose[0])
+        self.__warn_if_malformed()
+        return np.asarray(dose)
     @property
     def minor_allele_dosage(self):
         ''' dosage for the minor allele for a biallelic variant
         '''
-        self.__check_closed()
-        # parse first, to validate the sample count before it sizes the array
-        self.thisptr.probs_per_sample()
-        cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
-        self.thisptr.minor_allele_dosage(&dose[0])
-        self.__warn_if_malformed()
-        return np.asarray(dose)
+        return self._dosage(True)
     @property
     def alt_dosage(self):
         ''' dosage for the alt allele for a biallelic variant
         '''
-        self.__check_closed()
-        # parse first, to validate the sample count before it sizes the array
-        self.thisptr.probs_per_sample()
-        cdef float[:] dose = np.empty(self.expected_n, dtype=np.float32, order='C')
-        self.thisptr.alt_dosage(&dose[0])
-        self.__warn_if_malformed()
-        return np.asarray(dose)
+        return self._dosage(False)
     @property
     def probabilities(self):
         ''' get the allelic probabilities for a variant
