@@ -1018,7 +1018,6 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
   // doubles it. Signed makes the float conversion one instruction, and these are masked
   std::int64_t het;
   std::int64_t hom;
-  std::uint32_t hom_alt;
   std::uint64_t bit_idx = 0;  // index position in bits
   for (std::uint32_t n=0; n<nrows; n++) {
     if (!constant_ploidy) {
@@ -1051,8 +1050,7 @@ void Genotypes::ref_dosage_slow_unphased(char * uncompressed, std::uint32_t idx,
     }
     if (layout == 1) {
       // layout1 stores hom alt probability, and all zeros indicates missingness
-      hom_alt = load<std::uint16_t>(&uncompressed[idx + bit_idx / 8]);
-      bit_idx += bit_depth;
+      std::uint64_t hom_alt = next_value(&uncompressed[idx], bit_idx, bit_depth, probs_mask);
       if ((hom == 0) & (het == 0) & (hom_alt == 0)) {
         missing.push_back(n);
       }
