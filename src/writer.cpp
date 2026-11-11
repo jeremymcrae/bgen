@@ -31,6 +31,11 @@ static void append_bytes(std::vector<char> &buf, const void *data, std::size_t s
   buf.insert(buf.end(), bytes, bytes + size);
 }
 
+// write the raw bytes of a string
+static void write_string(std::ofstream &handle, const std::string &value) {
+  handle.write(value.data(), value.size());
+}
+
 /// @brief the current write position, or a clear error if there is not one
 ///
 /// These positions become the header's variant offset and the .bgi index, so a wrong one
@@ -104,8 +109,8 @@ void CppBgenWriter::write_header(std::string &free_data,
   // write zero variants for now, is fixed while closing
   handle.write(reinterpret_cast<char *>(&n_variants), 4);
   handle.write(reinterpret_cast<char *>(&n_samples), 4);
-  handle << "bgen";
-  handle << free_data;
+  handle.write("bgen", 4);
+  write_string(handle, free_data);
 
   // check and write flags
   if (compression > 2) {
@@ -168,7 +173,7 @@ void CppBgenWriter::add_samples(std::vector<std::string> &samples) {
   for (auto &x : samples) {
     id_size = x.size();
     handle.write(reinterpret_cast<char *>(&id_size), 2);
-    handle << x;
+    write_string(handle, x);
   }
   // the offset is a four byte field, so check it in 64 bits first, since the check above
   // bounds the sample block alone, and the header pushes the two together over
@@ -215,13 +220,13 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
   std::uint16_t tmp;
   tmp = varid.size();
   handle.write(reinterpret_cast<char *>(&tmp), 2);
-  handle << varid;
+  write_string(handle, varid);
   tmp = rsid.size();
   handle.write(reinterpret_cast<char *>(&tmp), 2);
-  handle << rsid;
+  write_string(handle, rsid);
   tmp = chrom.size();
   handle.write(reinterpret_cast<char *>(&tmp), 2);
-  handle << chrom;
+  write_string(handle, chrom);
   handle.write(reinterpret_cast<char *>(&pos), 4);
   
   if (layout != 1) {
@@ -233,7 +238,7 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
   for (auto &x : alleles) {
     allele_size = x.size();
     handle.write(reinterpret_cast<char *>(&allele_size), 4);
-    handle << x;
+    write_string(handle, x);
   }
   handle.flush();
   return var_offset;
