@@ -24,11 +24,9 @@ inline std::shared_ptr<std::istream> borrowed_stream(std::istream * handle) {
 #if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
   #define BGEN_TARGET_AVX  __attribute__((target("avx")))
   #define BGEN_TARGET_AVX2 __attribute__((target("avx2")))
-  #define BGEN_TARGET_SSE4 __attribute__((target("sse4.1")))
 #else
   #define BGEN_TARGET_AVX
   #define BGEN_TARGET_AVX2
-  #define BGEN_TARGET_SSE4
 #endif
 
 /// read a fixed width value from a stream, and report whether the read worked. A

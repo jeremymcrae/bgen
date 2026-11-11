@@ -34,9 +34,8 @@ static std::uint64_t ploidy_sum_avx2(std::uint8_t * x, std::uint32_t & size, std
   return arr[0] + arr[1] + arr[2] + arr[3];
 }
 
-// sum ploidy states with SSE, for x86_64 CPUs without AVX2
-BGEN_TARGET_SSE4
-static std::uint64_t ploidy_sum_sse4(std::uint8_t * x, std::uint32_t & size, std::uint32_t & i) {
+// sum ploidy states with SSE2, which every x86_64 CPU has, for those without AVX2
+static std::uint64_t ploidy_sum_sse2(std::uint8_t * x, std::uint32_t & size, std::uint32_t & i) {
   std::uint64_t arr[2];
   __m128i _sum = _mm_setzero_si128();
   const __m128i zero = _mm_setzero_si128();
@@ -75,9 +74,8 @@ static void range_avx2(std::uint8_t * x, std::uint32_t & size, size_t & i,
   }
 }
 
-// get min and max of ploidy values with SSE, for x86_64 CPUs without AVX2
-BGEN_TARGET_SSE4
-static void range_sse4(std::uint8_t * x, std::uint32_t & size, size_t & i,
+// get min and max of ploidy values with SSE2, for x86_64 CPUs without AVX2
+static void range_sse2(std::uint8_t * x, std::uint32_t & size, size_t & i,
                        std::uint8_t & min_val, std::uint8_t & max_val) {
   std::array<std::uint8_t, 16> arr;
   __m128i values;
@@ -331,8 +329,8 @@ std::uint64_t fast_ploidy_sum(std::uint8_t * x, std::uint32_t & size) {
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
     total += ploidy_sum_avx2(x, size, i);
-  } else if (__builtin_cpu_supports("sse4.1")) {
-    total += ploidy_sum_sse4(x, size, i);
+  } else {
+    total += ploidy_sum_sse2(x, size, i);
   }
 #elif defined(__aarch64__)
   total += ploidy_sum_neon(x, size, i);
@@ -354,8 +352,8 @@ Range fast_range(std::uint8_t * x, std::uint32_t & size) {
 #if defined(__x86_64__)
   if (__builtin_cpu_supports("avx2")) {
     range_avx2(x, size, i, min_val, max_val);
-  } else if (__builtin_cpu_supports("sse4.1")) {
-    range_sse4(x, size, i, min_val, max_val);
+  } else {
+    range_sse2(x, size, i, min_val, max_val);
   }
 #elif defined(__aarch64__)
   range_neon(x, size, i, min_val, max_val);

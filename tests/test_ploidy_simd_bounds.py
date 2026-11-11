@@ -5,7 +5,7 @@ have to account for the width of the load, or the final iteration reads past the
 the ploidy array, which faults if the array ends near a mapping boundary.
 
 None of this is reachable from Python on a machine with AVX2, since fast_ploidy_sum only
-calls the SSE4 version when AVX2 is missing, and there is no way to ask for the SSE4 path
+calls the SSE2 version when AVX2 is missing, and there is no way to ask for the SSE2 path
 at runtime. So these tests compile the helpers directly and call them with the ploidy
 array butted up against an unreadable page, which turns any overread into a crash rather
 than something that depends on allocator slack.
@@ -57,18 +57,18 @@ int main() {
       if (x[j] > want_max) { want_max = x[j]; }
     }
 
-    // the SSE4 helpers are static and skipped on this cpu, so call them directly, then
+    // the SSE2 helpers are static and skipped on this cpu, so call them directly, then
     // finish the remainder the way fast_ploidy_sum does
     std::uint32_t i = 0;
     std::uint32_t sz = size;
-    std::uint64_t got = ploidy_sum_sse4(x, sz, i);
+    std::uint64_t got = ploidy_sum_sse2(x, sz, i);
     for (; i < size; i++) { got += x[i]; }
     if (got != want) { failures++; }
 
     std::uint8_t got_min = 255, got_max = 0;
     size_t k = 0;
     sz = size;
-    range_sse4(x, sz, k, got_min, got_max);
+    range_sse2(x, sz, k, got_min, got_max);
     for (; k < size; k++) {
       if (x[k] < got_min) { got_min = x[k]; }
       if (x[k] > got_max) { got_max = x[k]; }
@@ -107,7 +107,7 @@ int main() {
   // max_ploidy is read as a whole byte from the file, and the constant ploidy branch of
   // parse_ploidy memsets the array to it without masking, so 255 is reachable
   const std::uint8_t worst = 255;
-  // well past where 32-bit lanes would wrap, about 33.7M for avx2 and 16.8M for sse4
+  // well past where 32-bit lanes would wrap, about 33.7M for avx2 and 16.8M for sse2
   for (std::uint32_t size : {16843024u, 33686048u, 40000000u}) {
     std::vector<std::uint8_t> values;
     try {
@@ -119,10 +119,10 @@ int main() {
     std::uint32_t n = size;
     if (fast_ploidy_sum(values.data(), n) != want) { failures++; }
 
-    // the sse4 helper is skipped on a cpu with avx2, so drive it directly as well
+    // the sse2 helper is skipped on a cpu with avx2, so drive it directly as well
     std::uint32_t i = 0;
     n = size;
-    std::uint64_t got = ploidy_sum_sse4(values.data(), n, i);
+    std::uint64_t got = ploidy_sum_sse2(values.data(), n, i);
     for (; i < size; i++) { got += values[i]; }
     if (got != want) { failures++; }
   }
