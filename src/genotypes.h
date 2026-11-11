@@ -104,6 +104,7 @@ private:
 };
 
 std::uint32_t get_max_probs(int max_ploidy, int n_alleles, bool phased);
+std::array<std::uint32_t, 64> probs_per_ploidy(int n_alleles, int max_ploidy);
 
 } // namespace bgen
 

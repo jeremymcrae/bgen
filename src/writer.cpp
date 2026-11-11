@@ -478,22 +478,6 @@ static inline std::uint64_t encode_group(const double *probs, std::uint32_t n_pr
   return bit_idx;
 }
 
-/// @brief precompute number of probabilities per sample for every ploidy (unphased)
-///
-/// Only entries up to max_ploidy are filled, since higher ones cannot occur, and are not
-/// even representable (12 alleles at a ploidy of 63 exceeds a 32-bit count)
-///
-/// @param n_alleles allele count for the variant
-/// @param max_ploidy highest ploidy any sample has
-/// @return counts indexed by ploidy, valid up to max_ploidy
-static std::array<std::uint32_t, 64> probs_per_ploidy(int n_alleles, int max_ploidy) {
-  std::array<std::uint32_t, 64> counts{};
-  for (int ploid = 0; ploid <= max_ploidy; ploid++) {
-    counts[ploid] = get_max_probs(ploid, n_alleles, false);
-  }
-  return counts;
-}
-
 /// @brief encode a range of samples of the biallelic, unphased, ploidy 2, 8 bit shape
 ///
 /// Split out so the vector paths below can hand back any batch they decline, which keeps

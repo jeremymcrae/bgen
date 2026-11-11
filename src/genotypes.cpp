@@ -261,6 +261,22 @@ std::uint32_t get_max_probs(int max_ploidy, int n_alleles, bool phased) {
   return n_choose_k(max_ploidy + n_alleles - 1, n_alleles - 1);
 }
 
+/// @brief number of probabilities per sample at every ploidy, for unphased data
+///
+/// Only entries up to max_ploidy are filled, since higher ones cannot occur, and are not
+/// even representable (12 alleles at a ploidy of 63 exceeds a 32-bit count)
+///
+/// @param n_alleles allele count for the variant
+/// @param max_ploidy highest ploidy any sample has
+/// @return counts indexed by ploidy, valid up to max_ploidy
+std::array<std::uint32_t, 64> probs_per_ploidy(int n_alleles, int max_ploidy) {
+  std::array<std::uint32_t, 64> counts{};
+  for (int ploid = 0; ploid <= max_ploidy; ploid++) {
+    counts[ploid] = get_max_probs(ploid, n_alleles, false);
+  }
+  return counts;
+}
+
 /// @brief number of bytes the packed probability data needs for this variant
 ///
 /// Every sample stores all but one probability per group, at bit_depth bits each, and
@@ -289,20 +305,10 @@ std::uint64_t Genotypes::probability_bytes() {
     values = phased ? total_ploidy * ((std::uint64_t) n_alleles - 1) : total_ploidy;
   } else {
     // unphased, multi-allelic and varying ploidy, so each sample stores a different
-    // number of genotypes. The ploidy is masked to 6 bits, so 64 counts cover them all
-    //
-    // Only fill up to max_ploidy, because higher counts cannot occur and may
-    // cause problems e.g. 12 alleles at a ploidy of 63 overflows a 32-bit count
-    std::uint32_t counts[64];
-    for (int ploid=0; ploid <= max_ploidy; ploid++) {
-      std::uint32_t n_probs = get_max_probs(ploid, n_alleles, phased);
-      if (n_probs < 1) {
-        throw std::invalid_argument("bgen variant stores no probabilities per sample");
-      }
-      counts[ploid] = n_probs - 1;
-    }
+    // number of genotypes
+    std::array<std::uint32_t, 64> counts = probs_per_ploidy(n_alleles, max_ploidy);
     for (std::uint32_t n=0; n < n_samples; n++) {
-      values += counts[ploidy[n]];
+      values += counts[ploidy[n]] - 1;
     }
   }
   std::uint64_t bits = values * bit_depth;
@@ -669,17 +675,18 @@ void Genotypes::probabilities_layout2(char * uncompressed, std::uint32_t idx, fl
     // fast path for phased data with ploidy=2, and 8 bits per probability
     fast_haplotype_probs(uncompressed, idx, probs, nrows);
   } else {
-    for (std::uint32_t offset=0; offset < (nrows * max_probs); offset += max_probs) {
-      // calculate the number of probabilities per sample (depends on whether the
-      // data is phased, the sample ploidy and the number of alleles)
-      if (constant_ploidy) {
-        n_probs = max_less_1;
-      } else if (phased) {
-        n_probs = n_alleles - 1;
-      } else if ((ploidy[offset / max_probs] == 2) && (n_alleles == 2)) {
-        n_probs = 2;
-      } else {
-        n_probs = n_choose_k(ploidy[offset / max_probs] + n_alleles - 1, n_alleles - 1) - 1;
+    // every row stores max_probs - 1 values, unless the data is unphased with a varying
+    // ploidy, where the number depends on the ploidy of the sample
+    const bool varies = !constant_ploidy && !phased;
+    std::array<std::uint32_t, 64> ploidy_probs;
+    if (varies) {
+      ploidy_probs = probs_per_ploidy(n_alleles, max_ploidy);
+    }
+    n_probs = max_less_1;
+    std::uint32_t row = 0;
+    for (std::uint32_t offset=0; offset < (nrows * max_probs); offset += max_probs, row++) {
+      if (varies) {
+        n_probs = ploidy_probs[ploidy[row]] - 1;
       }
       remainder = 1.0;
       for (std::uint32_t x=0; x<n_probs; x++) {
