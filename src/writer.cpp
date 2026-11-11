@@ -30,11 +30,16 @@ static void append_bytes(std::vector<char> &buf, const void *data, std::size_t s
   buf.insert(buf.end(), bytes, bytes + size);
 }
 
+// write a fixed width value
+template <typename T>
+static void write_value(std::ofstream &handle, T value) {
+  handle.write(reinterpret_cast<const char *>(&value), sizeof(T));
+}
+
 // write a string, preceded by its length as an integer of the given type
 template <typename LenType>
 static void write_prefixed_string(std::ofstream &handle, const std::string &value) {
-  LenType size = (LenType) value.size();
-  handle.write(reinterpret_cast<const char *>(&size), sizeof(LenType));
+  write_value(handle, (LenType) value.size());
   handle.write(value.data(), value.size());
 }
 
@@ -71,7 +76,7 @@ const std::uint32_t N_VARIANTS_POS = 8;
 static void write_at_offset(std::ofstream &handle, std::uint32_t val, std::uint32_t offset) {
   std::uint64_t orig_pos = current_position(handle);
   handle.seekp(offset);
-  handle.write(reinterpret_cast<char *>(&val), 4);
+  write_value(handle, val);
   handle.seekp(orig_pos);
 }
 
@@ -109,11 +114,11 @@ void CppBgenWriter::write_header(const std::string &free_data,
   std::uint32_t header_len = 20 + free_data.size();
   write_at_offset(handle, header_len, VARIANT_DATA_OFFSET_POS);
   handle.seekp(4);
-  handle.write(reinterpret_cast<char *>(&header_len), 4);
+  write_value(handle, header_len);
 
   // write zero variants for now, is fixed while closing
-  handle.write(reinterpret_cast<char *>(&n_variants), 4);
-  handle.write(reinterpret_cast<char *>(&n_samples), 4);
+  write_value(handle, n_variants);
+  write_value(handle, n_samples);
   handle.write("bgen", 4);
   handle.write(free_data.data(), free_data.size());
   std::uint32_t sample_id_flag = samples.size() > 0;
@@ -121,7 +126,7 @@ void CppBgenWriter::write_header(const std::string &free_data,
   flags |= compression;
   flags |= layout << 2;
   flags |= sample_id_flag << 31;
-  handle.write(reinterpret_cast<char *>(&flags), 4);
+  write_value(handle, flags);
 }
 
 /// @brief check a string fits the 16-bit length field the bgen stores it behind
@@ -157,10 +162,8 @@ void CppBgenWriter::add_samples(const std::vector<std::string> &samples) {
                                 " bytes, which overflows the bgen sample block "
                                 "length field");
   }
-  std::uint32_t samples_len = (std::uint32_t) block_len;
-  handle.write(reinterpret_cast<char *>(&samples_len), 4);
-  std::uint32_t size = samples.size();
-  handle.write(reinterpret_cast<char *>(&size), 4);
+  write_value(handle, (std::uint32_t) block_len);
+  write_value(handle, (std::uint32_t) samples.size());
 
   // write each sample ID to the file, preceded by its length
   for (auto &x : samples) {
@@ -199,16 +202,15 @@ std::uint64_t CppBgenWriter::write_variant_header(const std::string &varid,
   }
   n_variants += 1;
   if (layout == 1) {
-    handle.write(reinterpret_cast<char *>(&n_samples), 4);
+    write_value(handle, n_samples);
   }
   write_prefixed_string<std::uint16_t>(handle, varid);
   write_prefixed_string<std::uint16_t>(handle, rsid);
   write_prefixed_string<std::uint16_t>(handle, chrom);
-  handle.write(reinterpret_cast<char *>(&pos), 4);
+  write_value(handle, pos);
   
   if (layout != 1) {
-    std::uint16_t n_alleles = alleles.size();
-    handle.write(reinterpret_cast<char *>(&n_alleles), 2);
+    write_value(handle, (std::uint16_t) alleles.size());
   }
 
   for (auto &x : alleles) {
