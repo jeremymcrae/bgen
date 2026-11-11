@@ -122,10 +122,7 @@ void CppBgenWriter::write_header(const std::string &free_data,
   handle.write("bgen", 4);
   handle.write(free_data.data(), free_data.size());
   std::uint32_t sample_id_flag = samples.size() > 0;
-  std::uint32_t flags = 0;
-  flags |= compression;
-  flags |= layout << 2;
-  flags |= sample_id_flag << 31;
+  std::uint32_t flags = compression | (layout << 2) | (sample_id_flag << 31);
   write_value(handle, flags);
 }
 
