@@ -459,12 +459,12 @@ cdef class BgenReader:
             path = str(path)
         if isinstance(sample_path, Path):
             sample_path = str(sample_path)
-        self.is_stdin = self.__is_from_stdin(path)
+        self.is_stdin = path is sys.stdin or str(path) in ('/dev/stdin', '-')
         if self.is_stdin:
             delay_parsing = True
             path = '/dev/stdin'
         
-        if Path(path).exists() and Path(path).is_dir():
+        if Path(path).is_dir():
             raise ValueError(f'bgen path is for a folder: {path}')
         
         delay_parsing |= self._check_for_index(path)
@@ -473,22 +473,13 @@ cdef class BgenReader:
         self.sample_path = sample_path.encode('utf8')
         self.delay_parsing = delay_parsing
         
-        samp = '' if sample_path == '' else f', (samples={self.sample_path.decode("utf")})'
-        logging.debug(f'opening BgenFile from {self.path.decode("utf")}{samp}')
+        samp = '' if sample_path == '' else f', (samples={sample_path})'
+        logging.debug(f'opening BgenFile from {path}{samp}')
         self.thisptr = new CppBgenReader(self.path, self.sample_path, self.delay_parsing)
         self.handle = wrap_stream(self.thisptr.handle)
         self.is_open = OpenStatus()
         self.offset = self.thisptr.first_variant_offset()
         self.n_iterated = 0
-    
-    def __is_from_stdin(self, bgen_path):
-        if bgen_path is sys.stdin:
-            return True
-        elif str(bgen_path) == '/dev/stdin':
-            return True
-        elif str(bgen_path) == '-':
-            return True
-        return False
     
     def __dealloc__(self):
         # a deallocated reader has nobody left to report errors to, so drop them
