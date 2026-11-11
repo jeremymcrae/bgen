@@ -40,16 +40,13 @@ cdef extern from "<fstream>" namespace "std":
 cdef extern from 'writer.h' namespace 'bgen':
     cdef cppclass CppBgenWriter:
         # declare class constructor and methods
-        CppBgenWriter(string &path, uint32_t n_samples, string &free_data, 
-                   uint32_t compression, uint32_t layout, vector[string] &samples) except +
-        uint64_t write_variant_header(string &varid, string &rsid, string &chrom, 
-                        uint32_t &pos, vector[string] &alleles, uint32_t _n_samples) except +
+        CppBgenWriter(const string &path, uint32_t n_samples, const string &free_data,
+                   uint32_t compression, uint32_t layout, const vector[string] &samples) except +
+        uint64_t write_variant_header(const string &varid, const string &rsid,
+                        const string &chrom, uint32_t pos, const vector[string] &alleles) except +
         uint64_t write_variant_direct(const char * data, size_t size) except +
         void encode_genotype_data(uint16_t n_alleles,
-                         double *genotypes, uint32_t geno_len, uint8_t ploidy,
-                         bool phased, uint8_t bit_depth) except +
-        void encode_genotype_data(uint16_t n_alleles,
-                         double *genotypes, uint32_t geno_len, uint8_t *ploidy,
+                         double *genotypes, uint32_t geno_len, const uint8_t *ploidy,
                          uint8_t min_ploidy, uint8_t max_ploidy,
                          bool phased, uint8_t bit_depth) except +
         uint64_t write_genotype_data() except +
@@ -330,18 +327,19 @@ cdef class BgenWriter:
         
         self._validate_layout1_data(_alleles, n_genos, phased)
         
+        # the ploidy array is only passed on when the ploidy varies
+        cdef const uint8_t * ploidy_ptr = NULL
+        if min_ploidy != max_ploidy:
+            ploidy_ptr = &ploidy_arr[0]
+        
         # encode the genotypes before writing anything, so that a variant with
         # invalid genotypes cannot leave a partial variant in the bgen file
         cdef uint32_t geno_len = n_samples * n_genos
-        if min_ploidy == max_ploidy:
-            self.thisptr.encode_genotype_data(_alleles.size(), <double *> &geno_c[0, 0],
-                                           geno_len, min_ploidy, phased, bit_depth)
-        else:
-            self.thisptr.encode_genotype_data(_alleles.size(), <double *> &geno_c[0, 0],
-                                           geno_len, <uint8_t *> &ploidy_arr[0], min_ploidy, 
-                                           max_ploidy, phased, bit_depth)
+        self.thisptr.encode_genotype_data(_alleles.size(), <double *> &geno_c[0, 0],
+                                          geno_len, ploidy_ptr, min_ploidy, max_ploidy,
+                                          phased, bit_depth)
         
-        var_offset = self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles, n_samples)
+        var_offset = self.thisptr.write_variant_header(_varid, _rsid, _chrom, pos, _alleles)
         end_offset = self.thisptr.write_genotype_data()
         
         self.indexer.add_variant(chrom, int(pos), rsid, alleles, var_offset, 

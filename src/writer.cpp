@@ -30,8 +30,11 @@ static void append_bytes(std::vector<char> &buf, const void *data, std::size_t s
   buf.insert(buf.end(), bytes, bytes + size);
 }
 
-// write the raw bytes of a string
-static void write_string(std::ofstream &handle, const std::string &value) {
+// write a string, preceded by its length as an integer of the given type
+template <typename LenType>
+static void write_prefixed_string(std::ofstream &handle, const std::string &value) {
+  LenType size = (LenType) value.size();
+  handle.write(reinterpret_cast<const char *>(&size), sizeof(LenType));
   handle.write(value.data(), value.size());
 }
 
@@ -90,8 +93,8 @@ CppBgenWriter::~CppBgenWriter() {
   }
 }
 
-void CppBgenWriter::write_header(std::string &free_data,
-                              std::vector<std::string> &samples) {
+void CppBgenWriter::write_header(const std::string &free_data,
+                              const std::vector<std::string> &samples) {
   if (compression > 2) {
     throw std::invalid_argument("compression flag must be 0, 1, or 2");
   }
@@ -131,7 +134,7 @@ static void check_length_fits(const std::string &value, const char *field) {
   }
 }
 
-void CppBgenWriter::add_samples(std::vector<std::string> &samples) {
+void CppBgenWriter::add_samples(const std::vector<std::string> &samples) {
   if (samples.size() == 0) { return; }
 
   if (samples.size() != n_samples) {
@@ -159,12 +162,9 @@ void CppBgenWriter::add_samples(std::vector<std::string> &samples) {
   std::uint32_t size = samples.size();
   handle.write(reinterpret_cast<char *>(&size), 4);
 
-  // write each sample ID to the file, preceeded by each ID length
-  std::uint16_t id_size;
+  // write each sample ID to the file, preceded by its length
   for (auto &x : samples) {
-    id_size = x.size();
-    handle.write(reinterpret_cast<char *>(&id_size), 2);
-    write_string(handle, x);
+    write_prefixed_string<std::uint16_t>(handle, x);
   }
   // the offset is a four byte field, so check it in 64 bits first, since the check above
   // bounds the sample block alone, and the header pushes the two together over
@@ -177,16 +177,12 @@ void CppBgenWriter::add_samples(std::vector<std::string> &samples) {
   write_at_offset(handle, (std::uint32_t) data_offset, VARIANT_DATA_OFFSET_POS);
 }
 
-std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
-                                                  std::string &rsid,
-                                                  std::string &chrom,
-                                                  std::uint32_t &pos,
-                                                  std::vector<std::string> &alleles,
-                                                  std::uint32_t _n_samples) {
+std::uint64_t CppBgenWriter::write_variant_header(const std::string &varid,
+                                                  const std::string &rsid,
+                                                  const std::string &chrom,
+                                                  std::uint32_t pos,
+                                                  const std::vector<std::string> &alleles) {
   std::uint64_t var_offset = current_position(handle);
-  if (_n_samples != n_samples) {
-    throw std::invalid_argument("number of samples doesn't match sample count in file");
-  }
   if ((layout == 1) && alleles.size() != 2) {
     throw std::invalid_argument("layout 1 requires exactly two alleles.");
   }
@@ -203,18 +199,11 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
   }
   n_variants += 1;
   if (layout == 1) {
-    handle.write(reinterpret_cast<char *>(&_n_samples), 4);
+    handle.write(reinterpret_cast<char *>(&n_samples), 4);
   }
-  std::uint16_t tmp;
-  tmp = varid.size();
-  handle.write(reinterpret_cast<char *>(&tmp), 2);
-  write_string(handle, varid);
-  tmp = rsid.size();
-  handle.write(reinterpret_cast<char *>(&tmp), 2);
-  write_string(handle, rsid);
-  tmp = chrom.size();
-  handle.write(reinterpret_cast<char *>(&tmp), 2);
-  write_string(handle, chrom);
+  write_prefixed_string<std::uint16_t>(handle, varid);
+  write_prefixed_string<std::uint16_t>(handle, rsid);
+  write_prefixed_string<std::uint16_t>(handle, chrom);
   handle.write(reinterpret_cast<char *>(&pos), 4);
   
   if (layout != 1) {
@@ -222,11 +211,8 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
     handle.write(reinterpret_cast<char *>(&n_alleles), 2);
   }
 
-  std::uint32_t allele_size;
   for (auto &x : alleles) {
-    allele_size = x.size();
-    handle.write(reinterpret_cast<char *>(&allele_size), 4);
-    write_string(handle, x);
+    write_prefixed_string<std::uint32_t>(handle, x);
   }
   return var_offset;
 }
@@ -887,7 +873,7 @@ static std::vector<std::uint8_t> encode_layout2(
                     std::uint16_t n_alleles,
                     double *genotypes,
                     std::uint32_t geno_len,
-                    uint8_t *ploidy,
+                    const std::uint8_t *ploidy,
                     std::uint8_t min_ploidy,
                     std::uint8_t max_ploidy,
                     bool phased,
@@ -960,24 +946,13 @@ static std::vector<std::uint8_t> encode_layout2(
   return encoded;
 }
 
-// convenience function for constant ploidy
-void CppBgenWriter::encode_genotype_data(std::uint16_t n_alleles,
-                                         double *genotypes,
-                                         std::uint32_t geno_len,
-                                         std::uint8_t ploidy,
-                                         bool phased,
-                                         std::uint8_t bit_depth)
-{
-  std::uint8_t *ploidy_vector = {};
-  encode_genotype_data(n_alleles, genotypes, geno_len, ploidy_vector, ploidy, ploidy, phased, bit_depth);
-}
-
 // encode (and compress) a genotype block, ready for write_genotype_data(). This never
-// touches the file handle, so an error it raises leaves the bgen unchanged
+// touches the file handle, so an error it raises leaves the bgen unchanged. The ploidy
+// array is only read when the ploidy varies
 void CppBgenWriter::encode_genotype_data(std::uint16_t n_alleles,
                                          double *genotypes,
                                          std::uint32_t geno_len,
-                                         uint8_t *ploidy,
+                                         const std::uint8_t *ploidy,
                                          std::uint8_t min_ploidy,
                                          std::uint8_t max_ploidy,
                                          bool phased,

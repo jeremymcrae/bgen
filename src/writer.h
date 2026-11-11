@@ -19,15 +19,18 @@ class CppBgenWriter {
   bool closed=false;
   // genotype block (length prefixes included) held between encoding and writing
   std::vector<char> pending;
+  void write_header(const std::string &free_data,
+                    const std::vector<std::string> &samples);
+  void add_samples(const std::vector<std::string> &samples);
 public:
-  CppBgenWriter(std::string &path,
+  CppBgenWriter(const std::string &path,
              std::uint32_t _n_samples,
-             std::string &free_data,
-             uint32_t _compression,
-             uint32_t _layout,
-             std::vector<std::string> &samples) : n_samples(_n_samples),
-                                                  compression(_compression),
-                                                  layout(_layout)
+             const std::string &free_data,
+             std::uint32_t _compression,
+             std::uint32_t _layout,
+             const std::vector<std::string> &samples) : n_samples(_n_samples),
+                                                        compression(_compression),
+                                                        layout(_layout)
   {
     handle.open(path, std::ios::out | std::ios::binary);
     if (!handle.is_open()) {
@@ -37,32 +40,21 @@ public:
     write_header(free_data, samples);
     add_samples(samples);
   }
-  CppBgenWriter() {}
   ~CppBgenWriter();
-  void write_header(std::string &free_data,
-                    std::vector<std::string> &samples);
-  void add_samples(std::vector<std::string> &samples);
-  std::uint64_t write_variant_header(std::string &varid,
-                                     std::string &rsid,
-                                     std::string &chrom,
-                                     std::uint32_t &pos,
-                                     std::vector<std::string> &alleles,
-                                     std::uint32_t _n_samples);
+  std::uint64_t write_variant_header(const std::string &varid,
+                                     const std::string &rsid,
+                                     const std::string &chrom,
+                                     std::uint32_t pos,
+                                     const std::vector<std::string> &alleles);
   std::uint64_t write_variant_direct(const char * data, std::size_t size);
   void encode_genotype_data(std::uint16_t n_alleles,
                             double *genotypes,
                             std::uint32_t geno_len,
-                            std::uint8_t ploidy = 2,
-                            bool phased = 0,
-                            std::uint8_t bit_depth = 8);
-  void encode_genotype_data(std::uint16_t n_alleles,
-                            double *genotypes,
-                            std::uint32_t geno_len,
-                            uint8_t *ploidy,
-                            std::uint8_t min_ploidy = 2,
-                            std::uint8_t max_ploidy = 2,
-                            bool phased = 0,
-                            std::uint8_t bit_depth = 8);
+                            const std::uint8_t *ploidy,
+                            std::uint8_t min_ploidy,
+                            std::uint8_t max_ploidy,
+                            bool phased,
+                            std::uint8_t bit_depth);
   std::uint64_t write_genotype_data();
   void close();
 };
