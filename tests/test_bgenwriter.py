@@ -113,7 +113,7 @@ class TestBgenWriter(unittest.TestCase):
         ''' check we can write metadata (and read back!)
         '''
         sample_ids = ['a', 'b', 'c']
-        metadata = 'a\nbc'  # previously had errors with metadata containing newlines
+        metadata = 'a\nbc'  # metadata can contain newlines
         path = self.tmpdir / 'temp.bgen'
         
         bit_depth = 16
@@ -289,7 +289,7 @@ class TestBgenWriter(unittest.TestCase):
 
         Probabilities are stored as integers out of 2**bit_depth - 1, so a low depth does
         not round so much as replace the values: [0.3, 0.3, 0.4] comes back from a one bit
-        file as [0, 1, 0]. That used to happen silently.
+        file as [0, 1, 0].
 
         Which depths warn depends on the values, since the test is whether the loss beats
         what the default depth would cost. These probabilities are coarse enough to warn
@@ -690,10 +690,9 @@ class TestBgenWriter(unittest.TestCase):
         ''' check the inferred final probability is never out of range
 
         Layout 2 only stores all but the last probability per sample, and the
-        reader infers the last as max - sum(stored). Rounding each probability
-        independently let the stored values sum to more than max (e.g. 0.5 and
-        0.5 both round to 128 at a bit depth of 8, but the max is 255), which
-        made the reader infer a negative probability.
+        reader infers the last as max - sum(stored). The stored values must not sum
+        to more than max, which rounding each probability independently would allow
+        (e.g. 0.5 and 0.5 both round to 128 at a bit depth of 8, but the max is 255).
         '''
         geno = np.array([[0.5, 0.5, 0.0],
                          [0.0, 0.5, 0.5],
@@ -721,8 +720,8 @@ class TestBgenWriter(unittest.TestCase):
         ''' check the constant-ploidy fast path agrees with the generic path
 
         Reading 8-bit unphased diploid data uses a lookup table keyed on
-        255 - first - second, which read outside the table when the stored
-        values summed above 255, and so disagreed with the generic path.
+        255 - first - second, which has to be clamped when the stored values sum
+        above 255.
         '''
         geno = np.array([[0.5, 0.5, 0.0],
                          [0.0, 0.5, 0.5],
@@ -798,8 +797,8 @@ class TestBgenWriter(unittest.TestCase):
         one distinct dosage can only mean the two halves disagree.
 
         The dosage count is first * 2 + second, and the stored first probability is swept
-        over its whole range, because the two halves used to differ only for counts whose
-        exact value is not representable as a float.
+        over its whole range, to include counts whose exact value is not representable as
+        a float.
         '''
         for first in [1, 23, 51, 77, 128, 200, 254, 255]:
             for n in [1, 2, 7, 8, 9, 15, 16, 17, 31, 33, 100]:
@@ -827,9 +826,8 @@ class TestBgenWriter(unittest.TestCase):
 
         The third probability is inferred as 255 - first - second, which goes negative for a
         bgen storing values that sum above the maximum. Older versions of this package wrote
-        such files. The scalar read clamps the index to zero; the vectorised read has its own
-        clamp, and without it the gather would index before the lookup table and return
-        whatever lies in front of it in memory.
+        such files. The scalar read clamps the index to zero, and the vectorised read has to
+        clamp it too.
 
         test_reading_probabilities_above_maximum covers the same ground for three samples,
         which only ever reach the scalar loop. Vary the count so the vectorised half handles
@@ -860,7 +858,7 @@ class TestBgenWriter(unittest.TestCase):
 
                 self.assertTrue(np.all((probs >= 0) & (probs <= 1)),
                                 f'probabilities out of range: {probs}')
-                # clamped to zero, rather than gathered from before the lookup table
+                # clamped to zero
                 self.assertTrue(np.all(probs[:, 2] == 0),
                                 f'expected zeroed final probability: {probs}')
                 # every sample is identical, so the vectorised and scalar halves must agree
@@ -1050,9 +1048,7 @@ class TestBgenWriter(unittest.TestCase):
         ''' one malformed variant must not make the valid ones look malformed too
 
         Each variant owns its own genotype state, so the flag recording an over-large sum is
-        scoped to a single variant. This locks that in: were the flag ever moved to the file
-        or reader, one bad variant would condemn every variant read after it, and the warning
-        would stop being useful for locating the problem.
+        scoped to a single variant.
         '''
         n = 24
         good = np.tile(np.array([[0.2, 0.3, 0.5]]), (n, 1))
@@ -1109,8 +1105,7 @@ class TestBgenWriter(unittest.TestCase):
         ''' check a bgen storing probabilities summing above the maximum is safe
 
         Older versions of this package wrote such files, and nothing stops a
-        third party from doing so. The reader used to index outside its lookup
-        table for these, which read whatever was adjacent in memory.
+        third party from doing so.
         '''
         path = self.tmpdir / 'temp.bgen'
         geno = np.array([[1.0, 0.0, 0.0],
@@ -1138,8 +1133,7 @@ class TestBgenWriter(unittest.TestCase):
                 probs = x.probabilities
                 self.assertTrue(np.all((probs >= 0) & (probs <= 1)),
                                 f'probabilities out of range: {probs}')
-                # the inferred probability is clamped to zero rather than read
-                # from outside the lookup table, which returned adjacent memory
+                # the inferred probability is clamped to zero
                 self.assertTrue(np.all(probs[:, 2] == 0),
                                 f'expected zeroed final probability: {probs}')
                 dose = x.alt_dosage
@@ -1148,10 +1142,6 @@ class TestBgenWriter(unittest.TestCase):
 
     def test_probabilities_out_of_range(self):
         ''' check we reject genotype probabilities outside 0-1
-
-        Layout 1 always checked this, but layout 2 used to cast whatever it was
-        given into an unsigned integer, so a negative or too-large probability
-        wrapped around into an unrelated value.
         '''
         for layout, compression in [(1, 'zlib'), (2, 'zstd')]:
             for label, geno in [
@@ -1512,9 +1502,8 @@ class TestBgenWriter(unittest.TestCase):
         ''' check we reject copying variant data into an incompatible bgen
 
         add_variant_direct copies the genotype block across as raw bytes, so the
-        destination has to interpret those bytes the same way as the source. If
-        the sample count, layout or compression differ, the copy used to be
-        written anyway, and only failed later when the new bgen was read.
+        destination has to interpret those bytes the same way as the source: the
+        sample count, layout and compression all have to match.
         '''
         source = self.tmpdir / 'source.bgen'
         geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25], [0.1, 0.2, 0.7]])
@@ -1667,11 +1656,7 @@ class TestBgenWriter(unittest.TestCase):
     def test_long_sample_id(self):
         ''' check we reject a sample ID too long for the bgen length field
 
-        Sample IDs are stored behind a two byte length, so a longer ID used to
-        wrap that field to a small value while still writing every character.
-        The sample block length stayed self-consistent, so the file looked fine,
-        but each later ID was read from the wrong offset and the whole bgen
-        became unreadable.
+        Sample IDs are stored behind a two byte length.
         '''
         geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
 
@@ -1691,8 +1676,7 @@ class TestBgenWriter(unittest.TestCase):
     def test_long_variant_identifiers(self):
         ''' check we reject variant IDs, rsIDs and chromosomes which are too long
 
-        These are all stored behind a two byte length, so anything longer used to
-        wrap the length field and leave a file which could not be read back.
+        These are all stored behind a two byte length.
         '''
         geno = np.array([[0.1, 0.8, 0.1], [0.5, 0.25, 0.25]])
         fields = {'varid': 'variant ID', 'rsid': 'rsID', 'chrom': 'chromosome'}
@@ -1881,11 +1865,8 @@ class TestBgenWriter(unittest.TestCase):
     def test_write_error_is_not_followed_by_a_bogus_offset(self):
         ''' a writer that has already failed must not report made up file offsets
 
-        The offsets come from tellp(), which returns -1 once the stream has failed. That
-        used to be cast to an unsigned 64 bit offset, so a caller that caught a write
-        error and carried on recorded 18446744073709551615 as a variant's position in the
-        index, with no error at all. Anything reading that index would then seek to
-        nonsense.
+        The offsets come from tellp(), which returns -1 once the stream has failed, and
+        that must not reach the index as a variant's position.
         '''
         geno = np.array([[0.1, 0.8, 0.1]] * 3)
         src = self.tmpdir / 'offsets_src.bgen'
@@ -1900,15 +1881,13 @@ class TestBgenWriter(unittest.TestCase):
         bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno)
         self.assertTrue(self._break_bgen_fd(path), 'could not find the bgen descriptor')
 
-        # each call has to keep refusing, rather than inventing an offset. A caller that
-        # catches the first error and carries on is exactly how a bogus offset used to
-        # reach the index
+        # each call has to keep refusing, rather than inventing an offset
         for i in range(3):
             with self.assertRaises(OSError) as ctx:
                 bfile.add_variant(f'v{i}', f'rs{i}', 'chr1', i + 20, ['A', 'C'], geno)
             self.assertIn('position', str(ctx.exception))
 
-        # the direct copy is the site that used to return (uint64)-1 without any error
+        # the direct copy has to refuse as well
         with self.assertRaises(OSError) as ctx:
             bfile.add_variant_direct(variant)
         self.assertIn('position', str(ctx.exception))
@@ -1928,9 +1907,7 @@ class TestBgenWriter(unittest.TestCase):
         ''' a bgen needs a seekable output, and saying so beats an iostream error
 
         The header records where the variants start and how many there are, and both are
-        only known at the end, so the writer seeks back to fill them in. On a pipe the
-        position cannot even be read, which used to surface as
-        "basic_ios::clear: iostream error" from somewhere in the middle of a write.
+        only known at the end, so the writer seeks back to fill them in.
         '''
         path = self.tmpdir / 'pipe.fifo'
         os.mkfifo(path)

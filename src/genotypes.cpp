@@ -135,12 +135,8 @@ static void zlib_uncompress(char * input, std::uint32_t compressed_len,
   }
 }
 
-// uncompress a char array with zstd
-//
-// ZSTD_decompress allocates and frees a context on every call, at a fixed cost which
-// dominates a bgen of many small variants (~30% faster reusing one across 20000 variants
-// of 500 samples, against ~7% across 300 variants of 20000 samples). The context is
-// thread_local, since a Genotypes exists per variant, and a shared one is not thread safe
+// get a zstd decompression context to reuse across variants, which avoids allocating one
+// per call. It is thread_local, since a shared context is not thread safe
 static ZSTD_DCtx * borrow_zstd_dctx() {
   // the unique_ptr frees the context when the thread exits
   struct Deleter {

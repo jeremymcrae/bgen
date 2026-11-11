@@ -1,11 +1,8 @@
 ''' test that the vectorised ploidy helpers stay inside their arrays
 
 fast_ploidy_sum and fast_range load a block of bytes per iteration, so their loop guards
-have to account for the width of the load, not just the step. The SSE4 sum stepped four
-bytes at a time but loaded sixteen, and its guard allowed a final iteration whose load ran
-up to three bytes past the end of the ploidy array. Only the low four bytes are converted,
-so the values were always right, but the read itself is out of bounds and faults if the
-array happens to end within three bytes of a mapping boundary.
+have to account for the width of the load, or the final iteration reads past the end of
+the ploidy array, which faults if the array ends near a mapping boundary.
 
 None of this is reachable from Python on a machine with AVX2, since fast_ploidy_sum only
 calls the SSE4 version when AVX2 is missing, and there is no way to ask for the SSE4 path
@@ -13,8 +10,7 @@ at runtime. So these tests compile the helpers directly and call them with the p
 array butted up against an unreadable page, which turns any overread into a crash rather
 than something that depends on allocator slack.
 
-The same helpers also used to widen the bytes to 32 bits and accumulate there, which
-overflowed partway through a large cohort, so that is checked here too.
+The sums are also checked for overflow partway through a large cohort.
 '''
 
 import os
@@ -111,7 +107,7 @@ int main() {
   // max_ploidy is read as a whole byte from the file, and the constant ploidy branch of
   // parse_ploidy memsets the array to it without masking, so 255 is reachable
   const std::uint8_t worst = 255;
-  // well past where 32-bit lanes wrapped, which was about 33.7M for avx2 and 16.8M for sse4
+  // well past where 32-bit lanes would wrap, about 33.7M for avx2 and 16.8M for sse4
   for (std::uint32_t size : {16843024u, 33686048u, 40000000u}) {
     std::vector<std::uint8_t> values;
     try {
@@ -196,11 +192,8 @@ class TestPloidySimdBounds(unittest.TestCase):
     def test_ploidy_sum_does_not_overflow(self):
         ''' the sums must stay correct for a big cohort at the largest ploidy
 
-        The bytes used to be widened to 32 bits and accumulated there, so both an
-        individual lane and the sum of the lanes wrapped partway through a large cohort.
-        The size at which that happened depended on the ploidy values, so it could not be
-        guarded by a fixed sample count. They are accumulated into 64-bit counters now,
-        which cannot overflow for any array a 32-bit size can describe.
+        The bytes are accumulated into 64-bit counters, which cannot overflow for any
+        array a 32-bit size can describe.
         '''
         self.assertEqual(self.run_probe('overflow'), '0',
                          msg='a ploidy sum overflowed')

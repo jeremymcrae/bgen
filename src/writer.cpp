@@ -126,9 +126,6 @@ void CppBgenWriter::write_header(std::string &free_data,
 }
 
 /// @brief check a string fits the 16-bit length field the bgen stores it behind
-///
-/// The length would otherwise wrap while the whole string is still written, leaving a
-/// file which looks consistent, but whose fields all read from the wrong offsets
 static void check_length_fits(const std::string &value, const char *field) {
   if (value.size() > UINT16_MAX) {
     throw std::invalid_argument(std::string(field) + " is too long for a bgen - "
@@ -198,8 +195,7 @@ std::uint64_t CppBgenWriter::write_variant_header(std::string &varid,
   if ((layout == 1) && alleles.size() != 2) {
     throw std::invalid_argument("layout 1 requires exactly two alleles.");
   }
-  // check these before anything is written, so a rejected variant leaves the
-  // file as it was rather than partly extended by a variant we then refuse
+  // check these before writing, so a rejected variant leaves the file as it was
   check_length_fits(varid, "variant ID");
   check_length_fits(rsid, "rsID");
   check_length_fits(chrom, "chromosome");

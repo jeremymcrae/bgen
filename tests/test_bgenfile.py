@@ -25,15 +25,11 @@ def run_capped(code, cap=None):
     ''' run code in a subprocess under a memory cap
     
     The cap has to apply to the whole process, so this cannot run in-process. The
-    child inherits this process' sys.path, so it imports the same build under test
-    rather than any installed copy.
+    child inherits this process' sys.path, so it imports the build under test.
     
-    The imports happen before the cap is applied. OpenBLAS sizes its thread arenas by
-    core count, and if RLIMIT_AS is too tight to mmap them its init retries forever
-    instead of failing, so capping first can hang. Capping afterwards leaves the
-    allocation under test just as constrained, and the headroom is measured from what
-    the imports already took so it does not depend on this machine's numpy. Only linux
-    publishes that, and elsewhere the cap falls back to being absolute, as it used to be.
+    The cap is applied after the imports, since OpenBLAS can hang during init under a
+    tight RLIMIT_AS. Where the platform reports it (linux), the cap is sized from what
+    the imports took, and is absolute elsewhere.
     '''
     if cap is None:
         cap = MEMORY_CAP
@@ -229,9 +225,6 @@ class TestBgenReader(unittest.TestCase):
     
     def test_corrupt_sample_count(self):
         ''' an impossible sample count is rejected rather than sizing an allocation
-        
-        nsamples comes straight from the header, so a corrupt count used to be
-        handed to resize(), which asked for over a hundred GB from a tiny file.
         '''
         data = bytearray((self.folder / 'example.16bits.bgen').read_bytes())
         # nsamples is the 4 byte field at offset 12
@@ -264,8 +257,8 @@ class TestBgenReader(unittest.TestCase):
         
         Runs under a memory cap in a subprocess, since the point is the size of the
         allocation rather than the result. Building 100 million IDs needs several GB,
-        so the cap fails the old behaviour while leaving ample room for the file
-        itself, which is under a megabyte.
+        whereas the cap leaves ample room for the file itself, which is under a
+        megabyte.
         '''
         path = self._corrupt_count_bgen(self.tmpdir, 100_000_000)
         out = run_capped(f'''
@@ -296,9 +289,7 @@ class TestBgenReader(unittest.TestCase):
     def test_corrupt_sample_count_with_sample_file(self):
         ''' a corrupt sample count does not allocate for an external sample file
         
-        The IDs come from the .sample file, so the bgen cannot bound the count. The
-        list used to be sized from the count before reading, so it allocated for
-        every claimed sample before finding the file only held a few.
+        The IDs come from the .sample file, so the bgen cannot bound the count.
         '''
         path = self._corrupt_count_bgen(self.tmpdir, 100_000_000)
         sample_path = Path(self.tmpdir) / 'few.sample'
@@ -326,10 +317,7 @@ class TestBgenReader(unittest.TestCase):
         self.assertIn('rejected', out.stdout)
     
     def test_generated_sample_ids(self):
-        ''' a bgen without sample IDs still gets sequential placeholder IDs
-        
-        These are built on demand now, so check they are unchanged, and that asking
-        twice gives the same answer.
+        ''' a bgen without sample IDs gets sequential placeholder IDs, the same each time
         '''
         path = self.folder / 'example.v11.bgen'
         bfile = BgenReader(path, delay_parsing=True)
@@ -361,8 +349,7 @@ class TestBgenReader(unittest.TestCase):
         ''' a sample block whose length disagrees with its IDs is rejected
         
         The variants are found through the header offset, not by walking the sample
-        block, so a wrong block length used to pass unnoticed even though the file is
-        internally inconsistent.
+        block, so reading them does not check the block length.
         '''
         for delta in [100, -100, 2, -2]:
             with self.subTest(delta=delta):
@@ -445,9 +432,7 @@ class TestBgenReader(unittest.TestCase):
         
         The sample block length is set to exactly fit the claimed count, so the count
         passes both capacity checks, but every ID says it is 65535 bytes long, so the
-        reads run out of file after a handful. That is the gap the allocation used to
-        fall through: the count is bounded by the bytes available, but each ID costs far
-        more in memory than the two bytes that justified counting it.
+        reads run out of file after a handful.
         '''
         header_length = 20
         flags = (2 << 2) | (1 << 31)
@@ -475,10 +460,8 @@ class TestBgenReader(unittest.TestCase):
         ''' the sample list must grow with the IDs read, not the count claimed
         
         The count is bounded by the file size, since an ID needs at least a two byte
-        length prefix, but it used to size the list up front, and a std::string costs
-        16 times that. So a file whose IDs run out immediately still allocated 16 bytes
-        of memory per byte of file. The cap here is a small multiple of the file, which
-        the old resize() cannot fit while leaving ample room for the IDs that are
+        length prefix, but a std::string costs 16 times that in memory. The cap here is
+        a small multiple of the file, which leaves ample room for the IDs that are
         genuinely readable.
         '''
         file_size = 32 * 1024 * 1024
@@ -571,9 +554,6 @@ class TestBgenReader(unittest.TestCase):
     
     def test_truncated_bgen_iteration(self):
         ''' iterating a truncated bgen raises rather than stopping early
-        
-        Iteration used to stop at whatever the file held, so a truncated bgen was
-        indistinguishable from a complete, shorter one.
         '''
         data = (self.folder / 'example.16bits.bgen').read_bytes()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -592,9 +572,8 @@ class TestBgenReader(unittest.TestCase):
     def test_truncated_bgen_index_still_reports_truncation(self):
         ''' indexing a truncated file must blame the file, not seeking
 
-        Reaching a variant by index on a stream now reports that a stream cannot seek.
-        A truncated file on disk can seek perfectly well, so it has to keep reporting
-        what is actually wrong with it.
+        A file on disk can seek, unlike a stream, so the error has to report the
+        truncation.
         '''
         data = (self.folder / 'example.16bits.bgen').read_bytes()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -609,10 +588,7 @@ class TestBgenReader(unittest.TestCase):
     def test_truncated_bgen_reparse(self):
         ''' a failed parse must not leave half-parsed variants behind
         
-        parse_all_variants() used to resize the variants up front, so a failure
-        partway left a full sized vector of empty variants. Its 'already parsed'
-        check then passed, and later calls silently returned empty rsids and
-        uninitialised positions instead of raising.
+        A later call has to fail in the same way, rather than return empty variants.
         '''
         data = (self.folder / 'example.16bits.bgen').read_bytes()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -631,13 +607,10 @@ class TestBgenReader(unittest.TestCase):
     
     def test_drop_variants_out_of_range(self):
         ''' dropping variants by an out of range index raises an error
-        
-        Out of range indices used to build an invalid iterator in the c++ code,
-        which segfaulted rather than raising.
         '''
         path = self.folder / 'example.16bits.bgen'
         with warnings.catch_warnings():
-            # drop_variants is deprecated, but still needs to not segfault
+            # drop_variants is deprecated
             warnings.simplefilter('ignore', DeprecationWarning)
             for idx in [-1, -100, 10000000]:
                 with BgenReader(path, delay_parsing=True) as bfile:

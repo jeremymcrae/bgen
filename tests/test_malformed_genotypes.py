@@ -101,10 +101,8 @@ class TestMalformedGenotypes(unittest.TestCase):
 
     The block length is stored in the bgen and sizes the decompressed buffer,
     but the fields which say how much data the variant holds (sample count,
-    ploidy, allele count and bit depth) are stored separately. Nothing checked
-    the two agreed, so the parsing indexed on those fields and read past the end
-    of the buffer. Depending on how far past, that either returned fabricated
-    probabilities or segfaulted.
+    ploidy, allele count and bit depth) are stored separately, so the two have
+    to agree before the parsing indexes on those fields.
     '''
 
     def setUp(self):
@@ -119,9 +117,6 @@ class TestMalformedGenotypes(unittest.TestCase):
 
     def test_block_without_probabilities(self):
         ''' a block holding only its preamble and ploidy is rejected
-
-        This used to report success, with every sample given the fabricated
-        probabilities that came of reading past the buffer.
         '''
         n = 500
         path = write_bgen(self.tmpdir / 'a.bgen', n)
@@ -151,9 +146,7 @@ class TestMalformedGenotypes(unittest.TestCase):
     def test_block_truncated_inside_ploidy(self):
         ''' a block too short for even the ploidy bytes is rejected
 
-        parse_ploidy reads a byte per sample, so this read past the buffer
-        before the bit depth was validated. It happened to raise about the bit
-        depth afterwards, which hid the out of bounds reads that came first.
+        parse_ploidy reads a byte per sample, so the block has to hold that many.
         '''
         n = 500
         path = write_bgen(self.tmpdir / 'a.bgen', n)
@@ -169,9 +162,7 @@ class TestMalformedGenotypes(unittest.TestCase):
         ''' a ploidy which needs more data than the block holds is rejected
 
         min_ploidy and max_ploidy are single bytes from the file which size the
-        probabilities per sample, so raising them made the reader run far past
-        the end of the buffer, which segfaulted once the sample count was large
-        enough.
+        probabilities per sample.
         '''
         n = 500
         path = write_bgen(self.tmpdir / 'a.bgen', n)
@@ -187,8 +178,7 @@ class TestMalformedGenotypes(unittest.TestCase):
     def test_bit_depth_larger_than_block(self):
         ''' a bit depth which needs more data than the block holds is rejected
 
-        A bit depth of 32 needs four times the data of the 8 the file was
-        written with, but only the 1 to 32 range was checked.
+        A bit depth of 32 needs four times the data of the 8 the file is written with.
         '''
         n = 500
         path = write_bgen(self.tmpdir / 'a.bgen', n)
@@ -206,9 +196,8 @@ class TestMalformedGenotypes(unittest.TestCase):
 
         The genotypes per sample is C(ploidy + n_alleles - 1, n_alleles - 1), from an
         allele count and a ploidy that both come from the file, and it sizes both the
-        probability array and the byte count the block is checked against. Counts beyond
-        a 32-bit range used to wrap, so 9 alleles at a ploidy of 56 became 54502224
-        rather than 4426165368, and the variant was sized from that.
+        probability array and the byte count the block is checked against. 9 alleles at
+        a ploidy of 56 gives 4426165368, which is beyond a 32-bit count.
         '''
         n = 2
         for n_alleles, ploidy in [(9, 56), (12, 32), (16, 21), (24, 14)]:
@@ -225,19 +214,14 @@ class TestMalformedGenotypes(unittest.TestCase):
     def test_wrapped_genotype_count_cannot_be_satisfied(self):
         ''' a count that wrapped low must not be satisfiable by a matching block
 
-        This is the harmful case. 9 alleles at a ploidy of 42 has 536878650 genotypes,
-        but the 32-bit count wrapped all the way down to 7738, which asks for only 15474
-        bytes of probabilities. A block that size then passed the size check, so the
-        variant parsed with no error and handed back an array of the wrong width.
-
-        The count fits a 32-bit result, so it is now computed correctly, and a block sized
-        for the wrapped value is rejected as far too small.
+        9 alleles at a ploidy of 42 has 536878650 genotypes, which fits a 32-bit count.
+        Overflow while counting would give 7738, which asks for only 15474 bytes of
+        probabilities, so a block of that size has to be rejected as far too small.
         '''
         n, n_alleles, ploidy = 2, 9, 42
         path = write_bgen(self.tmpdir / 'wrapped.bgen', n, n_alleles=n_alleles)
         patched(path, self._ploidy_edits(path, n, ploidy))
-        # pad the block out to what the wrapped count would have demanded, so the old
-        # code would have found it satisfying
+        # pad the block out to what the wrapped count would demand
         offset = block_offset(path)
         data = bytearray(path.read_bytes())
         (block_len, ) = struct.unpack_from('<I', data, offset)
@@ -268,9 +252,9 @@ class TestMalformedGenotypes(unittest.TestCase):
     def test_countable_genotype_counts_are_still_read(self):
         ''' counts which do fit must keep working, including large ones
 
-        The rejection has to be limited to counts that genuinely cannot be represented,
-        or variants which used to read would start failing. A biallelic sample at the
-        largest ploidy the format can store has a countable number of genotypes.
+        The rejection is limited to counts that genuinely cannot be represented. A
+        biallelic sample at the largest ploidy the format can store has a countable
+        number of genotypes.
         '''
         n = 2
         path = write_bgen(self.tmpdir / 'big.bgen', n, n_alleles=2, ploidy=63)
@@ -281,10 +265,6 @@ class TestMalformedGenotypes(unittest.TestCase):
 
     def test_truncated_block_raises_every_time(self):
         ''' asking again after a rejection raises again, rather than reading
-
-        The genotype header is only parsed once, so a caller which caught the
-        error and asked for the probabilities again skipped straight past the
-        check to the reads it exists to prevent.
         '''
         n = 500
         path = write_bgen(self.tmpdir / 'a.bgen', n)
@@ -301,10 +281,7 @@ class TestMalformedGenotypes(unittest.TestCase):
         ''' the other genotype accessors reject a short block too
 
         They all parse the same genotype header, so none of them should be able
-        to reach the reads. The order matters, since the accessors only parse the
-        header when max_probs is unset, and the size check runs after max_probs
-        has been assigned - so a rejection has to clear it again, or these return
-        data for a variant which just failed the check.
+        to reach the reads, on the first call or a later one.
         '''
         n = 500
         accessors = ['probabilities', 'minor_allele_dosage', 'alt_dosage',
@@ -326,10 +303,8 @@ class TestMalformedGenotypes(unittest.TestCase):
     def test_implausible_decompressed_length(self):
         ''' a decompressed length near the 32-bit limit is rejected
 
-        The buffer was sized as the decompressed length plus 8 bytes of read
-        padding in 32-bit arithmetic, so lengths this large wrapped to a tiny
-        allocation and the padding was then zeroed ~4GB past the end of it.
-        This segfaulted for every compression scheme.
+        The buffer is the decompressed length plus 8 bytes of read padding, which must
+        not wrap 32-bit arithmetic.
         '''
         for compression in [None, 'zlib', 'zstd']:
             for length in [0xFFFFFFF8, 0xFFFFFFFB, 0xFFFFFFFF]:
@@ -351,10 +326,8 @@ class TestMalformedGenotypes(unittest.TestCase):
         ''' a compressed block shorter than its own length field is rejected
 
         The 4-byte decompressed length is counted within the block length, so a
-        block shorter than that underflowed the compressed length. That asked
-        for a ~4GB allocation, which only failed because the read then ran out
-        of file, so this checks the length itself is rejected rather than
-        accepting the incidental read error the old code gave.
+        shorter block would underflow the compressed length. Check the length itself
+        is rejected, rather than a later read failing.
         '''
         for compression in ['zlib', 'zstd']:
             for length in [0, 1, 2, 3]:
@@ -373,9 +346,8 @@ class TestMalformedGenotypes(unittest.TestCase):
 
         The probabilities are written into rows sized from the declared
         max_ploidy, but how many values go into each row is worked out from that
-        sample's own ploidy byte. A byte above max_ploidy therefore wrote past
-        the end of its row, and past the end of the numpy array on the last
-        sample - which corrupted the heap.
+        sample's own ploidy byte, so a byte above max_ploidy would write past
+        the end of its row.
         '''
         n = 100
         for target in [3, 7, 20, 63]:
@@ -404,9 +376,8 @@ class TestMalformedGenotypes(unittest.TestCase):
     def test_sample_ploidy_below_declared_min(self):
         ''' a sample ploidy below the variant's min_ploidy is rejected
 
-        This gave a probabilities array of the wrong shape rather than reading
-        out of bounds, but it is the same disagreement between the declared
-        bounds and the per-sample values.
+        This is the same disagreement between the declared bounds and the
+        per-sample values, though it would not read out of bounds.
         '''
         n = 100
         path = write_variable_ploidy(self.tmpdir / 'a.bgen', n,
@@ -518,12 +489,9 @@ class TestMalformedGenotypes(unittest.TestCase):
         ''' a variant declaring a max_ploidy above 63 is rejected
 
         The per sample ploidy is stored in 6 bits, so parse_ploidy masks each one
-        to at most 63 and a declared maximum above that can never be reached. That
-        made its range check pass trivially, while the count of genotypes per
-        ploidy was worked out for every value up to max_ploidy in a 64 entry array
-        on the stack - so a single byte took the writes up to 255 entries, 768
-        bytes past the end. The small overshoots landed in stack padding and
-        returned plausible probabilities, and only larger ones tripped the canary.
+        to at most 63, and a declared maximum above that can never be reached. The
+        count of genotypes per ploidy is held in a 64 entry array, which a larger
+        maximum would overrun.
         '''
         n = 4
         for target in [64, 65, 66, 70, 100, 128, 200, 255]:

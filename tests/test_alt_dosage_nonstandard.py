@@ -49,8 +49,8 @@ class TestAltDosage(unittest.TestCase):
         ''' dosage must match the probabilities at all bit depths
 
         A probability of one fills a 32 bit integer at the maximum bit depth, so
-        doubling it for a diploid genotype used to wrap, turning a dosage of two
-        into one. Dosages below one were unaffected, hence the range checked here.
+        doubling it for a diploid genotype must not wrap. Only dosages above one are
+        at risk, hence the range checked here.
         '''
         geno = np.array([[1.0, 0.0, 0.0],
                          [0.0, 1.0, 0.0],
@@ -92,10 +92,10 @@ class TestAltDosage(unittest.TestCase):
                                            err_msg=f'{variant.rsid}')
 
     def test_minor_allele_at_the_maximum_bit_depth(self):
-        ''' the wrapped dosage also picked the wrong minor allele
+        ''' the minor allele is right at the maximum bit depth
 
-        The first allele's frequency is estimated from the dosages, so wrapping
-        them flipped the comparison against one half.
+        The first allele's frequency is estimated from the dosages, so a wrapped
+        dosage would flip the comparison against one half.
         '''
         n = 40
         # make the first allele clearly the major one, so the second is minor

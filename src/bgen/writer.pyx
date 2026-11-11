@@ -383,10 +383,6 @@ cdef class BgenWriter:
 
     def _check_compatible(self, variant):
         ''' check a variant's data can be copied into this file unchanged
-
-        Without this the mismatch is only noticed when the resulting bgen is
-        read, which reports a confusing error against the new file rather than
-        the copy that caused it.
         '''
         n_samples = getattr(variant, 'n_samples', None)
         layout = getattr(variant, 'layout', None)

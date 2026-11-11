@@ -1,14 +1,11 @@
 ''' tests for probability offsets of missing samples in phased variable ploidy data
 
 Phased samples occupy one row per haplotype, so the probabilities for a sample start
-after the haplotypes of every sample before it. That offset used to be found by
-summing the ploidy of all preceding samples once per missing sample, which costs the
-whole cohort per missing sample and so grows with the square of the sample count. The
-offset is now carried forward between missing samples, since they are visited in
-ascending order.
+after the haplotypes of every sample before it. That offset is carried forward between
+missing samples, since they are visited in ascending order, which keeps the cost linear
+in the sample count.
 
-The values written were always correct, so these tests cover the scaling as well as
-the offsets themselves.
+These tests cover the scaling as well as the offsets themselves.
 '''
 
 from pathlib import Path
@@ -169,15 +166,15 @@ class TestMissingSampleOffsets(unittest.TestCase):
     def test_missing_offsets_scale_linearly(self):
         ''' cost per sample must not grow with the size of the cohort
 
-        Re-summing the preceding ploidy values for each missing sample costs the
-        whole cohort per missing sample, so the time per sample grows in step with
-        the sample count, while carrying the total forward leaves it flat.
+        Carrying the offset forward keeps the time per sample flat, whereas summing the
+        preceding ploidy values for each missing sample would grow it in step with the
+        sample count.
 
         The cohorts have to be large enough for that growth to outweigh the fixed
         cost of parsing each sample, which does not change with cohort size. At
-        these sizes the re-summing version measured a growth of 2.4 to 2.9, and the
-        carried version 1.0, so the threshold sits between the two with roughly a
-        1.5x margin either way.
+        these sizes quadratic scaling measures a growth of 2.4 to 2.9, and linear
+        1.0, so the threshold sits between the two with roughly a 1.5x margin
+        either way.
         '''
         small = self._time_read(20000)
         large = self._time_read(80000)

@@ -79,8 +79,8 @@ void CppBgenReader::close_stream() {
   }
 }
 
-/// byte position of the first variant in the bgen. The cast matters, since a corrupt
-/// 32-bit header.offset would otherwise wrap back inside the header
+/// byte position of the first variant in the bgen, in 64 bits so that a corrupt
+/// header.offset cannot wrap
 std::uint64_t CppBgenReader::first_variant_offset() {
   return (std::uint64_t) header.offset + 4;
 }
@@ -101,9 +101,7 @@ void CppBgenReader::parse_all_variants() {
   }
   offset = first_variant_offset();
   variants.clear();
-  // Only reserve what the file could hold. nvariants comes straight from the
-  // header, so a corrupt count would otherwise ask for hundreds of GB of
-  // Variants up front. Parsing still stops at whatever the file really contains.
+  // only reserve what the file could hold, since the header's count may be corrupt
   std::uint64_t n_reserve = header.nvariants;
   if (file_size > 0) {
     std::uint64_t possible = file_size / MIN_VARIANT_BYTES + 1;
@@ -121,9 +119,7 @@ void CppBgenReader::parse_all_variants() {
       variants.push_back(next_var());
     }
   } catch (const std::out_of_range &) {
-    // Running out of file part way through means the bgen holds fewer variants
-    // than its header lists, so say that, rather than reporting the end of the
-    // file for what looked like a perfectly valid variant index.
+    // the bgen holds fewer variants than its header lists
     std::uint64_t parsed = variants.size();
     variants.clear();
     throw std::invalid_argument("bgen is truncated - the header lists " +
@@ -131,8 +127,7 @@ void CppBgenReader::parse_all_variants() {
                                 " variants, but only " + std::to_string(parsed) +
                                 " could be read");
   } catch (...) {
-    // Drop the partial list, so a later call retries rather than finding a full
-    // sized vector and assuming the parse had finished
+    // drop the partial list, so a later call parses again
     variants.clear();
     throw;
   }
@@ -143,9 +138,8 @@ void CppBgenReader::parse_all_variants() {
 
 /// drop a subset of variants passed in by indexes
 void CppBgenReader::drop_variants(std::vector<int> indices) {
-  // Check every index before dropping any, so a bad index cannot leave the
-  // variants half dropped. Without this, an out of range index builds an invalid
-  // iterator and erases from outside the vector, which segfaults.
+  // check every index before dropping any, so a bad index leaves the variants as
+  // they were
   for (auto idx : indices) {
     if ((idx < 0) || ((std::size_t) idx >= variants.size())) {
       throw std::out_of_range("variant index " + std::to_string(idx) +

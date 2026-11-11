@@ -56,8 +56,7 @@ class Index:
             params = (chrom, start)
         elif start is None:
             # a stop without a start needs its own query, since comparing a
-            # position against a NULL start is never true in sqlite, so folding
-            # this into the query below would silently match nothing
+            # position against a NULL start is never true in sqlite
             query = 'SELECT file_start_position FROM Variant \
                         WHERE chromosome=? AND position <= ?'
             params = (chrom, stop)

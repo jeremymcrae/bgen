@@ -1,12 +1,9 @@
 ''' tests for dosage of samples which have no alleles
 
 A ploidy zero sample has just one possible genotype, the empty one, and since the
-final probability of each group is never stored it occupies no bytes at all.
-
-The dosage reader used to read one probability per sample regardless, so for these
-it consumed the next sample's data, shifted every later sample's bit offset along,
-and ran off the end of the block. The probability reader handled them correctly, so
-the two disagreed.
+final probability of each group is never stored it occupies no bytes at all. The dosage
+reader has to skip these, as the probability reader does, rather than consume the next
+sample's data.
 '''
 
 from pathlib import Path
@@ -101,10 +98,9 @@ class TestZeroPloidy(unittest.TestCase):
         np.testing.assert_allclose(dose, expected, atol=0.01)
 
     def test_zero_ploidy_at_the_end_of_the_cohort(self):
-        ''' the final sample having no alleles used to read past the block
+        ''' the final sample having no alleles must not read past the block
 
-        Nothing follows it to misalign, so the dosages come out right either way,
-        but the read still ran off the end of the buffer.
+        Nothing follows it to misalign, so the dosages alone would not show an overread.
         '''
         ploidy = np.array([2] * 19 + [0], dtype=np.uint8)
         self.write(ploidy)
@@ -163,7 +159,7 @@ class TestZeroPloidy(unittest.TestCase):
         self.assertTrue(np.allclose(dose[ploidy == 2], 1.4, atol=0.01), f'{dose}')
 
     def test_ploidy_above_two_still_raises(self):
-        ''' the ploidy check moved earlier, so make sure it still fires '''
+        ''' a ploidy above two is still rejected '''
         ploidy = np.array([0, 3, 2], dtype=np.uint8)
         geno = np.full((3, 4), nan)
         geno[0, :1] = [1.0]

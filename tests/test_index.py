@@ -65,9 +65,7 @@ class TestBgenIndex(unittest.TestCase):
     def test_index_fetch_stop_without_start(self):
         ''' fetches file offsets for variants up to a position
         
-        This is the one combination the test above misses. It used to compare the
-        position against a null start, which is never true in sqlite, so it
-        quietly returned nothing rather than erroring.
+        A stop without a start is the one combination the test above misses.
         '''
         chrom = '01'
         stop = 50000
@@ -108,9 +106,8 @@ class TestBgenIndex(unittest.TestCase):
     def test_index_queries_do_not_disturb_a_live_fetch(self):
         ''' another query must not cut short a fetch which is part way through
         
-        fetch is a generator, so it hands out rows as it steps through them. Every
-        query used to share one cursor, and re-executing a cursor abandons the rows
-        it had not yet yielded, so any interleaved query ended the fetch early.
+        fetch is a generator, so it hands out rows as it steps through them, and
+        needs a cursor of its own.
         '''
         index = Index(self.folder / 'example.16bits.bgen.bgi')
         expected = list(index.fetch('01'))

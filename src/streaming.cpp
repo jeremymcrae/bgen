@@ -14,13 +14,11 @@
 
 namespace bgen {
 
-/// bytes the bgen file reads at a time (even on seek)
+/// bytes the bgen file reads at a time
 ///
-/// A seek discards the previous buffer, and the next read refills it. Every
-/// variant seeks when starting, and by default would read 8 KB, despite only
-/// using ~50 bytes for variant metadata. Resize buffer to 512 bytes instead.
-///
-/// Reading genotypes is unaffected, since that reads > 512 bytes.
+/// Every variant seeks when starting, which discards the buffer, and the variant
+/// metadata only needs ~50 bytes. Genotype reads are larger than this, so are
+/// unaffected.
 const std::size_t FILE_BUFFER = 512;
 
 /// bytes the stdin stream reads at a time (bigger than the file buffer, since a

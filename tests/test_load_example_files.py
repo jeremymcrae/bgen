@@ -136,10 +136,6 @@ class TestExampleBgens(unittest.TestCase):
     
     def test_load_sample_file_delimiters(self):
         ''' sample files can be tab delimited, or have windows line endings
-        
-        Only a space used to end the first column, so a tab delimited file kept
-        the remaining columns in the ID, and a windows file kept a carriage
-        return on the end of it.
         '''
         bgen_path = self.folder / 'temp.bgen'
         expected = ['sample_0', 'sample_1', 'sample_2', 'sample_3']

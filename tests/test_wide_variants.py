@@ -1,17 +1,13 @@
 ''' test variants whose per sample probability counts are large
 
-Two counters used to be too narrow for variants with many alleles, or with a high ploidy.
-Both were found while profiling the writer, and both reject or mangle data that is
-perfectly legal:
+Two counts have to be wide enough for variants with many alleles, or with a high ploidy:
 
-  * missing_genotypes counted nans in a uint16. A sample's probability count is
+  * the writer counts a sample's missing probabilities. A sample's probability count is
     C(ploidy + n_alleles - 1, n_alleles - 1), which passes 65535 at 6 alleles and a ploidy
-    of 21, so a fully missing sample counted 244 instead of 65780 and the writer rejected
-    it as only partially missing.
-  * the reader's probability_bytes() filled a 64-entry table by calling get_max_probs for
-    every ploidy from 0 to 63, regardless of the ploidy the variant actually declares. For
-    12 or more alleles the ploidy 63 entry exceeds a 32-bit count, so a variant with a
-    varying ploidy of 1-2 could be written but not read back.
+    of 21.
+  * the reader's probability_bytes() sizes a variant from the ploidies it declares. For
+    12 or more alleles the count at a ploidy of 63 exceeds 32 bits, which must not stop a
+    variant with a ploidy of 1-2 being read.
 
 The arrays here stay small: it is the count per sample that has to be large, not the
 cohort, so a handful of samples is enough.
@@ -71,10 +67,6 @@ class TestWideVariants(unittest.TestCase):
 
     def test_fully_missing_sample_beyond_16_bits(self):
         ''' a missing sample with more than 65535 probabilities is stored as missing
-
-        The nan count wrapped a uint16 here, so the writer rejected the variant with
-        'samples with any missing genotype must encode all as missing' even though every
-        value for that sample was nan.
         '''
         # each case exceeds 65535 probabilities per sample, and the one below it does not
         for n_alleles, ploidy in [(6, 21), (5, 33), (7, 16)]:
@@ -93,8 +85,7 @@ class TestWideVariants(unittest.TestCase):
     def test_missing_sample_below_the_boundary(self):
         ''' the case just under 65535 probabilities has to keep working
 
-        6 alleles at a ploidy of 20 gives 53130 probabilities, which fits a uint16, so
-        this passed before the fix and must still pass.
+        6 alleles at a ploidy of 20 gives 53130 probabilities, which fits a uint16.
         '''
         path = self.tmpdir / 'below.bgen'
         n_probs = math.comb(20 + 6 - 1, 6 - 1)
@@ -106,14 +97,13 @@ class TestWideVariants(unittest.TestCase):
     def test_many_alleles_with_varying_ploidy(self):
         ''' a multiallelic variant with a low varying ploidy reads back
 
-        The reader sized a per ploidy table by computing every ploidy up to 63, and for
-        12 or more alleles that count does not fit 32 bits - so these variants wrote
-        successfully but raised 'more than 2^32 probabilities' when read.
+        For 12 or more alleles, the probability count at a ploidy of 63 does not fit
+        32 bits, which must not matter for a variant that never reaches that ploidy.
         '''
         ploidy = [1, 2, 1, 2]
         for n_alleles in [12, 16, 20, 24, 30]:
             with self.subTest(n_alleles=n_alleles):
-                # the ploidy 63 entry is what used to be computed unnecessarily
+                # the count for a ploidy of 63, which these variants never reach
                 unreachable = math.comb(63 + n_alleles - 1, n_alleles - 1)
                 self.assertGreater(unreachable, 0xFFFFFFFF)
 
@@ -128,7 +118,7 @@ class TestWideVariants(unittest.TestCase):
                                      f'sample {i} should have {k} probabilities')
 
     def test_many_alleles_constant_ploidy_still_reads(self):
-        ''' the constant ploidy path was never affected, so check it is unchanged '''
+        ''' many alleles at a constant ploidy can be read '''
         for n_alleles in [12, 24]:
             with self.subTest(n_alleles=n_alleles):
                 path = self.tmpdir / f'const{n_alleles}.bgen'

@@ -567,9 +567,8 @@ cdef class BgenReader:
             self.n_iterated += 1
             return var
         except IndexError:
-            # Running out of file before reaching the header's variant count means
-            # the bgen is truncated. Without this, iteration would just stop early
-            # and a truncated file would look like a complete, shorter one.
+            # running out of file before the header's variant count means the bgen
+            # is truncated
             if self.n_iterated < self.thisptr.header.nvariants:
                 raise ValueError(f'bgen is truncated - the header lists '
                                  f'{self.thisptr.header.nvariants} variants, but only '
@@ -614,10 +613,7 @@ cdef class BgenReader:
         if idx >= size or idx < 0:
             raise IndexError(f'cannot get Variant at index: {orig_idx}')
         
-        # Getting a variant by index has to seek to it, which a pipe cannot do. Say so
-        # before parsing, since otherwise the seek fails after the walk and the error
-        # blames the file for being truncated, which sends people looking for
-        # corruption in a bgen that is perfectly fine.
+        # getting a variant by index has to seek to it, which a pipe cannot do
         if self.is_stdin:
             raise ValueError(NO_RANDOM_ACCESS)
         
@@ -632,9 +628,8 @@ cdef class BgenReader:
               self.thisptr.header.compression, self.thisptr.header.nsamples,
               self.is_stdin, self.is_open)
         except IndexError:
-            # The index was in range, so running out of file means the bgen does
-            # not hold the variant its index (or header) says it should. Reporting
-            # the end of the file for a valid index just looks like a bug here.
+            # the index was in range, so the bgen lacks a variant that its index (or
+            # header) lists
             raise ValueError(f'bgen is truncated - could not read the variant at '
                              f'index {orig_idx}')
     

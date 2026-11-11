@@ -54,9 +54,7 @@ Header::Header(std::istream * handle) {
   layout = (int) ((flags & layout_mask) >> 2).to_ulong();
   has_sample_ids = flags[31];
   
-  // both fields have spare bits, so can hold values the spec does not define.
-  // Reject those, as the genotype parsing has no branch for them, and would
-  // otherwise return an unwritten buffer.
+  // both fields have spare bits, so reject values the spec does not define
   if ((layout != 1) && (layout != 2)) {
     throw std::invalid_argument("unknown bgen layout version");
   }

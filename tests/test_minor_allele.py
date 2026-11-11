@@ -1,16 +1,15 @@
 ''' tests for identifying the minor allele and its dosage
 
 The minor allele is picked by estimating the frequency of the first allele from a
-sample of the cohort, then comparing it against 0.5. That estimate used to divide
-the summed dosage by a fixed batch size of 100 samples times a ploidy of two,
-rather than by the alleles it had actually summed, so it was wrong whenever:
+sample of the cohort, then comparing it against 0.5. The estimate has to divide the
+summed dosage by the alleles actually summed, which matters whenever:
 
-  - the cohort was smaller than the batch size, or did not divide evenly by it
-  - the samples were not diploid
-  - some samples were missing, and so contributed no alleles
+  - the cohort is smaller than the batch size, or does not divide evenly by it
+  - the samples are not diploid
+  - some samples are missing, and so contribute no alleles
 
-Each understates the frequency, which flips the comparison and hands back the major
-allele's dosage from minor_allele_dosage.
+Getting it wrong flips the comparison, and hands back the major allele's dosage from
+minor_allele_dosage.
 '''
 
 from pathlib import Path
@@ -118,9 +117,6 @@ class TestMinorAllele(unittest.TestCase):
 
     def test_cohort_smaller_than_the_batch_size(self):
         ''' check the minor allele is right for cohorts under 100 samples
-
-        The estimate divided by a fixed 100 samples however many it summed, so a
-        small cohort's frequency was understated tenfold at ten samples.
         '''
         checked = 0
         for n_samples in [3, 10, 37, 50, 99]:
@@ -135,9 +131,6 @@ class TestMinorAllele(unittest.TestCase):
 
     def test_cohort_not_a_multiple_of_the_batch_size(self):
         ''' check cohorts which don't divide evenly by the batch size
-
-        The stride only covers exactly a batch of samples when the cohort divides
-        evenly by it, so these were scaled by the wrong divisor too.
         '''
         checked = 0
         for n_samples in [101, 150, 199, 250, 299]:
@@ -151,9 +144,6 @@ class TestMinorAllele(unittest.TestCase):
 
     def test_haploid_samples(self):
         ''' check the minor allele is right for haploid data
-
-        The frequency assumed every sample was diploid, so haploid data read as
-        half its true frequency.
         '''
         checked = 0
         for n_samples in [10, 100, 199, 500]:
@@ -168,8 +158,7 @@ class TestMinorAllele(unittest.TestCase):
     def test_missing_samples(self):
         ''' check missing samples are left out of the frequency
 
-        A missing sample has no called alleles, but its dosage was still zero when
-        the frequency was taken, so it pulled the first allele's frequency down.
+        A missing sample has no called alleles, so must not count towards the total.
         '''
         checked = 0
         for n_samples in [100, 199, 500]:
@@ -188,9 +177,6 @@ class TestMinorAllele(unittest.TestCase):
 
     def test_missing_samples_are_still_nan(self):
         ''' check missing samples come back as nan, and only those samples
-
-        They are marked before the minor allele is chosen now, so check that
-        reordering did not lose the nans, or spread them any further.
         '''
         n_samples = 200
         missing = [0, 5, 17, 100, 199]
@@ -290,7 +276,7 @@ class TestMinorAllele(unittest.TestCase):
     def test_missing_samples_with_a_frequency_near_one_half(self):
         ''' missing samples must be excluded from the whole cohort sum too
 
-        The sampled estimate already skipped them, but a frequency near 0.5 falls
+        The sampled estimate skips them, but a frequency near 0.5 falls
         through to summing every sample, which is a separate piece of code. A missing
         sample there would either poison the total, since its dosage is nan, or be
         counted as a called sample and understate the frequency.
@@ -398,9 +384,8 @@ class TestMinorAllele(unittest.TestCase):
 class TestMinorAlleleWithoutDosage(unittest.TestCase):
     ''' the minor allele must not depend on a dosage having been read first
 
-    Which allele is minor is worked out while computing dosages, and used to be left
-    in an attribute by that call. Asking for it without reading a dosage returned an
-    empty string, so the answer depended on the order the properties were touched.
+    Which allele is minor is worked out while computing dosages, so asking for it
+    alone has to trigger that, whichever order the properties are touched in.
     '''
 
     def setUp(self):

@@ -17,7 +17,6 @@ HAS_RLIMIT = can_cap_memory()
 
 # how long to give a child before treating it as stuck. These children read a bgen from
 # a pipe and exit, which takes well under a second, so this only trips on a real hang.
-# Without it a child that never exits leaves the whole test run waiting forever.
 CHILD_TIMEOUT = 120
 
 # a child that caps its own address space has to import before capping, which is what
@@ -66,9 +65,7 @@ class TestBgenStream(unittest.TestCase):
         ''' picking a single variant out of a stream has to blame the stream
 
         A pipe cannot seek, so there is no way to reach a variant by index, rsid or
-        position. That used to be reported as 'bgen is truncated', which sends people
-        looking for corruption in a file that is perfectly intact - the same file streams
-        every variant fine. Check each entry point says what is actually wrong.
+        position. Check each entry point says so.
         '''
         path = self.folder / 'example.16bits.zstd.bgen'
         data = path.read_bytes()
@@ -95,8 +92,7 @@ class TestBgenStream(unittest.TestCase):
         ''' refusing a lookup must not consume the stream
 
         The refusal happens before anything is parsed, so the variants are all still
-        there to iterate over. If it were raised after walking the file, the advice to
-        iterate instead would be useless.
+        there to iterate over.
         '''
         path = self.folder / 'example.16bits.zstd.bgen'
         code = ('from bgen import BgenReader\n'
@@ -159,8 +155,8 @@ class TestBgenStream(unittest.TestCase):
     def test_truncated_stream_does_not_blame_seeking(self):
         ''' a stream that really is short must not be blamed on seeking
 
-        The new message names an unseekable stream as the problem, so it must not appear
-        for a stream that is genuinely damaged, or a corrupt bgen would look merely
+        The message for an unseekable stream must not appear for a stream that is
+        genuinely damaged, or a corrupt bgen would look merely
         unseekable. A stream cut short reports the read that failed, since cutting
         mid-variant is caught while decompressing rather than by the variant count.
         '''
@@ -185,8 +181,7 @@ class TestBgenStream(unittest.TestCase):
         Anything which needs every variant at once (rsids, varids, chroms,
         positions, indexing, drop_variants) parses them all up front, which
         collects the variants into a list. A streamed bgen loads its genotypes
-        as each variant is constructed, so this used to hand the same genotype
-        buffers to two variants, and freeing them twice aborted the process.
+        as each variant is constructed, so each variant has to own its buffers.
         '''
         path = self.folder / 'example.16bits.zstd.bgen'
         code = ('from bgen import BgenReader\n'
@@ -203,11 +198,8 @@ class TestBgenStream(unittest.TestCase):
     def test_streamed_bgen_corrupt_sample_count(self):
         ''' a corrupt sample count on stdin must not size an allocation
         
-        The file size check in the reader needs to seek to the end, so it is skipped
-        for a stream. That left the sample block, whose length and count both come
-        from the file, as the only thing sizing the sample list, so a stream that
-        claims millions of samples used to allocate for them all before running out
-        of data.
+        A stream cannot be checked against its file size, so only the sample block,
+        whose length and count both come from the file, bounds the sample list.
         
         The cap is applied after the imports, since capping first hangs OpenBLAS's
         thread init.
@@ -236,10 +228,8 @@ class TestBgenStream(unittest.TestCase):
         ''' a corrupt variant count on stdin must not size an allocation
         
         The reserve for the variant list is bounded by what the file could hold, but a
-        stream cannot be seeked, so its size is unknown and that bound was skipped. A
-        Variant is a few hundred bytes, so a stream claiming millions of them used to
-        ask for several GB up front and fail with a memory error, rather than reporting
-        the file as truncated.
+        stream's size is unknown, so the reserve is capped instead, and the bgen is
+        reported as truncated.
         
         The cap is applied after the imports, since capping first hangs OpenBLAS's
         thread init.

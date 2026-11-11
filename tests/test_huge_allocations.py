@@ -1,28 +1,22 @@
 ''' test that a small bgen cannot drive a huge allocation
 
 Several sizes in a bgen come from 32-bit fields, and a corrupt or hostile file can set
-them far beyond what the file itself holds. Where those fields size an allocation before
-anything checks them, a file of a hundred bytes can ask for gigabytes of memory:
+them far beyond what the file itself holds. None of these may size an allocation before
+being checked:
 
-  * an allele's length prefix. read_prefixed_string used to resize a std::string to the
-    claimed length before reading any bytes, and resize() zero fills, so the memory was
-    genuinely committed rather than merely reserved. A 105 byte bgen claiming a 3 GB
-    allele grew the process by 3071 MB, an amplification of about 30 million to one.
-  * the sample count, when the bgen carries no sample IDs. Building the placeholder IDs
-    is deferred so that the count cannot size an allocation at open time, but a caller
-    can ask for the IDs without ever reading a variant, and layout 2 does not repeat the
-    sample count per variant, so nothing else validates it.
-
+  * an allele's length prefix.
+  * the sample count, when the bgen carries no sample IDs. The placeholder IDs are built
+    on demand, and a caller can ask for them without ever reading a variant.
   * the header's length, which sizes the free data area.
   * the genotype block's length, and the length a compressed block decompresses to.
     These also size the buffer for copy_data().
   * the sample count, which sizes the array a dosage is returned in.
 
-Most are checked here by running a child with a capped address space. Without the fix the
-child dies with MemoryError or std::bad_alloc; with it, the file is rejected as malformed.
-The cap is what makes these safe to run: the point is a claim too large to serve, so
-serving it would page out the machine. It is applied after the child's imports, and sized
-from what those took, since capping before them hangs (see cap_after_import).
+Most are checked here by running a child with a capped address space, which has to
+reject the file as malformed, rather than die with MemoryError or std::bad_alloc. The
+cap is what makes these safe to run, since serving a claim this large would page out the
+machine. It is applied after the child's imports, and sized from what those took, since
+capping before them hangs (see cap_after_import).
 
 Allele lengths cannot simply be capped, since indels and structural variants carry real
 sequence, so a legitimately long allele is checked here too.
@@ -49,8 +43,7 @@ CAN_CAP = can_cap_memory()
 CHILD_HEADROOM = 512 * 1024 * 1024
 
 # how long to give a child before treating it as stuck. These children read a bgen of a
-# few hundred bytes and exit, so this only trips on a real hang. Without it a stuck child
-# leaves the whole test run waiting.
+# few hundred bytes and exit, so this only trips on a real hang.
 CHILD_TIMEOUT = 120
 
 # read a bgen in a child with a capped address space, reporting what came back. The cap is
@@ -310,7 +303,7 @@ class TestHugeAllocations(unittest.TestCase):
                 self.assertIn('ValueError', outcome)
 
     def test_long_alleles_still_read(self):
-        ''' a genuinely long allele must survive, so the fix cannot be a cap
+        ''' a genuinely long allele must survive, so lengths cannot simply be capped
 
         Indels and structural variants store sequence as the allele, so multi-megabyte
         alleles are legitimate and have to round trip intact.
