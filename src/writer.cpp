@@ -450,41 +450,75 @@ static std::uint64_t scale_cumulative(double cumulative,
   return value;
 }
 
-/// @brief figure out the 64-bit pattern to insert an encoded genotype probability
+/// @brief OR an encoded genotype probability into the buffer at a bit offset
+///
+/// This rewrites the 64 bits at the pointer, so the bits already in the buffer survive,
+/// and a 32 bit probability shifted across 39 bits keeps its top
+///
+/// @param out byte the probability starts in
 /// @param value encoded genotype probability, already scaled to the bit depth
-/// @param encoded vector of proabilties, set up as 8-bit. We pull a 64-bit slice
-///        of this at the pointer position, in order to swap in the bits for the
-///        encoded genotype at the correct offset
-/// @param bit_remainder bit offset to place the encoded genotype at
-/// @return data with probability inserted
-static std::uint64_t emplace_probability(std::uint64_t value,
-                                  std::uint8_t *encoded,
-                                  std::uint32_t &bit_remainder)
-{
+/// @param shift bit offset within that byte
+static inline void insert_bits(std::uint8_t *out, std::uint64_t value, std::uint32_t shift) {
   std::uint64_t window;
-
-  // read the full 64 bits the caller writes back, so the bits already in the buffer
-  // survive, and a 32 bit probability shifted across 39 bits keeps its top
-  std::memcpy(&window, encoded, sizeof(window));
-  window |= (value << bit_remainder);
-  return window;
+  std::memcpy(&window, out, sizeof(window));
+  window |= (value << shift);
+  std::memcpy(out, &window, sizeof(window));
 }
 
-/// @brief precompute number of probabilities per sample for every ploidy
+/// @brief encode a group of probabilities which sum to one, storing all but the last
+///
+/// A group is a sample's genotypes when unphased, or the alleles of one haplotype when
+/// phased. The stored values are differences of the scaled running total
+///
+/// @param probs probabilities of the group
+/// @param n_probs number of probabilities in the group
+/// @param factor maximum encoded value for the bit depth
+/// @param bit_depth bits per stored probability
+/// @param out first byte of the variant's probability data
+/// @param bit_idx bit offset from out to store the group at
+/// @return bit offset after the stored probabilities
+static inline std::uint64_t encode_group(const double *probs, std::uint32_t n_probs,
+                                         double factor, std::uint32_t bit_depth,
+                                         std::uint8_t *out, std::uint64_t bit_idx) {
+  double cumulative = 0.0;
+  std::uint64_t running = 0;
+  for (std::uint32_t j = 0; j < (n_probs - 1); j++) {
+    double g = probs[j];
+    check_probability(g);
+    cumulative += g;
+    check_cumulative(cumulative);
+    std::uint64_t previous = running;
+    running = scale_cumulative(cumulative, factor, previous);
+    std::uint8_t *dest = out + (std::size_t) (bit_idx / 8);
+    if (bit_depth == 8) {
+      // a byte per probability
+      *dest = (std::uint8_t) (running - previous);
+    } else {
+      insert_bits(dest, running - previous, (std::uint32_t) (bit_idx % 8));
+    }
+    bit_idx += bit_depth;
+  }
+  // the reader infers the last probability rather than reading it, so check it as part
+  // of the total, or a group summing over one silently changes its final probability
+  double g = probs[n_probs - 1];
+  check_probability(g);
+  cumulative += g;
+  check_cumulative(cumulative);
+  return bit_idx;
+}
+
+/// @brief precompute number of probabilities per sample for every ploidy (unphased)
 ///
 /// Only entries up to max_ploidy are filled, since higher ones cannot occur, and are not
 /// even representable (12 alleles at a ploidy of 63 exceeds a 32-bit count)
 ///
 /// @param n_alleles allele count for the variant
 /// @param max_ploidy highest ploidy any sample has
-/// @param phased whether the genotypes are phased
 /// @return counts indexed by ploidy, valid up to max_ploidy
-static std::array<std::uint32_t, 64> probs_per_ploidy(int n_alleles, int max_ploidy,
-                                                     bool phased) {
+static std::array<std::uint32_t, 64> probs_per_ploidy(int n_alleles, int max_ploidy) {
   std::array<std::uint32_t, 64> counts{};
   for (int ploid = 0; ploid <= max_ploidy; ploid++) {
-    int p = ploid;
-    counts[ploid] = get_max_probs(p, n_alleles, phased);
+    counts[ploid] = get_max_probs(ploid, n_alleles, false);
   }
   return counts;
 }
@@ -784,77 +818,37 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
                      std::uint16_t n_alleles,
                      bool constant_ploidy,
                      std::uint32_t max_ploidy,
+                     std::uint32_t max_probs,
                      double *genotypes,
-                     std::uint8_t &bit_depth)
+                     std::uint8_t bit_depth)
 {
-  int _ploid = (int)max_ploidy;
-  int _n_alleles = (int)n_alleles;
-  bool phased = false;
-  std::uint32_t max_probs = get_max_probs(_ploid, _n_alleles, phased);
   std::uint32_t n_probs = max_probs;  // for storing probs per person
 
   // only needed when the ploidy varies, since a constant ploidy reuses max_probs
   std::array<std::uint32_t, 64> ploidy_probs;
   if (!constant_ploidy) {
-    ploidy_probs = probs_per_ploidy(_n_alleles, (int) max_ploidy, phased);
+    ploidy_probs = probs_per_ploidy(n_alleles, max_ploidy);
   }
 
   double factor = std::pow(2, bit_depth) - 1;
-  bool missing;
+  std::uint8_t *out = &encoded[genotype_offset];
   // 64-bit, since the bit count can exceed 2^32
   std::uint64_t bit_idx=0;
-  std::size_t byte_idx;
-  std::uint32_t bit_remainder;
-  std::uint64_t window;
-  double g;
-  double cumulative;
-  std::uint64_t running, previous, value;
   // counted alongside i rather than recovered as i / max_probs, which divides by a
   // runtime value once or twice per sample
   std::uint32_t sample_idx = 0;
   for (std::uint32_t i=0; i<(n_samples*max_probs); i+= max_probs, sample_idx++) {
     if (!constant_ploidy) {
-      _ploid = (int)(encoded[ploidy_offset + sample_idx] &= 63);
-      n_probs = ploidy_probs[_ploid];
-    } else {
-      n_probs = max_probs;
+      n_probs = ploidy_probs[encoded[ploidy_offset + sample_idx] &= 63];
     }
-    missing = missing_genotypes(&genotypes[i], n_probs);
-    if (missing) {
+    if (missing_genotypes(&genotypes[i], n_probs)) {
       encoded[ploidy_offset + sample_idx] |= 0x80;
       // every probability of a missing sample encodes as zero, and the buffer is already
-      // zero here, so stepping over the sample keeps the test out of the inner loop
+      // zero here, so step over the sample
       bit_idx += (std::uint64_t) (n_probs - 1) * bit_depth;
       continue;
     }
-    // the probabilities for a sample sum to 1.0, so scale their running total
-    cumulative = 0.0;
-    running = 0;
-    for (std::uint32_t j = 0; j < (n_probs - 1); j++) {
-      g = genotypes[i + j];
-      check_probability(g);
-      cumulative += g;
-      check_cumulative(cumulative);
-      previous = running;
-      running = scale_cumulative(cumulative, factor, previous);
-      value = running - previous;
-      byte_idx = genotype_offset + (std::size_t) (bit_idx / 8);
-      if (bit_depth == 8) {
-        // fast path for 8-bit genotype data
-        encoded[byte_idx] = (std::uint8_t) value;
-      } else {
-        bit_remainder = bit_idx % 8;
-        window = emplace_probability(value, &encoded[byte_idx], bit_remainder);
-        std::memcpy(&encoded[byte_idx], &window, 8);
-      }
-      bit_idx += bit_depth;
-    }
-    // the reader infers the last probability rather than reading it, so check it as part
-    // of the total, or a row summing over one silently changes its final probability
-    g = genotypes[i + n_probs - 1];
-    check_probability(g);
-    cumulative += g;
-    check_cumulative(cumulative);
+    bit_idx = encode_group(&genotypes[i], n_probs, factor, bit_depth, out, bit_idx);
   }
   // fits 32 bits, as checked in encode_layout2
   return genotype_offset + (std::uint32_t) ((bit_idx / 8) + ((bit_idx % 8) > 0));
@@ -868,82 +862,35 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
                             bool constant_ploidy,
                             std::uint32_t max_ploidy,
                             double *genotypes,
-                            std::uint8_t &bit_depth)
+                            std::uint8_t bit_depth)
 {
-  int _ploid = (int)max_ploidy;
-  int _n_alleles = (int)n_alleles;
-  bool phased = true;
-  std::uint32_t max_probs = get_max_probs(_ploid, _n_alleles, phased);
-  std::uint32_t n_probs = max_probs; // for storing probs per person
-
-  // as in encode_unphased, only the varying ploidy path needs the table
-  std::array<std::uint32_t, 64> ploidy_probs;
-  if (!constant_ploidy) {
-    ploidy_probs = probs_per_ploidy(_n_alleles, (int) max_ploidy, phased);
-  }
+  // every haplotype has a probability per allele, and each sample's row has room for
+  // max_ploidy haplotypes
+  const std::uint32_t n_probs = n_alleles;
+  const std::uint32_t row_len = n_probs * max_ploidy;
+  std::uint32_t ploid = max_ploidy;
 
   double factor = std::pow(2, bit_depth) - 1;
-  bool missing;
+  std::uint8_t *out = &encoded[genotype_offset];
   // 64-bit, as in encode_unphased
   std::uint64_t bit_idx = 0;
-  std::size_t byte_idx;
-  std::uint32_t bit_remainder;
-  std::uint64_t window;
-  double g;
-  double cumulative;
-  std::uint64_t running, previous, value;
-  std::uint32_t i = 0;
-  std::uint32_t sample_idx=0;
-  while (i < (n_samples * max_probs * max_ploidy)) {
+  std::uint32_t sample_idx = 0;
+  for (std::uint32_t i=0; i<(n_samples*row_len); i+= row_len, sample_idx++) {
     if (!constant_ploidy) {
-      _ploid = (int)(encoded[ploidy_offset + sample_idx] &= 63);
-      n_probs = ploidy_probs[_ploid];
-    } else {
-      _ploid = max_ploidy;
-      n_probs = max_probs;
+      ploid = (encoded[ploidy_offset + sample_idx] &= 63);
     }
-    missing = missing_genotypes(&genotypes[i], n_probs);
-    if (missing) {
+    if (missing_genotypes(&genotypes[i], n_probs)) {
       encoded[ploidy_offset + sample_idx] |= 0x80;
-      // as in encode_unphased, every stored probability of a missing sample is zero,
-      // and the buffer is already zero here, so step over the whole sample
-      bit_idx += (std::uint64_t) _ploid * (n_probs - 1) * bit_depth;
-      i += max_probs * max_ploidy;
-      sample_idx += 1;
+      // as in encode_unphased, step over the whole sample
+      bit_idx += (std::uint64_t) ploid * (n_probs - 1) * bit_depth;
       continue;
     }
-    // phased data is received in n_alleles * n_ploidy values, but is stored in
-    // n_alleles * (n_ploidy - 1) values, where n_ploidy can differ per person.
-    for (std::uint32_t k = 0; k < (std::uint32_t)_ploid; k++) {
-      // repeat for each haplotype. The allele probabilities sum to 1.0 within a
-      // haplotype, so the running total restarts for each one
-      cumulative = 0.0;
-      running = 0;
-      for (std::uint32_t j = 0; j < (n_probs - 1); j++) {
-        // repeat for each allele
-        g = genotypes[i];
-        check_probability(g);
-        cumulative += g;
-        check_cumulative(cumulative);
-        previous = running;
-        running = scale_cumulative(cumulative, factor, previous);
-        value = running - previous;
-        byte_idx = genotype_offset + (std::size_t) (bit_idx / 8);
-        bit_remainder = bit_idx % 8;
-        window = emplace_probability(value, &encoded[byte_idx], bit_remainder);
-        std::memcpy(&encoded[byte_idx], &window, 8);
-        bit_idx += bit_depth;
-        i += 1;
-      }
-      // as above, the final probability of the haplotype is inferred, not stored
-      g = genotypes[i];
-      check_probability(g);
-      cumulative += g;
-      check_cumulative(cumulative);
-      i += 1;
+    // the allele probabilities sum to 1.0 within each haplotype. Haplotypes beyond the
+    // sample's ploidy are skipped
+    for (std::uint32_t k = 0; k < ploid; k++) {
+      bit_idx = encode_group(&genotypes[i + k * n_probs], n_probs, factor, bit_depth,
+                             out, bit_idx);
     }
-    i += (max_probs * max_ploidy) - (n_probs * _ploid);
-    sample_idx += 1;
   }
   // fits 32 bits, as checked in encode_layout2
   return genotype_offset + (std::uint32_t) ((bit_idx / 8) + ((bit_idx % 8) > 0));
@@ -958,12 +905,10 @@ static std::vector<std::uint8_t> encode_layout2(
                     std::uint8_t min_ploidy,
                     std::uint8_t max_ploidy,
                     bool phased,
-                    std::uint8_t &bit_depth
+                    std::uint8_t bit_depth
                     ) 
 {
-  int _max_ploid = (int)max_ploidy;
-  int _n_alleles = (int)n_alleles;
-  std::uint32_t max_probs = get_max_probs(_max_ploid, _n_alleles, phased);
+  std::uint32_t max_probs = get_max_probs(max_ploidy, n_alleles, phased);
   if (phased) {
     max_probs *= max_ploidy;
   }
@@ -999,13 +944,10 @@ static std::vector<std::uint8_t> encode_layout2(
   const std::uint32_t ploidy_offset = i;
   if (constant_ploidy) {
     std::memset(&encoded[i], max_ploidy, n_samples);
-    i += n_samples;
   } else {
-    for (size_t j=0; j<n_samples; j++) {
-      encoded[i] = ploidy[j];
-      i += 1;
-    }
+    std::memcpy(&encoded[i], ploidy, n_samples);
   }
+  i += n_samples;
 
   encoded[i] = phased;
   i += 1;
@@ -1021,7 +963,7 @@ static std::vector<std::uint8_t> encode_layout2(
                                            genotypes);
     } else {
       encoded_size = encode_unphased(encoded, i, ploidy_offset, n_samples, n_alleles,
-                                constant_ploidy, max_ploidy, genotypes, bit_depth);
+                                constant_ploidy, max_ploidy, max_probs, genotypes, bit_depth);
     }
   } else {
     encoded_size = encode_phased(encoded, i, ploidy_offset, n_samples, n_alleles,
