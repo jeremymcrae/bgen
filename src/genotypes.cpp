@@ -1185,22 +1185,16 @@ int Genotypes::get_minor_idx() {
     load_data_and_parse_header();
     std::unique_ptr<float[]> dose(new float[n_samples]);
     // this sets minor_idx, and the dosages themselves are not needed
-    get_allele_dosage(dose.get(), true, false);
+    get_allele_dosage(dose.get(), false);
   }
   return minor_idx;
 }
 
 /// calculate allele dosage from the genotype probabilities
 ///
-/// This either computes the alternate allele dosage, or the minor allele dosage
-/// depending on the use_alt or use_minor arguments.
-///
-/// @param use_alt whether to return the alt allele dosages
-/// @param use_minor whether to return the minor allele dosages
-void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
-  if (use_alt == use_minor) {
-    throw std::invalid_argument("one of use_alt or use_minor must be true");
-  }
+/// @param dose array to fill with a dosage per sample
+/// @param use_minor whether to return dosages of the minor allele, rather than the alt
+void Genotypes::get_allele_dosage(float * dose, bool use_minor) {
   load_data_and_parse_header();
   
   if (n_alleles != 2) {
@@ -1237,7 +1231,7 @@ void Genotypes::get_allele_dosage(float * dose, bool use_alt, bool use_minor) {
   
   minor_idx = find_minor_allele(dose);
   minor_known = true;
-  if (use_alt | (use_minor & (minor_idx != 0))) {
+  if (!use_minor || (minor_idx != 0)) {
     if (constant_ploidy & (max_ploidy == 2)) {
       swap_allele_dosage_simple(dose);
     } else {

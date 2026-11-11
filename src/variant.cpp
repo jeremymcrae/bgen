@@ -128,13 +128,13 @@ bool Variant::probs_above_max() {
 
 /// get dosage of the alt allele (only works for biallelic variants)
 void Variant::alt_dosage(float * dose) {
-  geno.get_allele_dosage(dose, true, false);
+  geno.get_allele_dosage(dose, false);
   minor_allele = alleles[geno.minor_idx];
 }
 
 /// get dosage of the minor allele (only works for biallelic variants)
 void Variant::minor_allele_dosage(float * dose) {
-  geno.get_allele_dosage(dose, false, true);
+  geno.get_allele_dosage(dose, true);
   minor_allele = alleles[geno.minor_idx];
 }
 

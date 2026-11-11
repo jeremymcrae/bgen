@@ -47,7 +47,7 @@ public:
     }
   void load_data_and_parse_header();
   void probabilities(float * probs);
-  void get_allele_dosage(float * dose, bool use_alt=true, bool use_minor=false);
+  void get_allele_dosage(float * dose, bool use_minor);
   int get_minor_idx();
   bool phased=false;
   std::uint32_t max_probs=0;
