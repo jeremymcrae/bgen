@@ -124,7 +124,7 @@ class BgenVar:
         ''' get the allelic probabilities for a variant
         '''
         ...
-    def copy_data(self) -> list[int]:
+    def copy_data(self) -> bytes:
         ''' get a copy of the data on disk for the variant
         '''
         ...

@@ -369,9 +369,7 @@ cdef class BgenWriter:
         pos = int(variant.pos)
         rsid = variant.rsid
         alleles = variant.alleles
-        # prefer bytes, since copy_data() gives a list with an entry per byte
-        copier = getattr(variant, '_copy_bytes', None)
-        raw = copier() if copier is not None else bytes(variant.copy_data())
+        raw = variant.copy_data()
         cdef const uint8_t[::1] data = raw
         if data.shape[0] == 0:
             raise ValueError('cannot copy variant data directly: the variant is empty')

@@ -462,21 +462,12 @@ cdef class BgenVar:
         return data
     
     def copy_data(self):
-        ''' get a copy of the data on disk for the variant.
+        ''' get a copy of the data on disk for the variant, as bytes
         
         This can be used to quickly copy data from one bgen into another, if
         you have the same set of samples between the source and destination
         bgens. This primarily avoids decompressing, decoding, re-encoding, and
         compressing the genotype data.
-        '''
-        if self.is_stdin:
-            raise ValueError('cannot copy variant data directly while reading from stdin')
-        self.__check_closed()
-        cdef vector[uint8_t] data = self.thisptr.copy_data()
-        return data
-    
-    def _copy_bytes(self):
-        ''' get the data on disk for the variant as bytes (copy_data() gives a list)
         '''
         if self.is_stdin:
             raise ValueError('cannot copy variant data directly while reading from stdin')
