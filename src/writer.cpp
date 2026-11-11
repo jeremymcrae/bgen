@@ -803,8 +803,9 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
 
   double factor = std::pow(2, bit_depth) - 1;
   bool missing;
-  std::uint32_t bit_idx=0;
-  std::uint32_t byte_idx;
+  // 64-bit, since the bit count can exceed 2^32
+  std::uint64_t bit_idx=0;
+  std::size_t byte_idx;
   std::uint32_t bit_remainder;
   std::uint64_t window;
   double g;
@@ -825,7 +826,7 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
       encoded[ploidy_offset + sample_idx] |= 0x80;
       // every probability of a missing sample encodes as zero, and the buffer is already
       // zero here, so stepping over the sample keeps the test out of the inner loop
-      bit_idx += (n_probs - 1) * bit_depth;
+      bit_idx += (std::uint64_t) (n_probs - 1) * bit_depth;
       continue;
     }
     // the probabilities for a sample sum to 1.0, so scale their running total
@@ -839,7 +840,7 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
       previous = running;
       running = scale_cumulative(cumulative, factor, previous);
       value = running - previous;
-      byte_idx = genotype_offset + (bit_idx / 8);
+      byte_idx = genotype_offset + (std::size_t) (bit_idx / 8);
       if (bit_depth == 8) {
         // fast path for 8-bit genotype data
         encoded[byte_idx] = (std::uint8_t) value;
@@ -857,7 +858,8 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
     cumulative += g;
     check_cumulative(cumulative);
   }
-  return genotype_offset + (bit_idx / 8) + (std::uint32_t)((bit_idx % 8) > 0);
+  // fits 32 bits, as checked in encode_layout2
+  return genotype_offset + (std::uint32_t) ((bit_idx / 8) + ((bit_idx % 8) > 0));
 }
 
 static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
@@ -884,8 +886,10 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
 
   double factor = std::pow(2, bit_depth) - 1;
   bool missing;
-  std::uint32_t bit_idx = 0;
-  std::uint32_t byte_idx, bit_remainder;
+  // 64-bit, as in encode_unphased
+  std::uint64_t bit_idx = 0;
+  std::size_t byte_idx;
+  std::uint32_t bit_remainder;
   std::uint64_t window;
   double g;
   double cumulative;
@@ -905,7 +909,7 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
       encoded[ploidy_offset + sample_idx] |= 0x80;
       // as in encode_unphased, every stored probability of a missing sample is zero,
       // and the buffer is already zero here, so step over the whole sample
-      bit_idx += (std::uint32_t)_ploid * (n_probs - 1) * bit_depth;
+      bit_idx += (std::uint64_t) _ploid * (n_probs - 1) * bit_depth;
       i += max_probs * max_ploidy;
       sample_idx += 1;
       continue;
@@ -926,7 +930,7 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
         previous = running;
         running = scale_cumulative(cumulative, factor, previous);
         value = running - previous;
-        byte_idx = genotype_offset + (bit_idx / 8);
+        byte_idx = genotype_offset + (std::size_t) (bit_idx / 8);
         bit_remainder = bit_idx % 8;
         window = emplace_probability(value, &encoded[byte_idx], bit_remainder);
         std::memcpy(&encoded[byte_idx], &window, 8);
@@ -943,7 +947,8 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
     i += (max_probs * max_ploidy) - (n_probs * _ploid);
     sample_idx += 1;
   }
-  return genotype_offset + (bit_idx / 8) + (std::uint32_t)((bit_idx % 8) > 0);
+  // fits 32 bits, as checked in encode_layout2
+  return genotype_offset + (std::uint32_t) ((bit_idx / 8) + ((bit_idx % 8) > 0));
 }
 
 static std::vector<std::uint8_t> encode_layout2(
@@ -968,12 +973,18 @@ static std::vector<std::uint8_t> encode_layout2(
     throw std::invalid_argument("genotypes does not match n_samples * per_person_probs");
   }
 
-  std::uint32_t probs_len = (n_samples * bit_depth) * (max_probs - 1);
-  bool remainder = (probs_len % 8) > 0;
-  probs_len = (probs_len / 8) + remainder;
-
-  std::uint32_t encoded_size = 10 + n_samples + probs_len;
-  std::vector<std::uint8_t> encoded(encoded_size + 8);  // extend slightly to help with variable bit depths
+  // 64-bit, since the bit count can exceed 2^32 while the bytes still fit the block
+  std::uint64_t probs_bits = (std::uint64_t) n_samples * bit_depth *
+                             (max_probs > 0 ? max_probs - 1 : 0);
+  std::uint64_t probs_len = (probs_bits / 8) + ((probs_bits % 8) > 0);
+  std::uint64_t block_size = 10 + (std::uint64_t) n_samples + probs_len;
+  if (block_size > UINT32_MAX) {
+    // the block and decompressed lengths are four byte fields
+    throw std::invalid_argument("genotype data needs " + std::to_string(block_size) +
+                                " bytes, which overflows the bgen block length field");
+  }
+  std::uint32_t encoded_size = (std::uint32_t) block_size;
+  std::vector<std::uint8_t> encoded((std::size_t) encoded_size + 8);  // extend slightly to help with variable bit depths
   std::uint32_t i=0;
   std::memcpy(&encoded[i], &n_samples, 4);
   i += 4;
