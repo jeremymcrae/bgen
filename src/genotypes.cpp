@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 #if defined(__x86_64__)
   #include <immintrin.h>
@@ -494,9 +495,9 @@ void Genotypes::probabilities_layout1(const char * data, float * probs, std::uin
     data += 6;
     
     if ((probs[offset] == 0.0) & (probs[offset + 1] == 0.0) & (probs[offset + 2] == 0.0)) {
-      probs[offset] = std::nan("1");
-      probs[offset + 1] = std::nan("1");
-      probs[offset + 2] = std::nan("1");
+      probs[offset] = std::numeric_limits<float>::quiet_NaN();
+      probs[offset + 1] = std::numeric_limits<float>::quiet_NaN();
+      probs[offset + 2] = std::numeric_limits<float>::quiet_NaN();
     }
   }
 }
@@ -693,7 +694,7 @@ void Genotypes::probabilities_layout2(const char * data, float * probs, std::uin
       }
       probs[offset + n_probs] = remainder;
       for (std::uint32_t x=(n_probs + 1); x<max_probs; x++) {
-        probs[offset + x] = std::nan("1");
+        probs[offset + x] = std::numeric_limits<float>::quiet_NaN();
       }
     }
   }
@@ -721,7 +722,7 @@ void Genotypes::probabilities_layout2(const char * data, float * probs, std::uin
       }
     }
     for (std::uint32_t x=0; x<(max_probs * k); x++) {
-      probs[offset + x] = std::nan("1");
+      probs[offset + x] = std::numeric_limits<float>::quiet_NaN();
     }
   }
 }
@@ -1180,7 +1181,7 @@ void Genotypes::get_allele_dosage(float * dose, bool use_minor) {
   // mark the missing samples before finding the minor allele, since their zeroed dosages
   // would pull the frequency towards zero, and can flip which allele looks minor
   for (auto n: missing) {
-    dose[n] = std::nanf("1");
+    dose[n] = std::numeric_limits<float>::quiet_NaN();
   }
   
   minor_idx = find_minor_allele(dose);
