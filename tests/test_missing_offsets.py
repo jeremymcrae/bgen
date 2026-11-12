@@ -142,17 +142,17 @@ class TestMissingSampleOffsets(unittest.TestCase):
         expected = write_phased(path, ploidy, [0, 3, 5], n_variants=4)
         self.assert_probs_match(path, expected)
 
-    def _time_read(self, n_samples):
-        ''' best time to read every probability of an all missing cohort
+    def _time_read(self, n_samples, n_variants):
+        ''' best time per sample to read every probability of an all missing cohort
 
         All samples missing is the worst case, since the offset is recomputed for
         each one. Ploidy alternates so the variable ploidy branch is taken.
         '''
         ploidy = np.resize(np.array([1, 2], dtype=np.uint8), n_samples)
         path = self.tmpdir / f'scale{n_samples}.bgen'
-        write_phased(path, ploidy, range(n_samples), n_variants=2)
+        write_phased(path, ploidy, range(n_samples), n_variants=n_variants)
         best = None
-        for _ in range(3):
+        for _ in range(5):
             bfile = BgenReader(path, delay_parsing=True)
             start = time.perf_counter()
             for var in bfile:
@@ -161,7 +161,7 @@ class TestMissingSampleOffsets(unittest.TestCase):
             bfile.close()
             best = elapsed if best is None else min(best, elapsed)
         path.unlink()
-        return best / n_samples
+        return best / (n_samples * n_variants)
 
     def test_missing_offsets_scale_linearly(self):
         ''' cost per sample must not grow with the size of the cohort
@@ -170,17 +170,17 @@ class TestMissingSampleOffsets(unittest.TestCase):
         preceding ploidy values for each missing sample would grow it in step with the
         sample count.
 
-        The cohorts have to be large enough for that growth to outweigh the fixed
-        cost of parsing each sample, which does not change with cohort size. At
-        these sizes quadratic scaling measures a growth of 2.4 to 2.9, and linear
-        1.0, so the threshold sits between the two with roughly a 1.5x margin
-        either way.
+        The cohorts differ 16 fold, so that growth outweighs the fixed cost of parsing
+        each sample, and the smaller one reads more variants, so both time the same
+        amount of work, rather than one timing being short enough for noise to swamp.
+        Quadratic scaling measures a growth of about 13, and linear 1.0 to 1.1, so the
+        threshold leaves a wide margin either way for a busy machine.
         '''
-        small = self._time_read(20000)
-        large = self._time_read(80000)
+        small = self._time_read(5000, 32)
+        large = self._time_read(80000, 2)
         growth = large / small
-        self.assertLess(growth, 1.6,
-                        f'per sample cost grew {growth:.1f}x when the cohort grew 4x, '
+        self.assertLess(growth, 3.0,
+                        f'per sample cost grew {growth:.1f}x when the cohort grew 16x, '
                         'which suggests the missing sample offsets are being '
                         're-summed rather than carried forward')
 
