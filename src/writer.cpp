@@ -119,8 +119,14 @@ void CppBgenWriter::write_header(const std::string &free_data,
   // the header is completed once the variants are written, so the output has to seek
   current_position(handle);
 
+  // the header length is a four byte field, holding the free data and 20 other bytes
+  if (free_data.size() > UINT32_MAX - 20) {
+    throw std::invalid_argument("metadata is too long for a bgen - it is " +
+                                std::to_string(free_data.size()) + " bytes, but the "
+                                "maximum is " + std::to_string(UINT32_MAX - 20));
+  }
   // the variant data follows the header, unless add_samples() moves it
-  std::uint32_t header_len = 20 + free_data.size();
+  std::uint32_t header_len = 20 + (std::uint32_t) free_data.size();
   write_value(handle, header_len);  // offset of the variant data
   write_value(handle, header_len);
 
@@ -134,13 +140,14 @@ void CppBgenWriter::write_header(const std::string &free_data,
   write_value(handle, flags);
 }
 
-/// @brief check a string fits the 16-bit length field the bgen stores it behind
-static void check_length_fits(const std::string &value, const char *field) {
-  if (value.size() > UINT16_MAX) {
+/// @brief check a string fits the length field the bgen stores it behind
+static void check_length_fits(const std::string &value, const char *field,
+                              std::uint64_t max_len = UINT16_MAX) {
+  if (value.size() > max_len) {
     throw std::invalid_argument(std::string(field) + " is too long for a bgen - "
                                 "it is " + std::to_string(value.size()) +
                                 " characters, but the maximum is " +
-                                std::to_string(UINT16_MAX));
+                                std::to_string(max_len));
   }
 }
 
@@ -204,6 +211,9 @@ std::uint64_t CppBgenWriter::write_variant_header(const std::string &varid,
     throw std::invalid_argument("variant has " + std::to_string(alleles.size()) +
                                 " alleles, but the maximum is " +
                                 std::to_string(UINT16_MAX));
+  }
+  for (auto &x : alleles) {
+    check_length_fits(x, "allele", UINT32_MAX);
   }
   n_variants += 1;
   if (layout == 1) {
@@ -367,7 +377,11 @@ static inline bool missing_genotypes(const double *genotypes, std::uint32_t size
 static std::vector<std::uint8_t> encode_layout1(
                     double *genotypes,
                     std::uint64_t geno_len) {
-  // genotypes are encoded as 16-bit uints
+  // genotypes are encoded as 16-bit uints, and the block length is a four byte field
+  if (geno_len > UINT32_MAX / 2) {
+    throw std::invalid_argument("genotype data needs " + std::to_string(geno_len * 2) +
+                                " bytes, which overflows the bgen block length field");
+  }
   std::vector<std::uint8_t> encoded((std::size_t) geno_len * 2);
 
   std::size_t i = 0;
@@ -972,8 +986,13 @@ void CppBgenWriter::encode_genotype_data(std::uint16_t n_alleles,
 
   std::vector<char> compressed = compress(encoded, compression);
   // layout 2 stores the decompressed length inside the block, ahead of the data
-  std::uint32_t block_len = compressed.size() + ((layout == 2) ? 4 : 0);
-  append_value(pending, block_len);
+  std::uint64_t block_len = compressed.size() + ((layout == 2) ? 4 : 0);
+  if (block_len > UINT32_MAX) {
+    throw std::invalid_argument("compressed genotype data needs " +
+                                std::to_string(block_len) + " bytes, which overflows "
+                                "the bgen block length field");
+  }
+  append_value(pending, (std::uint32_t) block_len);
   if (layout == 2) {
     append_value(pending, decompressed_len);
   }
