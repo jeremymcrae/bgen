@@ -1912,6 +1912,22 @@ class TestBgenWriter(unittest.TestCase):
             con.close()
         self.assertTrue(all(0 < x < 2 ** 32 for x in starts), starts)
 
+    def test_rejected_header_leaves_an_existing_file(self):
+        ''' arguments the bgen cannot hold are rejected before the file is opened
+        '''
+        path = self.tmpdir / 'existing.bgen'
+        path.write_bytes(b'keep me')
+        for samples in [['a'], ['a', 'b', 'c' * 70000]]:
+            with self.subTest(samples=samples[:2]):
+                with self.assertRaises(ValueError):
+                    BgenWriter(path, 3, samples=samples)
+                self.assertEqual(path.read_bytes(), b'keep me')
+
+        missing = self.tmpdir / 'missing.bgen'
+        with self.assertRaises(ValueError):
+            BgenWriter(missing, 3, samples=['a'])
+        self.assertFalse(missing.exists())
+
     def test_index_metadata_describes_the_bgen(self):
         ''' the index records the bgen's path, size, mtime and first bytes
         '''

@@ -18,6 +18,8 @@ class CppBgenWriter {
   bool closed=false;
   // genotype block (length prefixes included) held between encoding and writing
   std::vector<char> pending;
+  void check_header(const std::string &free_data,
+                    const std::vector<std::string> &samples);
   void write_header(const std::string &free_data,
                     const std::vector<std::string> &samples);
   void add_samples(const std::vector<std::string> &samples);
@@ -31,6 +33,7 @@ public:
                                                         compression(_compression),
                                                         layout(_layout)
   {
+    check_header(free_data, samples);
     handle.open(path, std::ios::out | std::ios::binary);
     if (!handle.is_open()) {
       throw std::ios_base::failure("cannot open '" + path + "' for writing");

@@ -107,25 +107,9 @@ CppBgenWriter::~CppBgenWriter() {
 
 void CppBgenWriter::write_header(const std::string &free_data,
                               const std::vector<std::string> &samples) {
-  if (compression > 2) {
-    throw std::invalid_argument("compression flag must be 0, 1, or 2");
-  }
-  if ((layout < 1) || layout > 2) {
-    throw std::invalid_argument("layout flag must be 1, or 2");
-  }
-  if ((layout == 1) && (compression == 2)) {
-    throw std::invalid_argument("you cannot use zstd compression with layout 1");
-  }
-
   // the header is completed once the variants are written, so the output has to seek
   current_position(handle);
 
-  // the header length is a four byte field, holding the free data and 20 other bytes
-  if (free_data.size() > UINT32_MAX - 20) {
-    throw std::invalid_argument("metadata is too long for a bgen - it is " +
-                                std::to_string(free_data.size()) + " bytes, but the "
-                                "maximum is " + std::to_string(UINT32_MAX - 20));
-  }
   // the variant data follows the header, unless add_samples() moves it
   std::uint32_t header_len = 20 + (std::uint32_t) free_data.size();
   write_value(handle, header_len);  // offset of the variant data
@@ -152,28 +136,64 @@ static void check_length_fits(const std::string &value, const char *field,
   }
 }
 
+/// check the header and sample IDs fit their bgen fields. This runs before the file is
+/// opened, so arguments the bgen cannot hold leave any file already at the path intact
+void CppBgenWriter::check_header(const std::string &free_data,
+                                 const std::vector<std::string> &samples) {
+  if (compression > 2) {
+    throw std::invalid_argument("compression flag must be 0, 1, or 2");
+  }
+  if ((layout < 1) || layout > 2) {
+    throw std::invalid_argument("layout flag must be 1, or 2");
+  }
+  if ((layout == 1) && (compression == 2)) {
+    throw std::invalid_argument("you cannot use zstd compression with layout 1");
+  }
+
+  // the header length is a four byte field, holding the free data and 20 other bytes
+  if (free_data.size() > UINT32_MAX - 20) {
+    throw std::invalid_argument("metadata is too long for a bgen - it is " +
+                                std::to_string(free_data.size()) + " bytes, but the "
+                                "maximum is " + std::to_string(UINT32_MAX - 20));
+  }
+  std::uint64_t header_len = 20 + (std::uint64_t) free_data.size();
+
+  std::uint64_t block_len = 0;
+  if (samples.size() > 0) {
+    if (samples.size() != n_samples) {
+      throw std::invalid_argument("samples vector length doesn't match the sample count in file");
+    }
+    // two four byte counts, then each ID behind its length
+    block_len = 8 + 2 * (std::uint64_t) samples.size();
+    for (auto &x : samples) {
+      check_length_fits(x, "sample ID");
+      block_len += x.size();
+    }
+    if (block_len > UINT32_MAX) {
+      // the block length is a four byte field, so a block this big would wrap and
+      // leave the variants starting at the wrong offset
+      throw std::invalid_argument("sample IDs need " + std::to_string(block_len) +
+                                  " bytes, which overflows the bgen sample block "
+                                  "length field");
+    }
+  }
+
+  // the variant data offset is a four byte field too, and counts both of them
+  if (header_len + block_len > UINT32_MAX) {
+    throw std::invalid_argument("the header and sample IDs take up " +
+                                std::to_string(header_len + block_len) + " bytes, "
+                                "which overflows the bgen variant data offset field");
+  }
+}
+
 void CppBgenWriter::add_samples(const std::vector<std::string> &samples) {
   if (samples.size() == 0) { return; }
 
-  if (samples.size() != n_samples) {
-    throw std::invalid_argument("samples vector length doesn't match the sample count in file");
-  }
-
-  // count the number of characters across all sample IDs
-  std::uint64_t nchars = 0;
+  // the length of the sample ID block, and number of sample IDs. check_header has
+  // already checked these fit
+  std::uint64_t block_len = 8 + 2 * (std::uint64_t) samples.size();
   for (auto &x : samples) {
-    check_length_fits(x, "sample ID");
-    nchars += x.size();
-  }
-
-  // write the length of the sample ID block, and number of sample IDs
-  std::uint64_t block_len = 8 + 2 * (std::uint64_t) samples.size() + nchars;
-  if (block_len > UINT32_MAX) {
-    // the block length is a four byte field, so a block this big would wrap and
-    // leave the variants starting at the wrong offset
-    throw std::invalid_argument("sample IDs need " + std::to_string(block_len) +
-                                " bytes, which overflows the bgen sample block "
-                                "length field");
+    block_len += x.size();
   }
   write_value(handle, (std::uint32_t) block_len);
   write_value(handle, (std::uint32_t) samples.size());
@@ -182,14 +202,7 @@ void CppBgenWriter::add_samples(const std::vector<std::string> &samples) {
   for (auto &x : samples) {
     write_prefixed_string<std::uint16_t>(handle, x);
   }
-  // the offset is a four byte field, so check it in 64 bits first, since the check above
-  // bounds the sample block alone, and the header pushes the two together over
   std::uint64_t data_offset = current_position(handle) - 4;
-  if (data_offset > UINT32_MAX) {
-    throw std::invalid_argument("the header and sample IDs take up " +
-                                std::to_string(data_offset) + " bytes, which overflows "
-                                "the bgen variant data offset field");
-  }
   write_at_offset(handle, (std::uint32_t) data_offset, VARIANT_DATA_OFFSET_POS);
 }
 
