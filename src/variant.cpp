@@ -30,13 +30,13 @@ static void read_checked_string(std::istream & handle, std::string & value) {
 /// required, just starts it so we can get the offset of the next variant, so as
 /// to parse the bgen variants at speed.
 ///
-///  @param _handle std::istream for bgen file, shared with the CppBgenReader so
+///  @param handle std::istream for bgen file, shared with the CppBgenReader so
 ///     the file stays open for as long as this Variant might read from it
 ///  @param varoffset start byte for variant in bgen file
 ///  @param layout bgen layout version (1 or 2)
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
-Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset, int layout, int compression, std::uint32_t expected_n, bool is_stdin) : handle(std::move(_handle)) {
+Variant::Variant(std::shared_ptr<std::istream> handle, std::uint64_t varoffset, int layout, int compression, std::uint32_t expected_n, bool is_stdin) {
   offset = varoffset;
   if (!is_stdin) {
     handle->clear();
@@ -47,10 +47,9 @@ Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset,
     // terminates, since we cannot seek back to check whether another variant follows
     throw std::out_of_range("reached end of file");
   }
+  std::uint32_t n_samples = expected_n;
   if (layout == 1) {
     read_checked(*handle, n_samples);
-  } else {
-    n_samples = expected_n;
   }
   
   if (n_samples != expected_n) {
@@ -62,9 +61,8 @@ Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset,
   read_checked_string<std::uint16_t>(*handle, chrom);
   
   read_checked(*handle, pos);
-  if (layout == 1) {
-    n_alleles = 2;
-  } else {
+  std::uint16_t n_alleles = 2;
+  if (layout != 1) {
     read_checked(*handle, n_alleles);
   }
   
@@ -87,7 +85,7 @@ Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset,
   if (!is_stdin) {
     geno_offset = (std::uint64_t) handle->tellg();
   }
-  geno.initialize(handle, layout, compression, n_alleles, n_samples, geno_offset, length, is_stdin);
+  geno.initialize(std::move(handle), layout, compression, n_alleles, n_samples, geno_offset, length, is_stdin);
   next_variant_offset = geno_offset + length;
 }
 
@@ -161,6 +159,7 @@ std::string Variant::get_minor_allele() {
 }
 
 std::vector<std::uint8_t> Variant::copy_data() {
+  std::istream * handle = geno.stream();
   // as in Genotypes::decompress, the badbit marks a closed bgen, while other
   // error states are recoverable and just need clearing before the seek
   if (handle->bad()) {

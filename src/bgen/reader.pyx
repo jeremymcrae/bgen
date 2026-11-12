@@ -62,7 +62,6 @@ cdef extern from 'variant.h' namespace 'bgen':
         uint64_t offset
         uint64_t next_variant_offset
         vector[string] alleles
-        shared_ptr_istream handle
 
 cdef extern from 'samples.h' namespace 'bgen':
     cdef cppclass Samples:
@@ -322,7 +321,7 @@ cdef class BgenVar:
         whether the istream object exists or not.
         '''
         if not self.is_open.status:
-            self.thisptr.handle.get().setstate(badbit)
+            self.handle.ptr.get().setstate(badbit)
     @property
     def is_phased(self):
         return self.thisptr.phased()

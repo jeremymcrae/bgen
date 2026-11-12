@@ -60,6 +60,8 @@ public:
   // fills the ploidy array when every sample shares a ploidy, in which case parse_ploidy
   // leaves it empty. Public because variant.cpp hands the array out to callers
   void materialise_ploidy();
+  // the bgen stream, which the Variant holding this also reads its raw bytes from
+  std::istream * stream() const { return handle.get(); }
 private:
   void load_block();
   void decompress();

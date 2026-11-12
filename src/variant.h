@@ -15,7 +15,7 @@ namespace bgen {
 class Variant {
   Genotypes geno;
 public:
-  Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset, int layout, int compression, std::uint32_t expected_n, bool is_stdin=false);
+  Variant(std::shared_ptr<std::istream> handle, std::uint64_t varoffset, int layout, int compression, std::uint32_t expected_n, bool is_stdin=false);
   Variant() {}
   std::uint32_t probs_per_sample();
   void alt_dosage(float * dosage);
@@ -27,17 +27,14 @@ public:
   int max_ploidy();
   /// check for probabilities summing above bit-depth max, indicates malformed bgen
   bool probs_above_max();
-  std::shared_ptr<std::istream> handle;
   std::uint8_t * ploidy();
   std::vector<std::uint8_t> copy_data();
   
   std::uint64_t offset = 0;
-  std::uint32_t n_samples = 0;
   std::string varid;
   std::string rsid;
   std::string chrom;
   std::uint32_t pos = 0;
-  std::uint16_t n_alleles = 0;
   std::vector<std::string> alleles;
   std::uint64_t next_variant_offset = 0;
 };
