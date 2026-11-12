@@ -197,8 +197,10 @@ cdef class BgenWriter:
     def _validate_genotypes(self, genotypes):
         ''' check the genotype values
         '''
-        # ensure the genotypes array is the correct size and type
-        genotypes = np.asarray(genotypes, dtype=np.float64)
+        # ensure the genotypes array is the correct size and type. It is made C
+        # contiguous (e.g. a transposed array is not), since the encoder reads it
+        # through a plain pointer
+        genotypes = np.ascontiguousarray(genotypes, dtype=np.float64)
         if genotypes.ndim != 2:
             raise ValueError('genotypes must be a 2D array')
         
@@ -289,12 +291,10 @@ cdef class BgenWriter:
         if bit_depth < 1 or bit_depth > 32:
             raise ValueError(f'bit_depth must be between 1 and 32: {bit_depth}')
         
-        # sanitise the genotypes. They are made C contiguous (e.g. a transposed array is
-        # not), since the encoder reads them through a plain pointer
         genotypes = self._validate_genotypes(genotypes)
         cdef uint32_t n_genos = genotypes.shape[1]
         self._check_bit_depth_fits(genotypes, bit_depth, rsid, varid)
-        cdef const double[:, ::1] geno_c = np.ascontiguousarray(genotypes)
+        cdef const double[:, ::1] geno_c = genotypes
     
         # validate ploidy levels
         cdef int32_t min_ploidy, max_ploidy
