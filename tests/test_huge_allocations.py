@@ -244,6 +244,25 @@ class TestHugeAllocations(unittest.TestCase):
             with self.assertRaises(ValueError):
                 var.probabilities
 
+    def test_layout1_block_length_does_not_wrap(self):
+        ''' an uncompressed layout 1 block is 6 bytes per sample, which can pass 4 GB
+        '''
+        path = self.tmpdir / 'layout1.bgen'
+        with BgenWriter(path, 4, layout=1, compression=None) as bfile:
+            bfile.add_variant('v', 'rs', '01', 1, ['A', 'C'], np.full((4, 3), 1 / 3))
+        path = self._drop_sample_ids(path)
+        with BgenReader(path) as bfile:
+            offset = next(iter(bfile)).fileoffset
+        claim = 0x30000000
+        # layout 1 repeats the sample count at the start of each variant
+        bad = self._claim(self._claim(path, 12, claim, 'claim.bgen'), offset, claim,
+                          'claim.bgen')
+        with BgenReader(bad, delay_parsing=True) as bfile:
+            var = next(iter(bfile))
+            self.assertGreater(var.next_variant_offset - var.fileoffset, 6 * claim)
+            with self.assertRaises(ValueError):
+                var.probabilities
+
     @unittest.skipIf(sys.platform == 'win32', 'needs resource, to measure peak memory')
     def test_overstated_header_length_is_not_allocated(self):
         ''' a header claiming more free data than the file holds is rejected

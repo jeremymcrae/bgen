@@ -74,11 +74,14 @@ Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset,
     read_checked_string<std::uint32_t>(*handle, allele);
   }
   
-  std::uint32_t length;
+  // 64-bit, since an uncompressed layout 1 block of n_samples * 6 can exceed 32 bits
+  std::uint64_t length;
   if ((layout == 1) && (compression == 0)) {
-    length = n_samples * 6;
+    length = (std::uint64_t) n_samples * 6;
   } else {
-    read_checked(*handle, length);
+    std::uint32_t stored;
+    read_checked(*handle, stored);
+    length = stored;
   }
   std::uint64_t geno_offset = 0;
   if (!is_stdin) {

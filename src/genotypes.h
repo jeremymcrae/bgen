@@ -29,7 +29,7 @@ public:
            int _n_alleles, 
            std::uint32_t _n_samples,
            std::uint64_t _offset,
-           std::uint32_t _length,
+           std::uint64_t _length,
            bool _is_stdin=false) {
       handle = std::move(_handle);
       layout = lay;
@@ -81,7 +81,7 @@ private:
   int n_alleles = 0;
   std::uint32_t n_samples = 0;
   std::uint64_t file_offset = 0;
-  std::uint32_t length = 0;
+  std::uint64_t length = 0;
   bool is_stdin = false;
   std::uint32_t bit_depth=0;
   std::uint32_t idx=0;

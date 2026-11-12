@@ -210,7 +210,7 @@ void Genotypes::decompress() {
     // the block is the genotype data, and was padded when it was read, so hand it
     // over as it stands rather than copying it into a second buffer
     uncompressed = std::move(block);
-    uncompressed_len = length;
+    uncompressed_len = (std::uint32_t) length;
     return;
   }
   
@@ -229,7 +229,7 @@ void Genotypes::decompress() {
     decompressed_len = load<std::uint32_t>(block.get());
   }
 
-  std::uint32_t compressed_len = length - prefix;
+  std::uint32_t compressed_len = (std::uint32_t) (length - prefix);
   char * compressed = block.get() + prefix;
   // the decompressed length is read from the bgen, so guard against wrapping, since a
   // length near the 32-bit limit would allocate a few bytes then memset past the end
