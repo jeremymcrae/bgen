@@ -223,10 +223,10 @@ cdef class BgenVar:
         self.thisptr = new Variant(self.handle.ptr, offset, layout, compression, expected_n, is_stdin)
     
     def __repr__(self):
-       return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", {self.pos}, {self.alleles})'
+        return f'BgenVar("{self.varid}", "{self.rsid}", "{self.chrom}", {self.pos}, {self.alleles})'
     
     def __str__(self):
-       return f'{self.rsid} - {self.chrom}:{self.pos} {self.alleles}'
+        return f'{self.rsid} - {self.chrom}:{self.pos} {self.alleles}'
     
     @property
     def layout(self):
@@ -278,7 +278,7 @@ cdef class BgenVar:
     
     @property
     def varid(self):
-      return self.thisptr.varid.decode('utf8')
+        return self.thisptr.varid.decode('utf8')
     @property
     def rsid(self):
         return self.thisptr.rsid.decode('utf8')
@@ -553,25 +553,25 @@ cdef class BgenReader:
             raise StopIteration
     
     def __len__(self):
-      ''' number of variants in the bgen file
-      
-      With delay_parsing this is the count from the bgen header, which is all that
-      is knowable without reading the file. A truncated bgen still names its
-      original number of variants there, so this can be more than can actually be
-      read - iterating, or getting a variant by index, raises in that case.
-      '''
-      self._check_open()
-      
-      length = self.thisptr.variants.size()
-      if length > 0:
-          return length
-      
-      if self.index is not None:
-          # variants are looked up through the index, so its count is the one that
-          # matches what indexing this BgenReader can actually reach
-          return len(self.index)
-      
-      return self.thisptr.header.nvariants
+        ''' number of variants in the bgen file
+
+        With delay_parsing this is the count from the bgen header, which is all that
+        is knowable without reading the file. A truncated bgen still names its
+        original number of variants there, so this can be more than can actually be
+        read - iterating, or getting a variant by index, raises in that case.
+        '''
+        self._check_open()
+
+        length = self.thisptr.variants.size()
+        if length > 0:
+            return length
+
+        if self.index is not None:
+            # variants are looked up through the index, so its count is the one that
+            # matches what indexing this BgenReader can actually reach
+            return len(self.index)
+
+        return self.thisptr.header.nvariants
     
     def __getitem__(self, Py_ssize_t idx):
         ''' pull out a Variant by index position
@@ -611,24 +611,24 @@ cdef class BgenReader:
     
     @property
     def header(self):
-      ''' get header info from bgen file
-      '''
-      self._check_open()
-      
-      hdr = self.thisptr.header
-      return BgenHeader(hdr.offset, hdr.nvariants, hdr.nsamples,
-          hdr.compression, hdr.layout, hdr.has_sample_ids, hdr.extra)
-    
+        ''' get header info from bgen file
+        '''
+        self._check_open()
+
+        hdr = self.thisptr.header
+        return BgenHeader(hdr.offset, hdr.nvariants, hdr.nsamples,
+            hdr.compression, hdr.layout, hdr.has_sample_ids, hdr.extra)
+
     @property
     def samples(self):
-      ''' get list of samples in the bgen file
-      '''
-      self._check_open()
-      
-      if self._samples is None:
-          self._samples = tuple(x.decode('utf8') for x in self.thisptr.samples.get_samples())
-      # a fresh list each time, so a caller changing it leaves the next one intact
-      return list(self._samples)
+        ''' get list of samples in the bgen file
+        '''
+        self._check_open()
+
+        if self._samples is None:
+            self._samples = tuple(x.decode('utf8') for x in self.thisptr.samples.get_samples())
+        # a fresh list each time, so a caller changing it leaves the next one intact
+        return list(self._samples)
     
     def drop_variants(self, list indices):
         ''' drops variants from bgen by indices, for avoiding processing variants
@@ -731,39 +731,39 @@ cdef class BgenReader:
         return [i for i, x in enumerate(values) if x == key]
     
     def with_rsid(self, rsid):
-      ''' get BgenVar from file given an rsID
-      '''
-      return self._lookup(rsid, True)
-    
+        ''' get BgenVar from file given an rsID
+        '''
+        return self._lookup(rsid, True)
+
     def at_position(self, pos):
-      ''' get BgenVar from file given a position
-      '''
-      return self._lookup(pos, False)
-    
+        ''' get BgenVar from file given a position
+        '''
+        return self._lookup(pos, False)
+
     def varids(self):
-      ''' get the variant IDs of all variants in the bgen file
-      '''
-      self._check_open()
-      
-      if self.index is not None:
-          raise ValueError("can't load varids when using an index file")
-      
-      self.thisptr.parse_all_variants()
-      return [self.thisptr.variants[i].varid.decode('utf8')
-              for i in range(self.thisptr.variants.size())]
-    
+        ''' get the variant IDs of all variants in the bgen file
+        '''
+        self._check_open()
+
+        if self.index is not None:
+            raise ValueError("can't load varids when using an index file")
+
+        self.thisptr.parse_all_variants()
+        return [self.thisptr.variants[i].varid.decode('utf8')
+                for i in range(self.thisptr.variants.size())]
+
     def rsids(self):
-      ''' get the rsIDs of all variants in the bgen file
-      '''
-      self._check_open()
-      
-      if self.index is not None:
-          # a copy, since the index caches the list it returns
-          return list(self.index.rsids)
-      
-      self.thisptr.parse_all_variants()
-      return [self.thisptr.variants[i].rsid.decode('utf8')
-              for i in range(self.thisptr.variants.size())]
+        ''' get the rsIDs of all variants in the bgen file
+        '''
+        self._check_open()
+
+        if self.index is not None:
+            # a copy, since the index caches the list it returns
+            return list(self.index.rsids)
+
+        self.thisptr.parse_all_variants()
+        return [self.thisptr.variants[i].rsid.decode('utf8')
+                for i in range(self.thisptr.variants.size())]
     
     def chroms(self):
         ''' get the chromosomes of all variants in the bgen file
