@@ -457,6 +457,8 @@ cdef class BgenReader:
     cdef object index
     cdef OpenStatus is_open
     cdef uint64_t offset
+    # sample IDs, decoded on first use
+    cdef tuple _samples
     # variants returned by __next__ so far, to spot a truncated bgen which stops
     # short of the variant count in the header
     cdef uint64_t n_iterated
@@ -618,8 +620,10 @@ cdef class BgenReader:
       '''
       self._check_open()
       
-      samples = self.thisptr.samples.get_samples()
-      return [x.decode('utf8') for x in samples]
+      if self._samples is None:
+          self._samples = tuple(x.decode('utf8') for x in self.thisptr.samples.get_samples())
+      # a fresh list each time, so a caller changing it leaves the next one intact
+      return list(self._samples)
     
     def drop_variants(self, list indices):
         ''' drops variants from bgen by indices, for avoiding processing variants
@@ -784,6 +788,7 @@ cdef class BgenReader:
             del self.thisptr
             self.thisptr = NULL
             self.handle = None
+            self._samples = None
         finally:
             self._close_index()
     
