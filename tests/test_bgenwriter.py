@@ -119,10 +119,10 @@ class TestBgenWriter(unittest.TestCase):
         with BgenWriter(path, n_samples=3, samples=sample_ids, metadata=metadata) as bfile:
             bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno, bit_depth=bit_depth)
         
-        bfile = BgenReader(path)
-        self.assertEqual(metadata, bfile.header.metadata)
-        var = next(bfile)
-        self.assertTrue(probs_close(geno[:, :-1], var.probabilities[:, :-1], bit_depth))
+        with BgenReader(path) as bfile:
+            self.assertEqual(metadata, bfile.header.metadata)
+            var = next(bfile)
+            self.assertTrue(probs_close(geno[:, :-1], var.probabilities[:, :-1], bit_depth))
     
     def test_wrong_sample_number(self):
         ''' check we can't write variants with the wrong number of samples
@@ -1256,13 +1256,13 @@ class TestBgenWriter(unittest.TestCase):
                         bit_depth=bit_depth)
         bfile.close()
 
-        bfile = BgenReader(path, delay_parsing=True)
-        x = next(bfile)
-        self.assertTrue(probs_close(geno1[:, :-1], x.probabilities[:, :-1], bit_depth))
+        with BgenReader(path, delay_parsing=True) as bfile:
+            x = next(bfile)
+            self.assertTrue(probs_close(geno1[:, :-1], x.probabilities[:, :-1], bit_depth))
 
-        x = next(bfile)
-        self.assertEqual(len(x.alleles), 3)
-        self.assertTrue(probs_close(geno2[:, :-1], x.probabilities[:, :-1], bit_depth))
+            x = next(bfile)
+            self.assertEqual(len(x.alleles), 3)
+            self.assertTrue(probs_close(geno2[:, :-1], x.probabilities[:, :-1], bit_depth))
 
     def test_phased_data(self):
         '''checking writing phased data'''
@@ -1275,10 +1275,10 @@ class TestBgenWriter(unittest.TestCase):
                             phased=1, bit_depth=8)
         bfile.close()
 
-        bfile = BgenReader(path, delay_parsing=True)
-        for x in bfile:
-            probs = x.probabilities
-            self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth=8))
+        with BgenReader(path, delay_parsing=True) as bfile:
+            for x in bfile:
+                probs = x.probabilities
+                self.assertTrue(probs_close(geno[:, :-1], probs[:, :-1], bit_depth=8))
     
     def test_phased_data_many_samples(self):
         '''checking writing phased data with many samples.
@@ -1331,10 +1331,10 @@ class TestBgenWriter(unittest.TestCase):
                             ploidy=ploidy)
         bfile.close()
 
-        bfile = BgenReader(path, delay_parsing=True)
-        for x in bfile:
-            probs = x.probabilities
-            self.assertTrue(probs_close(geno, probs, bit_depth=8))
+        with BgenReader(path, delay_parsing=True) as bfile:
+            for x in bfile:
+                probs = x.probabilities
+                self.assertTrue(probs_close(geno, probs, bit_depth=8))
         
     def test_ploidy_phased(self):
         ''' check we can write phased variants with variable ploidy per sample
@@ -1351,10 +1351,10 @@ class TestBgenWriter(unittest.TestCase):
                             ploidy=ploidy, phased=1)
         bfile.close()
 
-        bfile = BgenReader(path, delay_parsing=True)
-        for x in bfile:
-            probs = x.probabilities
-            self.assertTrue(probs_close(geno, probs, bit_depth=8))
+        with BgenReader(path, delay_parsing=True) as bfile:
+            for x in bfile:
+                probs = x.probabilities
+                self.assertTrue(probs_close(geno, probs, bit_depth=8))
     
     def test_add_variant_direct(self):
         ''' test adding variant data directly from BgenVar

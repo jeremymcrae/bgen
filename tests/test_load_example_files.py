@@ -31,56 +31,57 @@ class TestExampleBgens(unittest.TestCase):
         '''
         for path in self.folder.glob('example.*bits.bgen'):
             bit_depth = int(path.stem.split('.')[1].strip('bits'))
-            bfile = BgenReader(str(path))
-            for var, g in zip(bfile, self.gen_data):
-                self.assertEqual(g, var)
-                self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
+            with BgenReader(str(path)) as bfile:
+                for var, g in zip(bfile, self.gen_data):
+                    self.assertEqual(g, var)
+                    self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
     
     def test_zstd_compressed(self):
         ''' check we can parse genotypes from zstd compressed geno probabilities
         '''
         path = self.folder / 'example.16bits.zstd.bgen'
-        bfile = BgenReader(str(path))
-        for var, g in zip(bfile, self.gen_data):
-            self.assertEqual(g, var)
-            self.assertTrue(arrays_equal(g.probabilities, var.probabilities, 16))
+        with BgenReader(str(path)) as bfile:
+            for var, g in zip(bfile, self.gen_data):
+                self.assertEqual(g, var)
+                self.assertTrue(arrays_equal(g.probabilities, var.probabilities, 16))
     
     def test_v11(self):
         ''' check we can open a bgen in v1.1 format, and parse genotypes correctly
         '''
         path = self.folder / 'example.v11.bgen'
-        bfile = BgenReader(str(path))
-        bit_depth = 16
-        for var, g in zip(bfile, self.gen_data):
-            self.assertEqual(g, var)
-            self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
+        with BgenReader(str(path)) as bfile:
+            bit_depth = 16
+            for var, g in zip(bfile, self.gen_data):
+                self.assertEqual(g, var)
+                self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
     
     def test_Path(self):
         ''' check we can open bgen files from Path objects
         '''
         path = self.folder / 'example.v11.bgen'
-        bfile = BgenReader(path)
+        with BgenReader(path):
+            pass
     
     def test_load_haplotypes_bgen(self):
         ''' check we can open a bgen with haplotypes, and parse genotypes correctly
         '''
         path = self.folder / 'haplotypes.bgen'
-        bfile = BgenReader(str(path))
-        bit_depth = 16
-        for var, g in zip(bfile, self.haps_data):
-            self.assertEqual(g, var)
-            self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
+        with BgenReader(str(path)) as bfile:
+            bit_depth = 16
+            for var, g in zip(bfile, self.haps_data):
+                self.assertEqual(g, var)
+                self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
     
     def test_load_complex_file(self):
         ''' make sure we can open a complex bgen file
         '''
         path = self.folder / 'complex.bgen'
-        bfile = BgenReader(path)
-        bit_depth = 16
-        for var, g in zip(bfile, self.vcf_data):
-            self.assertEqual(g, var)
-            self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
-            self.assertTrue(all(x == y for x, y in zip(g.ploidy, var.ploidy)))
+        with BgenReader(path) as bfile:
+            bit_depth = 16
+            for var, g in zip(bfile, self.vcf_data):
+                self.assertEqual(g, var)
+                self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
+                self.assertTrue(all(x == y for x, y in zip(g.ploidy, var.ploidy)))
     
     def test_load_complex_files(self):
         ''' make sure we can open the complex bgen files
@@ -88,10 +89,10 @@ class TestExampleBgens(unittest.TestCase):
         
         for path in self.folder.glob('complex.*.bgen'):
             bit_depth = int(path.stem.split('.')[1].strip('bits'))
-            bfile = BgenReader(path)
-            for var, g in zip(bfile, self.vcf_data):
-                self.assertEqual(g, var)
-                self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
+            with BgenReader(path) as bfile:
+                for var, g in zip(bfile, self.vcf_data):
+                    self.assertEqual(g, var)
+                    self.assertTrue(arrays_equal(g.probabilities, var.probabilities, bit_depth))
     
     def test_load_sample_file(self):
         ''' make sure we can open a sample file for a bgen
@@ -110,6 +111,7 @@ class TestExampleBgens(unittest.TestCase):
                         compression=orig.header.compression) as bfile:
             for var in orig:
                 bfile.add_variant_direct(var)
+        orig.close()
         
         # check bgen files without internal IDs or an external file instead
         # use numeric IDs (converted to strings)

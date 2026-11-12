@@ -207,52 +207,49 @@ class TestBgenReader(unittest.TestCase):
         ''' can fetch variants within a genomic region
         '''
         chrom, start, stop = '01', 5000, 50000
-        bfile = BgenReader(self.folder / 'example.16bits.bgen')
-        self.assertTrue(bfile._check_for_index(str(self.folder / 'example.16bits.bgen')))
-        
-        self.assertTrue(list(bfile.fetch('02')) == [])
+        with BgenReader(self.folder / 'example.16bits.bgen') as bfile:
+            self.assertTrue(bfile._check_for_index(str(self.folder / 'example.16bits.bgen')))
+            
+            self.assertTrue(list(bfile.fetch('02')) == [])
     
     def test_fetch_whole_chrom(self):
         ''' fetching just with chrom gives all variants on chromosome
         '''
         chrom, start, stop = '01', 5000, 50000
-        bfile = BgenReader(self.folder / 'example.16bits.bgen')
-        
-        # test fetching a whole chromosome
-        sortkey = lambda x: (x.chrom, x.pos)
-        for x, y in zip(sorted(bfile.fetch(chrom), key=sortkey), sorted(self.gen_data, key=sortkey)):
-            self.assertEqual(x.rsid, y.rsid)
-            self.assertEqual(x.chrom, y.chrom)
-            self.assertEqual(x.pos, y.pos)
+        with BgenReader(self.folder / 'example.16bits.bgen') as bfile:
+            # test fetching a whole chromosome
+            sortkey = lambda x: (x.chrom, x.pos)
+            for x, y in zip(sorted(bfile.fetch(chrom), key=sortkey), sorted(self.gen_data, key=sortkey)):
+                self.assertEqual(x.rsid, y.rsid)
+                self.assertEqual(x.chrom, y.chrom)
+                self.assertEqual(x.pos, y.pos)
     
     def test_fetch_after_position(self):
         ''' fetching variants with chrom and start gives all variants after pos
         '''
         chrom, start, stop = '01', 5000, 50000
-        bfile = BgenReader(self.folder / 'example.16bits.bgen')
-        
-        sortkey = lambda x: (x.chrom, x.pos)
-        gen_vars = [x for x in sorted(self.gen_data, key=sortkey) if start <= x.pos]
-        for x, y in zip(sorted(bfile.fetch(chrom, start), key=sortkey), gen_vars):
-            self.assertEqual(x.rsid, y.rsid)
-            self.assertEqual(x.chrom, y.chrom)
-            self.assertEqual(x.pos, y.pos)
+        with BgenReader(self.folder / 'example.16bits.bgen') as bfile:
+            sortkey = lambda x: (x.chrom, x.pos)
+            gen_vars = [x for x in sorted(self.gen_data, key=sortkey) if start <= x.pos]
+            for x, y in zip(sorted(bfile.fetch(chrom, start), key=sortkey), gen_vars):
+                self.assertEqual(x.rsid, y.rsid)
+                self.assertEqual(x.chrom, y.chrom)
+                self.assertEqual(x.pos, y.pos)
     
     def test_fetch_in_region(self):
         ''' fetching variants with chrom, start, stop gives variants in region
         '''
         chrom, start, stop = '01', 5000, 50000
-        bfile = BgenReader(self.folder / 'example.16bits.bgen')
-        
-        sortkey = lambda x: (x.chrom, x.pos)
-        gen_vars = [x for x in sorted(self.gen_data, key=sortkey) if start <= x.pos <= stop]
-        for x, y in zip(sorted(bfile.fetch(chrom, start, stop), key=sortkey), gen_vars):
-            self.assertEqual(x.rsid, y.rsid)
-            self.assertEqual(x.chrom, y.chrom)
-            self.assertEqual(x.pos, y.pos)
-        
-        # check that we don't get any variants in a region without any
-        self.assertEqual(list(bfile.fetch(chrom, start * 1000, stop * 1000)), [])
+        with BgenReader(self.folder / 'example.16bits.bgen') as bfile:
+            sortkey = lambda x: (x.chrom, x.pos)
+            gen_vars = [x for x in sorted(self.gen_data, key=sortkey) if start <= x.pos <= stop]
+            for x, y in zip(sorted(bfile.fetch(chrom, start, stop), key=sortkey), gen_vars):
+                self.assertEqual(x.rsid, y.rsid)
+                self.assertEqual(x.chrom, y.chrom)
+                self.assertEqual(x.pos, y.pos)
+            
+            # check that we don't get any variants in a region without any
+            self.assertEqual(list(bfile.fetch(chrom, start * 1000, stop * 1000)), [])
     
     def test_corrupt_sample_count(self):
         ''' an impossible sample count is rejected rather than sizing an allocation

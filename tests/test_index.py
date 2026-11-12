@@ -25,11 +25,11 @@ class TestBgenIndex(unittest.TestCase):
     def test_index_opens(self):
         ''' loads index when available
         '''
-        bfile = BgenReader(self.folder / 'example.15bits.bgen')
-        self.assertFalse(bfile._check_for_index(str(self.folder / 'example.15bits.bgen')))
+        with BgenReader(self.folder / 'example.15bits.bgen') as bfile:
+            self.assertFalse(bfile._check_for_index(str(self.folder / 'example.15bits.bgen')))
         
-        bfile = BgenReader(self.folder / 'example.16bits.bgen')
-        self.assertTrue(bfile._check_for_index(str(self.folder / 'example.16bits.bgen')))
+        with BgenReader(self.folder / 'example.16bits.bgen') as bfile:
+            self.assertTrue(bfile._check_for_index(str(self.folder / 'example.16bits.bgen')))
     
     def test_rechecking_for_an_index_closes_the_previous_one(self):
         ''' an index replaced by a second check is closed, rather than left open '''
@@ -55,6 +55,7 @@ class TestBgenIndex(unittest.TestCase):
         stop = 50000
         
         index = Index(self.folder / 'example.16bits.bgen.bgi')
+        self.addCleanup(index.close)
         self.assertTrue(len(list(index.fetch(chrom))) == len(self.gen_data))
         self.assertTrue(len(list(index.fetch('02'))) == 0)
         self.assertTrue(len(list(index.fetch(chrom, start * 100, stop * 100))) == 0)
@@ -88,6 +89,7 @@ class TestBgenIndex(unittest.TestCase):
         stop = 50000
         
         index = Index(self.folder / 'example.16bits.bgen.bgi')
+        self.addCleanup(index.close)
         before_pos_offsets = list(index.fetch(chrom, stop=stop))
         expected = [x for x in self.gen_data if x.pos <= stop]
         self.assertTrue(len(before_pos_offsets) > 0)
@@ -127,6 +129,7 @@ class TestBgenIndex(unittest.TestCase):
         needs a cursor of its own.
         '''
         index = Index(self.folder / 'example.16bits.bgen.bgi')
+        self.addCleanup(index.close)
         expected = list(index.fetch('01'))
         self.assertGreater(len(expected), 1)
         
@@ -151,6 +154,7 @@ class TestBgenIndex(unittest.TestCase):
     def test_index_supports_concurrent_fetches(self):
         ''' several fetches can be part way through at once '''
         index = Index(self.folder / 'example.16bits.bgen.bgi')
+        self.addCleanup(index.close)
         expected = list(index.fetch('01'))
         
         generators = [index.fetch('01') for _ in range(4)]
