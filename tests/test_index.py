@@ -1,9 +1,10 @@
 
 from pathlib import Path
+import tempfile
 import unittest
 
 
-from bgen import BgenReader
+from bgen import BgenReader, BgenWriter
 from bgen.index import Index
 
 from tests.utils import load_gen_data
@@ -170,3 +171,18 @@ class TestBgenIndex(unittest.TestCase):
             index.offset_by_rsid('RSID_5')
         # closing twice must stay harmless
         index.close()
+    
+    def test_reader_uses_an_index_without_variants(self):
+        ''' an indexed bgen with no variants is still read through its index '''
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'empty.bgen'
+            with BgenWriter(path, n_samples=2):
+                pass
+            with BgenReader(path) as bfile:
+                self.assertEqual(len(bfile), 0)
+                self.assertEqual(list(bfile.fetch('01')), [])
+                self.assertEqual(bfile.with_rsid('rs1'), [])
+                self.assertEqual(bfile.at_position(1), [])
+                self.assertEqual(bfile.rsids(), [])
+                with self.assertRaises(ValueError):
+                    bfile.varids()

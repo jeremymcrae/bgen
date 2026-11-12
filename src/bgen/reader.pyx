@@ -584,7 +584,7 @@ cdef class BgenReader:
             self.thisptr.parse_all_variants()
         
         cdef uint64_t offset
-        offset = self.index.offset_by_index(idx) if self.index else self.thisptr.variants[idx].offset
+        offset = self.index.offset_by_index(idx) if self.index is not None else self.thisptr.variants[idx].offset
         try:
             return self._variant_at(offset)
         except IndexError:
@@ -668,7 +668,7 @@ cdef class BgenReader:
         '''
         self._check_open()
         
-        if not self.index:
+        if self.index is None:
             if self.is_stdin:
                 raise ValueError(NO_RANDOM_ACCESS)
             raise ValueError("can't fetch variants without index")
@@ -681,7 +681,7 @@ cdef class BgenReader:
         '''
         self._check_open()
         
-        if self.index:
+        if self.index is not None:
             if by_rsid:
                 offsets = self.index.offset_by_rsid(key)
             else:
@@ -712,7 +712,7 @@ cdef class BgenReader:
       '''
       self._check_open()
       
-      if self.index:
+      if self.index is not None:
           raise ValueError("can't load varids when using an index file")
       
       self.thisptr.parse_all_variants()
@@ -724,7 +724,7 @@ cdef class BgenReader:
       '''
       self._check_open()
       
-      if self.index:
+      if self.index is not None:
           return self.index.rsids
       
       self.thisptr.parse_all_variants()
@@ -736,7 +736,7 @@ cdef class BgenReader:
         '''
         self._check_open()
         
-        if self.index:
+        if self.index is not None:
             return self.index.chroms
         
         self.thisptr.parse_all_variants()
@@ -748,7 +748,7 @@ cdef class BgenReader:
         '''
         self._check_open()
         
-        if self.index:
+        if self.index is not None:
             return self.index.positions
         
         self.thisptr.parse_all_variants()
