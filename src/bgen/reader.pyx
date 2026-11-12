@@ -714,7 +714,7 @@ cdef class BgenReader:
         variants directly, rather than decoding every variant's value to compare in
         python. The results match comparing the decoded values with ==
         '''
-        cdef size_t i, n = self.thisptr.variants.size()
+        cdef size_t n = self.thisptr.variants.size()
         cdef string rsid
         cdef uint32_t pos
         if by_rsid:
