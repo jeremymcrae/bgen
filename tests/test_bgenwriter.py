@@ -1915,6 +1915,21 @@ class TestBgenWriter(unittest.TestCase):
             con.close()
         self.assertTrue(all(0 < x < 2 ** 32 for x in starts), starts)
 
+    def test_index_metadata_describes_the_bgen(self):
+        ''' the index records the bgen's path, size, mtime and first bytes
+        '''
+        path = self.tmpdir / 'meta.bgen'
+        with BgenWriter(path, 3, samples=['a', 'b', 'c']) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], np.full((3, 3), 1 / 3))
+
+        con = sqlite3.connect(Path(str(path) + '.bgi'))
+        rows = con.execute('SELECT filename, file_size, last_write_time, '
+                           'first_1000_bytes FROM Metadata').fetchall()
+        con.close()
+        st = path.stat()
+        self.assertEqual(rows, [(str(path), st.st_size, int(st.st_mtime),
+                                 path.read_bytes()[:1000])])
+
     @unittest.skipUnless(hasattr(os, 'mkfifo'), 'needs fifos, which windows lacks')
     def test_writing_to_a_pipe_reports_a_useful_error(self):
         ''' a bgen needs a seekable output, and saying so beats an iostream error

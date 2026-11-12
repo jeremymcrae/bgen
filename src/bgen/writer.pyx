@@ -40,6 +40,7 @@ class Indexer:
     ''' class to automatically index bgen files as they are being constructed
     '''
     def __init__(self, bgen_path):
+        self.bgen_path = Path(bgen_path)
         self.index_path = Path(str(bgen_path) + '.bgi')
         if self.index_path.exists():
             self.index_path.unlink()
@@ -83,13 +84,12 @@ class Indexer:
         self.cur.execute(query, params)
     
     def add_metadata(self):
-        bgen_path = self.index_path.with_suffix('')
-        bgen_size = bgen_path.stat().st_size
-        bgen_time = int(bgen_path.stat().st_mtime)
-        with open(bgen_path, 'rb') as f:
+        st = self.bgen_path.stat()
+        with open(self.bgen_path, 'rb') as f:
             first_1000_bytes = f.read(1000)
         query = '''INSERT INTO Metadata VALUES (?, ?, ?, ?, ?)'''
-        params = (str(bgen_path), bgen_size, bgen_time, first_1000_bytes, self.create_time)
+        params = (str(self.bgen_path), st.st_size, int(st.st_mtime), first_1000_bytes,
+                  self.create_time)
         self.cur.execute(query, params)
 
     def close(self):
