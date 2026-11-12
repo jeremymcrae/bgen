@@ -147,7 +147,7 @@ cdef class BgenWriter:
 
         self.path = path.encode('utf8')
         
-        logging.debug(f'opening CppBgenWriter from {self.path.decode("utf")}')
+        logging.debug(f'opening CppBgenWriter from {path}')
         self.thisptr = new CppBgenWriter(self.path, n_samples, _metadata, compress_flag, layout, _samples)
         self.is_open = True
         self.indexer = Indexer(path)
