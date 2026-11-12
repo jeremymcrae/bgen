@@ -268,3 +268,21 @@ class TestBgenIndex(unittest.TestCase):
                 self.assertEqual(fetched(None, np.int64(0)), [])
                 self.assertEqual(fetched(-2 ** 70, 2 ** 70), ['v0', 'v1', 'v2', 'v3'])
                 self.assertEqual(fetched(2 ** 63), [])
+    
+    def test_lookups_come_in_file_order(self):
+        ''' variants sharing an rsID or position come in file order, as without an index '''
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'order.bgen'
+            geno = np.full((2, 3), 1 / 3)
+            with BgenWriter(path, 2) as bfile:
+                for i, (chrom, pos) in enumerate([('02', 10), ('01', 30), ('01', 10)]):
+                    bfile.add_variant(f'v{i}', 'rsX', chrom, pos, ['A', 'C'], geno)
+            for indexed in [True, False]:
+                if not indexed:
+                    Path(str(path) + '.bgi').unlink()
+                with self.subTest(indexed=indexed):
+                    with BgenReader(path, delay_parsing=indexed) as bfile:
+                        self.assertEqual([x.varid for x in bfile.with_rsid('rsX')],
+                                         ['v0', 'v1', 'v2'])
+                        self.assertEqual([x.varid for x in bfile.at_position(10)],
+                                         ['v0', 'v2'])

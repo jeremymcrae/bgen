@@ -120,7 +120,9 @@ class Index:
     def offset_by_rsid(self, rsid) -> list[int]:
         ''' get file offsets of the bgen variants with a given rsID
         '''
-        query = "SELECT file_start_position FROM Variant WHERE rsid = ?"
+        # in file order, as a bgen without an index gives them
+        query = ("SELECT file_start_position FROM Variant WHERE rsid = ? "
+                 "ORDER BY file_start_position")
         params = (rsid, )
         return [x[0] for x in self._query(query, params)]
     
@@ -131,7 +133,9 @@ class Index:
         if pos is None or not 0 <= pos <= MAX_POSITION:
             # no stored position can equal this
             return []
-        query = "SELECT file_start_position FROM Variant WHERE position = ?"
+        # in file order, as a bgen without an index gives them
+        query = ("SELECT file_start_position FROM Variant WHERE position = ? "
+                 "ORDER BY file_start_position")
         params = (pos, )
         return [x[0] for x in self._query(query, params)]
     
