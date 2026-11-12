@@ -6,6 +6,8 @@ from numpy.typing import ArrayLike, NDArray
 
 from bgen.reader import BgenVar
 
+DEFAULT_BIT_DEPTH: int
+
 class Indexer:
     ''' class to automatically index bgen files as they are being constructed
     '''
@@ -22,6 +24,7 @@ class Indexer:
                     offset: int,
                     size: int,
                     ) -> None: ...
+    def add_metadata(self) -> None: ...
     def close(self) -> None: ...
 
 class BgenWriter:
