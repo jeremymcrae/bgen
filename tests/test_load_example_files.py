@@ -179,6 +179,9 @@ class TestExampleBgens(unittest.TestCase):
         with self.assertRaises(ValueError):
             BgenReader('/zzz/jjj/qqq.bgen')
     
-    # def test_load_missing_sample_file(self):
-    #     path = str(self.folder / 'example.8bits.bgen')
-    #     bfile = BgenReader(path, '/zzz/jjj/qqq.sample')
+    def test_load_missing_sample_file(self):
+        ''' a missing sample file fails gracefully, for a bgen without its own IDs
+        '''
+        path = self.folder / 'example.v11.bgen'
+        with self.assertRaises(ValueError):
+            BgenReader(path, '/zzz/jjj/qqq.sample')
