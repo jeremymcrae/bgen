@@ -48,7 +48,7 @@ public:
   std::uint64_t write_variant_direct(const char * data, std::size_t size);
   void encode_genotype_data(std::uint16_t n_alleles,
                             double *genotypes,
-                            std::uint32_t geno_len,
+                            std::uint64_t geno_len,
                             const std::uint8_t *ploidy,
                             std::uint8_t min_ploidy,
                             std::uint8_t max_ploidy,

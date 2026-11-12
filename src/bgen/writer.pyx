@@ -30,7 +30,7 @@ cdef extern from 'writer.h' namespace 'bgen':
                         const string &chrom, uint32_t pos, const vector[string] &alleles) except +
         uint64_t write_variant_direct(const char * data, size_t size) except +
         void encode_genotype_data(uint16_t n_alleles,
-                         double *genotypes, uint32_t geno_len, const uint8_t *ploidy,
+                         double *genotypes, uint64_t geno_len, const uint8_t *ploidy,
                          uint8_t min_ploidy, uint8_t max_ploidy,
                          bool phased, uint8_t bit_depth) except +
         uint64_t write_genotype_data() except +
@@ -305,7 +305,7 @@ cdef class BgenWriter:
         
         # encode the genotypes before writing anything, so that a variant with
         # invalid genotypes cannot leave a partial variant in the bgen file
-        cdef uint32_t geno_len = self.n_samples * n_genos
+        cdef uint64_t geno_len = <uint64_t> self.n_samples * n_genos
         self.thisptr.encode_genotype_data(_alleles.size(), <double *> &geno_c[0, 0],
                                           geno_len, ploidy_ptr, min_ploidy, max_ploidy,
                                           phased, bit_depth)

@@ -366,12 +366,12 @@ static inline bool missing_genotypes(const double *genotypes, std::uint32_t size
 
 static std::vector<std::uint8_t> encode_layout1(
                     double *genotypes,
-                    std::uint32_t geno_len) {
+                    std::uint64_t geno_len) {
   // genotypes are encoded as 16-bit uints
   std::vector<std::uint8_t> encoded((std::size_t) geno_len * 2);
 
-  std::uint32_t i = 0;
-  for (std::uint32_t j=0; j < geno_len; j+=3) {
+  std::size_t i = 0;
+  for (std::uint64_t j=0; j < geno_len; j+=3) {
     bool missing = missing_genotypes(&genotypes[j], 3);
     double cumulative = 0.0;
     for (std::uint32_t k=0; k<3; k++) {
@@ -798,7 +798,8 @@ static std::uint32_t encode_unphased(std::vector<std::uint8_t> &encoded,
   // counted alongside i rather than recovered as i / max_probs, which divides by a
   // runtime value once or twice per sample
   std::uint32_t sample_idx = 0;
-  for (std::uint32_t i=0; i<(n_samples*max_probs); i+= max_probs, sample_idx++) {
+  const std::uint64_t geno_len = (std::uint64_t) n_samples * max_probs;
+  for (std::uint64_t i=0; i<geno_len; i+= max_probs, sample_idx++) {
     if (!constant_ploidy) {
       n_probs = ploidy_probs[encoded[ploidy_offset + sample_idx] &= 63];
     }
@@ -836,7 +837,8 @@ static std::uint32_t encode_phased(std::vector<std::uint8_t> &encoded,
   // 64-bit, as in encode_unphased
   std::uint64_t bit_idx = 0;
   std::uint32_t sample_idx = 0;
-  for (std::uint32_t i=0; i<(n_samples*row_len); i+= row_len, sample_idx++) {
+  const std::uint64_t geno_len = (std::uint64_t) n_samples * row_len;
+  for (std::uint64_t i=0; i<geno_len; i+= row_len, sample_idx++) {
     if (!constant_ploidy) {
       ploid = (encoded[ploidy_offset + sample_idx] &= 63);
     }
@@ -862,7 +864,7 @@ static std::vector<std::uint8_t> encode_layout2(
                     std::uint32_t n_samples,
                     std::uint16_t n_alleles,
                     double *genotypes,
-                    std::uint32_t geno_len,
+                    std::uint64_t geno_len,
                     const std::uint8_t *ploidy,
                     std::uint8_t min_ploidy,
                     std::uint8_t max_ploidy,
@@ -874,7 +876,7 @@ static std::vector<std::uint8_t> encode_layout2(
   if (phased) {
     max_probs *= max_ploidy;
   }
-  if ((std::uint64_t) geno_len != (std::uint64_t) max_probs * n_samples) {
+  if (geno_len != (std::uint64_t) max_probs * n_samples) {
     throw std::invalid_argument("genotypes does not match n_samples * per_person_probs");
   }
 
@@ -941,7 +943,7 @@ static std::vector<std::uint8_t> encode_layout2(
 // array is only read when the ploidy varies
 void CppBgenWriter::encode_genotype_data(std::uint16_t n_alleles,
                                          double *genotypes,
-                                         std::uint32_t geno_len,
+                                         std::uint64_t geno_len,
                                          const std::uint8_t *ploidy,
                                          std::uint8_t min_ploidy,
                                          std::uint8_t max_ploidy,
