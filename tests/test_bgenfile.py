@@ -206,7 +206,6 @@ class TestBgenReader(unittest.TestCase):
     def test_fetch(self):
         ''' can fetch variants within a genomic region
         '''
-        chrom, start, stop = '01', 5000, 50000
         with BgenReader(self.folder / 'example.16bits.bgen') as bfile:
             self.assertTrue(bfile._check_for_index(str(self.folder / 'example.16bits.bgen')))
             
@@ -215,7 +214,7 @@ class TestBgenReader(unittest.TestCase):
     def test_fetch_whole_chrom(self):
         ''' fetching just with chrom gives all variants on chromosome
         '''
-        chrom, start, stop = '01', 5000, 50000
+        chrom = '01'
         with BgenReader(self.folder / 'example.16bits.bgen') as bfile:
             # test fetching a whole chromosome
             sortkey = lambda x: (x.chrom, x.pos)
@@ -227,7 +226,7 @@ class TestBgenReader(unittest.TestCase):
     def test_fetch_after_position(self):
         ''' fetching variants with chrom and start gives all variants after pos
         '''
-        chrom, start, stop = '01', 5000, 50000
+        chrom, start = '01', 5000
         with BgenReader(self.folder / 'example.16bits.bgen') as bfile:
             sortkey = lambda x: (x.chrom, x.pos)
             gen_vars = [x for x in sorted(self.gen_data, key=sortkey) if start <= x.pos]

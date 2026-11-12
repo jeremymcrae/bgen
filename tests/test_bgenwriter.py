@@ -95,7 +95,6 @@ class TestBgenWriter(unittest.TestCase):
         path2 = self.tmpdir / 'temp2.bgen'
 
         # check if we change the attributes, then we get the right data
-        # bfile = BgenWriter(tmp.name, n_samples=4, samples=['a', 'b', 'c', 'd'], 
         with BgenWriter(path2, n_samples=4, samples=[], 
                            compression=None, layout=1, metadata='1234') as bfile:
             pass
