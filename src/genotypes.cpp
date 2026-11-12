@@ -1089,7 +1089,7 @@ BGEN_TARGET_AVX
 static void swap_dosage_avx(float * dose, std::uint32_t n_samples, float ploidy,
                             std::uint32_t & n) {
   __m256 k = _mm256_set1_ps(ploidy);
-  for (; n + 8 < n_samples; n+=8) {
+  for (; n + 8 <= n_samples; n+=8) {
     _mm256_storeu_ps(dose + n, _mm256_sub_ps(k, _mm256_loadu_ps(dose + n)));
   }
 }
@@ -1114,7 +1114,7 @@ void Genotypes::swap_allele_dosage(float * dose) {
   }
 #elif defined(__aarch64__)
   float32x4_t k = vdupq_n_f32(ploid);
-  for (; n + 4 < n_samples; n += 4) {
+  for (; n + 4 <= n_samples; n += 4) {
     vst1q_f32(dose + n, vsubq_f32(k, vld1q_f32(dose + n)));
   }
 #endif
