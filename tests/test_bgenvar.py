@@ -100,8 +100,10 @@ class TestBgenVar(unittest.TestCase):
         path = self.folder / 'example.16bits.zstd.bgen'
         with BgenReader(path) as bfile:
             for var in bfile:
-                # this checks that we can pickle and unpickle a BgenVar
-                pickled = pickle.dumps(var)
+                # this checks that we can pickle and unpickle a BgenVar, and that
+                # pickling warns the bgen has to stay open for the copy to read it
+                with self.assertWarns(RuntimeWarning):
+                    pickled = pickle.dumps(var)
                 unpickled = pickle.loads(pickled)
                 
                 # check attributes of the original and unpickled are identical
