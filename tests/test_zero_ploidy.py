@@ -7,6 +7,7 @@ sample's data.
 '''
 
 from pathlib import Path
+import struct
 import tempfile
 import unittest
 
@@ -157,6 +158,34 @@ class TestZeroPloidy(unittest.TestCase):
         dose = self.read('alt_dosage')
         self.assertTrue(np.isnan(dose[ploidy == 0]).all(), f'{dose}')
         self.assertTrue(np.allclose(dose[ploidy == 2], 1.4, atol=0.01), f'{dose}')
+
+    def test_phased_constant_zero_ploidy_probabilities(self):
+        ''' a phased variant where every sample has zero ploidy has no probabilities
+
+        The writer cannot store an empty genotype array, so this rewrites a diploid
+        variant's ploidy fields to zero and drops its probabilities.
+        '''
+        n = 4
+        with BgenWriter(self.path, n, compression=None) as bfile:
+            bfile.add_variant('var', 'rs1', '01', 1, ['A', 'C'], np.full((n, 4), 0.5),
+                              phased=True)
+        with BgenReader(self.path) as bfile:
+            end = next(iter(bfile)).next_variant_offset
+        data = bytearray(self.path.read_bytes())
+        # sample count, allele count, ploidy bounds, ploidies, phased flag, bit depth,
+        # then a byte per haplotype
+        block_len = 10 + n + 2 * n
+        start = end - block_len
+        self.assertEqual(struct.unpack_from('<I', data, start - 4), (block_len, ))
+        struct.pack_into('<I', data, start - 4, block_len - 2 * n)
+        data[start + 6:start + 8 + n] = bytes(2 + n)
+        del data[end - 2 * n:end]
+        self.path.write_bytes(bytes(data))
+
+        with BgenReader(self.path) as bfile:
+            var = next(iter(bfile))
+            self.assertEqual(var.probabilities.shape, (n, 0))
+            self.assertTrue((var.alt_dosage == 0).all())
 
     def test_ploidy_above_two_still_raises(self):
         ''' a ploidy above two is still rejected '''

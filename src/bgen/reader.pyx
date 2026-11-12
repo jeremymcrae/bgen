@@ -414,7 +414,7 @@ cdef class BgenVar:
         if phased:
             if min_ploidy == max_ploidy:
                 # quickly reshape probs if ploidy is constant
-                data = np.reshape(arr, (-1, max_ploidy * cols))
+                data = np.reshape(arr, (n_samples, max_ploidy * cols))
             else:
                 # phased data comes as one row per haplotype. Copy each sample's
                 # haplotypes into a single row, leaving nan beyond its ploidy
@@ -426,7 +426,7 @@ cdef class BgenVar:
                         memcpy(&ragged[i, 0], &arr[used], count * sizeof(float))
                     used += count
         else:
-            data = np.reshape(arr, (-1, cols))
+            data = np.reshape(arr, (n_samples, cols))
         
         return data
     
