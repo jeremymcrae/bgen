@@ -12,7 +12,7 @@ import numpy as np
 
 from bgen import BgenReader, BgenWriter
 
-from tests.utils import load_gen_data, can_cap_memory
+from tests.utils import load_gen_data, can_cap_memory, cap_after_import
 
 HAS_RLIMIT = can_cap_memory()
 
@@ -36,19 +36,9 @@ def run_capped(code, cap=None):
     preamble = textwrap.dedent(f'''
         import sys
         sys.path[:] = {sys.path!r}
-        import numpy, resource
+        import numpy
         from bgen import BgenReader
-        used = 0
-        try:
-            with open('/proc/self/status') as handle:
-                for line in handle:
-                    if line.startswith('VmSize'):
-                        used = int(line.split()[1]) * 1024
-        except OSError:
-            pass
-        cap = used + {cap}
-        resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
-        ''')
+        ''') + cap_after_import(cap)
     return subprocess.run([sys.executable, '-c', preamble + textwrap.dedent(code)],
                           capture_output=True, text=True, timeout=120)
 
