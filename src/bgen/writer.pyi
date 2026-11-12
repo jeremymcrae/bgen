@@ -48,7 +48,7 @@ class BgenWriter:
                     pos: int,
                     alleles: Sequence[str],
                     genotypes: ArrayLike,
-                    ploidy: Union[int, NDArray[np.integer[Any]]] = 2,
+                    ploidy: Union[int, Sequence[int], NDArray[np.integer[Any]]] = 2,
                     phased: bool = False,
                     bit_depth: int = 8,
                     ) -> None:

@@ -216,11 +216,10 @@ cdef class BgenWriter:
     def _validate_ploidy(self, ploidy, n_samples):
         ''' check the ploidy values
         '''
-        if isinstance(ploidy, list):
+        if isinstance(ploidy, (list, tuple)):
             ploidy = np.array(ploidy)
         
         # determine ploidy levels
-        cdef int32_t min_ploidy, max_ploidy
         cdef const uint8_t[::1] ploidy_arr = None
         if np.isscalar(ploidy) and np.issubdtype(type(ploidy), np.integer):
             min_ploidy, max_ploidy = ploidy, ploidy
@@ -229,14 +228,16 @@ cdef class BgenWriter:
                 raise ValueError(f'ploidy array must have {n_samples} entries, not {ploidy.size}')
 
             min_ploidy, max_ploidy = np.min(ploidy), np.max(ploidy)
-            if min_ploidy != max_ploidy:
-                # contiguous, since the encoder reads through a plain pointer
-                ploidy_arr = np.ascontiguousarray(ploidy, dtype=np.uint8)
         else:
             raise ValueError('ploidy must be either integer, or numpy array of integers')
         
+        # checked as python integers, so a value too big for a C integer is rejected here
         if min_ploidy < 0 or max_ploidy > 63:
             raise ValueError('ploidy values must be between 0 and 63')
+        
+        if min_ploidy != max_ploidy:
+            # contiguous, since the encoder reads through a plain pointer
+            ploidy_arr = np.ascontiguousarray(ploidy, dtype=np.uint8)
         
         return min_ploidy, max_ploidy, ploidy_arr
 

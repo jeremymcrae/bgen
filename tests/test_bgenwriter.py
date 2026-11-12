@@ -1443,6 +1443,29 @@ class TestBgenWriter(unittest.TestCase):
             self.assertEqual(var.ploidy.tolist(), [2, 1, 2, 2])
             self.assertTrue(probs_close(geno, var.probabilities, bit_depth=8))
 
+    def test_ploidy_from_a_tuple(self):
+        ''' a tuple of ploidies is accepted, as a list is
+        '''
+        geno = np.array([[0.1, 0.3, 0.6], [0.25, 0.75, float('nan')]])
+        path = self.tmpdir / 'tuple.bgen'
+        with BgenWriter(path, 2) as bfile:
+            bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno, ploidy=(2, 1))
+
+        with BgenReader(path) as bfile:
+            self.assertEqual(next(iter(bfile)).ploidy.tolist(), [2, 1])
+
+    def test_ploidy_too_large_for_an_integer(self):
+        ''' a ploidy beyond a C integer is a ValueError, as any other out of range ploidy
+        '''
+        geno = np.full((2, 3), 1 / 3)
+        path = self.tmpdir / 'huge.bgen'
+        with BgenWriter(path, 2) as bfile:
+            for ploidy in [2 ** 40, np.array([2, 2 ** 40])]:
+                with self.subTest(ploidy=ploidy):
+                    with self.assertRaises(ValueError):
+                        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
+                                          ploidy=ploidy)
+
     def test_read_only_arrays_can_be_written(self):
         ''' read-only genotype and ploidy arrays are accepted
         '''
