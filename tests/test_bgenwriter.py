@@ -1943,6 +1943,26 @@ class TestBgenWriter(unittest.TestCase):
         with BgenReader(path) as bfile:
             self.assertEqual(len(list(bfile)), 0)
 
+    def test_variants_without_samples(self):
+        ''' a bgen without samples can still hold variants, and a wrong count says so
+        '''
+        path = self.tmpdir / 'nosamples.bgen'
+        for compression, layout in [(None, 1), ('zlib', 1), (None, 2), ('zstd', 2)]:
+            with self.subTest(compression=compression, layout=layout):
+                with BgenWriter(path, 0, compression=compression, layout=layout) as bfile:
+                    bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'],
+                                      np.empty((0, 3)))
+                with BgenReader(path) as bfile:
+                    var = next(iter(bfile))
+                    self.assertEqual(var.probabilities.shape, (0, 3))
+                    self.assertEqual(var.alt_dosage.shape, (0, ))
+
+        with BgenWriter(path, 3) as bfile:
+            with self.assertRaisesRegex(ValueError, 'must have 3 samples, not 0'):
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], np.empty((0, 3)))
+            with self.assertRaisesRegex(ValueError, 'non-empty'):
+                bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], np.empty((3, 0)))
+
     def test_failed_index_setup_closes_its_connection(self):
         ''' a failure creating the index tables does not leave the database open
         '''

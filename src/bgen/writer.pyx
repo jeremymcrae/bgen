@@ -213,12 +213,13 @@ cdef class BgenWriter:
         if genotypes.ndim != 2:
             raise ValueError('genotypes must be a 2D array')
         
-        if genotypes.size == 0:
-            raise ValueError('genotypes array must be non-empty')
-        
         n_samples = genotypes.shape[0]
         if n_samples != self.n_samples:
             raise ValueError(f'genotypes array must have {self.n_samples} samples, not {n_samples}')
+        
+        # a bgen without samples has no rows, but each row needs a probability
+        if genotypes.shape[1] == 0:
+            raise ValueError('genotypes array must be non-empty')
         
         return genotypes
 
@@ -235,6 +236,9 @@ cdef class BgenWriter:
         elif isinstance(ploidy, np.ndarray) and np.issubdtype(ploidy.dtype, np.integer):
             if ploidy.ndim != 1 or ploidy.size != n_samples:
                 raise ValueError(f'ploidy array must have {n_samples} entries, not {ploidy.size}')
+            if ploidy.size == 0:
+                raise ValueError('a ploidy array needs samples to describe, so pass an '
+                                 'integer ploidy for a bgen without samples')
 
             min_ploidy, max_ploidy = np.min(ploidy), np.max(ploidy)
         else:
