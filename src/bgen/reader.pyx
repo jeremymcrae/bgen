@@ -510,11 +510,18 @@ cdef class BgenReader:
         return 0
     
     cdef BgenVar _variant_at(self, uint64_t offset):
-        ''' open the variant which starts at a byte offset in the bgen
+        ''' open the variant at a byte offset which the index or header lists
+        
+        A bgen ending before that offset is truncated. __next__ opens variants itself,
+        since there reaching the end of the file is how iteration stops
         '''
-        return BgenVar(self.handle, offset, self.thisptr.header.layout,
-                       self.thisptr.header.compression, self.thisptr.header.nsamples,
-                       self.is_stdin, self.is_open)
+        try:
+            return BgenVar(self.handle, offset, self.thisptr.header.layout,
+                           self.thisptr.header.compression, self.thisptr.header.nsamples,
+                           self.is_stdin, self.is_open)
+        except IndexError:
+            raise ValueError(f'bgen is truncated - it ends before the variant listed at '
+                             f'byte {offset}')
     
     def __iter__(self):
         return self
@@ -526,7 +533,9 @@ cdef class BgenReader:
         
         cdef BgenVar var
         try:
-            var = self._variant_at(self.offset)
+            var = BgenVar(self.handle, self.offset, self.thisptr.header.layout,
+                          self.thisptr.header.compression, self.thisptr.header.nsamples,
+                          self.is_stdin, self.is_open)
             # read the next offset off the C++ variant, rather than through the python
             # property, which would box it into a python int just to unbox it
             self.offset = var.thisptr.next_variant_offset
@@ -587,13 +596,7 @@ cdef class BgenReader:
         
         cdef uint64_t offset
         offset = self.index.offset_by_index(idx) if self.index is not None else self.thisptr.variants[idx].offset
-        try:
-            return self._variant_at(offset)
-        except IndexError:
-            # the index was in range, so the bgen lacks a variant that its index (or
-            # header) lists
-            raise ValueError(f'bgen is truncated - could not read the variant at '
-                             f'index {orig_idx}')
+        return self._variant_at(offset)
     
     def _check_for_index(self, bgen_path):
         ''' creates self.index if a bgenix index file is available
@@ -691,7 +694,7 @@ cdef class BgenReader:
                 offsets = self.index.offset_by_rsid(key)
             else:
                 offsets = self.index.offset_by_pos(key)
-            return [self._variant_at(int(offset)) for offset in offsets]
+            return [self._variant_at(offset) for offset in offsets]
         
         if not self.delay_parsing:
             return [self[i] for i in self._matching(key, by_rsid)]

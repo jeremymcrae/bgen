@@ -286,3 +286,18 @@ class TestBgenIndex(unittest.TestCase):
                                          ['v0', 'v1', 'v2'])
                         self.assertEqual([x.varid for x in bfile.at_position(10)],
                                          ['v0', 'v2'])
+    
+    def test_truncated_bgen_lookups_say_so(self):
+        ''' an index listing variants past the end of a truncated bgen raises ValueError '''
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._positions_bgen(tmp)
+            with BgenReader(path) as bfile:
+                cut = bfile[2].fileoffset
+            path.write_bytes(path.read_bytes()[:cut])
+            with BgenReader(path) as bfile:
+                for name, lookup in [('fetch', lambda: list(bfile.fetch('01'))),
+                                     ('with_rsid', lambda: bfile.with_rsid('rs2')),
+                                     ('at_position', lambda: bfile.at_position(30))]:
+                    with self.subTest(name=name):
+                        with self.assertRaisesRegex(ValueError, 'truncated'):
+                            lookup()
