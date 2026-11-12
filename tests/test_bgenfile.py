@@ -68,6 +68,29 @@ class TestBgenReader(unittest.TestCase):
         with self.assertRaises(ValueError):
             bfile.samples
 
+    def test_lookups_without_an_index(self):
+        ''' a fully parsed bgen without an index finds variants by rsID and position
+        '''
+        path = Path(self.tmpdir) / 'lookup.bgen'
+        geno = np.full((2, 3), 1 / 3)
+        with BgenWriter(path, 2) as bfile:
+            for i, pos in enumerate([10, 20, 10]):
+                bfile.add_variant(f'v{i}', f'rs{i}', '1', pos, ['A', 'C'], geno)
+        Path(str(path) + '.bgi').unlink()
+
+        with BgenReader(path, delay_parsing=False) as bfile:
+            self.assertEqual([x.varid for x in bfile.with_rsid('rs1')], ['v1'])
+            self.assertEqual(bfile.with_rsid('rs9'), [])
+            self.assertEqual(bfile.with_rsid('\ud800'), [])
+            self.assertEqual(bfile.with_rsid(1), [])
+            for pos in [10, np.int64(10), 10.0]:
+                with self.subTest(pos=pos):
+                    self.assertEqual([x.varid for x in bfile.at_position(pos)],
+                                     ['v0', 'v2'])
+            for pos in [10.5, -1, 2 ** 40, '10']:
+                with self.subTest(pos=pos):
+                    self.assertEqual(bfile.at_position(pos), [])
+
     def test_repr(self):
         ''' the repr names the class and its paths
         '''
