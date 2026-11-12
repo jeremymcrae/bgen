@@ -6,10 +6,6 @@ build/
 *zlib_build/
 src/bgen/*.cpp
 src/bgen/*.so
-tests/data/temp.bgen
-tests/data/temp.bgen.bgi
-tests/data/empty.sample
-tests/data/extra.sample
 benchmark.py
 .tmp.bgen*
 *.egg

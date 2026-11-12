@@ -1,5 +1,6 @@
 
 from pathlib import Path
+import tempfile
 import unittest
 
 
@@ -20,6 +21,10 @@ class TestExampleBgens(unittest.TestCase):
         ''' set path to folder with test data
         '''
         self.folder = Path(__file__).parent /  "data"
+        # files written by the tests go here, rather than among the test data
+        self.tmp = tempfile.TemporaryDirectory()
+        self.tmpdir = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
     
     def test_load_example_genotypes_bit_depths(self):
         ''' check parsing genotypes from the example files with different bit depths
@@ -99,7 +104,7 @@ class TestExampleBgens(unittest.TestCase):
         # construct a bgen file without any sample IDs inside (otherwise 
         # the internal IDs take priority). The variant data is copied across as
         # raw bytes, so the layout and compression have to match the source
-        bgen_path = self.folder / 'temp.bgen'
+        bgen_path = self.tmpdir / 'temp.bgen'
         with BgenWriter(bgen_path, n_samples=len(orig.samples),
                         layout=orig.header.layout,
                         compression=orig.header.compression) as bfile:
@@ -118,7 +123,7 @@ class TestExampleBgens(unittest.TestCase):
             self.assertEqual(orig_samples, bfile.samples)
         
         # check we raise an error with too few sample IDs
-        missing_path = self.folder / 'empty.sample'
+        missing_path = self.tmpdir / 'empty.sample'
         missing = open(missing_path, 'wt')
         missing.close()
         
@@ -126,7 +131,7 @@ class TestExampleBgens(unittest.TestCase):
             BgenReader(bgen_path, missing_path)
         
         # check we raise an error with too many sample IDs
-        extra_path = self.folder / 'extra.sample'
+        extra_path = self.tmpdir / 'extra.sample'
         with open(extra_path, 'wt') as extra:
             extra.write('id\n0\nsample_0\nsample_1\nsample_2\nsample_3\nsample_4\n')
         
@@ -136,7 +141,7 @@ class TestExampleBgens(unittest.TestCase):
     def test_load_sample_file_delimiters(self):
         ''' sample files can be tab delimited, or have windows line endings
         '''
-        bgen_path = self.folder / 'temp.bgen'
+        bgen_path = self.tmpdir / 'temp.bgen'
         expected = ['sample_0', 'sample_1', 'sample_2', 'sample_3']
         
         # build a bgen without internal sample IDs, so the sample file is used
@@ -159,7 +164,7 @@ class TestExampleBgens(unittest.TestCase):
                 ('windows blank last line', ''.join(f'{x}\r\n' for x in rows) + '\r\n'),
                 ('blank last line', ''.join(f'{x}\n' for x in rows) + '\n'),
                 ]:
-            sample_path = self.folder / 'delim.sample'
+            sample_path = self.tmpdir / 'delim.sample'
             with open(sample_path, 'w', newline='') as handle:
                 handle.write(text)
             with BgenReader(bgen_path, sample_path) as bfile:
