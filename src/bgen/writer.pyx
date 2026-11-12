@@ -46,8 +46,13 @@ class Indexer:
             self.index_path.unlink()
         self.create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
         self.conn = sqlite3.connect(self.index_path)
-        self.cur = self.conn.cursor()
-        self.create_tables()
+        try:
+            self.cur = self.conn.cursor()
+            self.create_tables()
+        except BaseException:
+            # nothing holds this Indexer yet to close it later
+            self.conn.close()
+            raise
     
     def create_tables(self):
         query = '''CREATE TABLE Metadata (

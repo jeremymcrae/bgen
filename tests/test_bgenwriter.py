@@ -8,12 +8,14 @@ import logging
 import os
 import sqlite3
 import threading
+from unittest import mock
 import sys
 import math
 
 import numpy as np
 
 from bgen import BgenReader, BgenWriter
+from bgen.writer import Indexer
 
 def probs_close(orig, updat, bit_depth):
     ''' check if the genotype probabilities are near the original values
@@ -1940,6 +1942,28 @@ class TestBgenWriter(unittest.TestCase):
                         bfile.add_variant('var1', 'rs1', 'chr1', 10, alleles, geno)
         with BgenReader(path) as bfile:
             self.assertEqual(len(list(bfile)), 0)
+
+    def test_failed_index_setup_closes_its_connection(self):
+        ''' a failure creating the index tables does not leave the database open
+        '''
+        opened = []
+        connect = sqlite3.connect
+
+        def record(*args, **kwargs):
+            opened.append(connect(*args, **kwargs))
+            return opened[-1]
+
+        def fail(indexer):
+            raise sqlite3.OperationalError('disk is full')
+
+        path = self.tmpdir / 'noindex.bgen'
+        with mock.patch('sqlite3.connect', record), \
+                mock.patch.object(Indexer, 'create_tables', fail):
+            with self.assertRaises(sqlite3.OperationalError):
+                BgenWriter(path, 3)
+        self.assertEqual(len(opened), 1)
+        with self.assertRaises(sqlite3.ProgrammingError):
+            opened[0].execute('SELECT 1')
 
     def test_index_metadata_describes_the_bgen(self):
         ''' the index records the bgen's path, size, mtime and first bytes
