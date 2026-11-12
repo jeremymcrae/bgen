@@ -596,6 +596,7 @@ cdef class BgenReader:
     def _check_for_index(self, bgen_path):
         ''' creates self.index if a bgenix index file is available
         '''
+        self._close_index()
         index_path = Path(bgen_path + '.bgi')
         idx_exists = index_path.exists()
         self.index = Index(index_path) if idx_exists else None

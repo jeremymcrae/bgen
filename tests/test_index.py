@@ -2,6 +2,7 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 
 from bgen import BgenReader, BgenWriter
@@ -29,6 +30,22 @@ class TestBgenIndex(unittest.TestCase):
         
         bfile = BgenReader(self.folder / 'example.16bits.bgen')
         self.assertTrue(bfile._check_for_index(str(self.folder / 'example.16bits.bgen')))
+    
+    def test_rechecking_for_an_index_closes_the_previous_one(self):
+        ''' an index replaced by a second check is closed, rather than left open '''
+        opened = []
+        class Recorder(Index):
+            def __init__(self, path):
+                super().__init__(path)
+                opened.append(self)
+        
+        path = self.folder / 'example.16bits.bgen'
+        with mock.patch('bgen.reader.Index', Recorder):
+            with BgenReader(path) as bfile:
+                bfile._check_for_index(str(path))
+                self.assertEqual(len(opened), 2)
+                self.assertIsNone(opened[0].conn)
+                self.assertIsNotNone(opened[1].conn)
     
     def test_index_fetch(self):
         ''' fetches file offsets
