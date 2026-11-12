@@ -60,10 +60,6 @@ const float lut8[256] = {0.0000000, 0.0039216, 0.0078431, 0.0117647, 0.0156863, 
   0.9568627, 0.9607843, 0.9647059, 0.9686275, 0.9725490, 0.9764706, 0.9803922,
   0.9843137, 0.9882353, 0.9921569, 0.9960784, 1.0000000};
 
-/// upper bound on the compression ratio (zstd peaks at 32768:1, zlib at ~1032:1), to
-/// reject a corrupt decompressed length before allocating for it
-const std::uint64_t MAX_EXPANSION = 35000;
-
 /// read an integer from an unaligned offset (the memcpy compiles to a single load)
 template <typename T>
 static inline T load(const char * data) {

@@ -131,15 +131,15 @@ Samples::Samples(std::uint32_t n_samples, std::uint64_t _file_size,
 const std::vector<std::string> & Samples::get_samples() {
   if (n_placeholders > 0) {
     if (file_size > 0) {
-      // 0-variant files hold only the header, while compressed variants can exceed
-      // 30,000:1 ratio. Cap against impossible allocations while allowing real cohorts
+      // 0-variant files hold only the header, while compressed variants can expand by
+      // up to MAX_EXPANSION. Cap against impossible allocations while allowing real cohorts
       bool cannot_describe = false;
       if (n_variants == 0) {
         cannot_describe = (n_placeholders > 10000000);
       } else if (compression == 0) {
         cannot_describe = ((std::uint64_t) n_placeholders > file_size);
       } else {
-        cannot_describe = ((std::uint64_t) n_placeholders > file_size * 35000);
+        cannot_describe = ((std::uint64_t) n_placeholders > file_size * MAX_EXPANSION);
       }
       if (cannot_describe) {
         throw std::invalid_argument("bgen claims " + std::to_string(n_placeholders) +

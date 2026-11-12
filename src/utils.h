@@ -11,6 +11,10 @@
 
 namespace bgen {
 
+/// upper bound on the compression ratio (zstd peaks at 32768:1, zlib at ~1032:1), to
+/// reject a corrupt length before allocating for it
+const std::uint64_t MAX_EXPANSION = 35000;
+
 /// wrap a stream which we do not own in a shared_ptr, for an unpickled variant, whose
 /// stream belongs to whichever reader holds it. The no-op deleter leaves it open
 inline std::shared_ptr<std::istream> borrowed_stream(std::istream * handle) {
