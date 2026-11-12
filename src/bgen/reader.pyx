@@ -729,7 +729,8 @@ cdef class BgenReader:
       self._check_open()
       
       if self.index is not None:
-          return self.index.rsids
+          # a copy, since the index caches the list it returns
+          return list(self.index.rsids)
       
       self.thisptr.parse_all_variants()
       return [self.thisptr.variants[i].rsid.decode('utf8')
@@ -741,7 +742,8 @@ cdef class BgenReader:
         self._check_open()
         
         if self.index is not None:
-            return self.index.chroms
+            # a copy, since the index caches the list it returns
+            return list(self.index.chroms)
         
         self.thisptr.parse_all_variants()
         return [self.thisptr.variants[i].chrom.decode('utf8')
@@ -753,7 +755,8 @@ cdef class BgenReader:
         self._check_open()
         
         if self.index is not None:
-            return self.index.positions
+            # a copy, since the index caches the list it returns
+            return list(self.index.positions)
         
         self.thisptr.parse_all_variants()
         return [self.thisptr.variants[i].pos for i in range(self.thisptr.variants.size())]

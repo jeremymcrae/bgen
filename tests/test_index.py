@@ -203,3 +203,13 @@ class TestBgenIndex(unittest.TestCase):
                 self.assertEqual(bfile.rsids(), [])
                 with self.assertRaises(ValueError):
                     bfile.varids()
+    
+    def test_reader_index_lists_are_fresh_each_time(self):
+        ''' changing a list from an indexed reader does not change the next one '''
+        with BgenReader(self.folder / 'example.16bits.bgen') as bfile:
+            for name in ['rsids', 'chroms', 'positions']:
+                with self.subTest(name=name):
+                    values = getattr(bfile, name)()
+                    expected = list(values)
+                    values.append(None)
+                    self.assertEqual(getattr(bfile, name)(), expected)
