@@ -72,7 +72,7 @@ Samples::Samples(std::istream * handle, std::uint32_t n_samples,
 }
 
 /// initialize from external sample file
-Samples::Samples(std::string path, std::uint32_t n_samples) {
+Samples::Samples(const std::string &path, std::uint32_t n_samples) {
   // binary, so a windows line ending stays on the line, and is dropped with the other
   // columns below
   std::ifstream handle(path, std::ios::in | std::ios::binary);

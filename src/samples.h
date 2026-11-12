@@ -14,7 +14,7 @@ public:
   // INT_MAX would turn negative, then huge at resize(). file_size is zero if unknown
   Samples(std::istream * handle, std::uint32_t n_samples,
           std::uint64_t file_size=0);
-  Samples(std::string path, std::uint32_t n_samples);
+  Samples(const std::string &path, std::uint32_t n_samples);
   // a bgen with no IDs in it. file_size limits how many samples the file could hold
   Samples(std::uint32_t n_samples, std::uint64_t file_size=0,
           std::uint32_t n_variants=0, int compression=0);

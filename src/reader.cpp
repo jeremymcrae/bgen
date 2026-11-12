@@ -19,7 +19,8 @@ const std::uint64_t MIN_VARIANT_BYTES = 12;
 /// measured. A Variant is a few hundred bytes, so a corrupt count asks for terabytes
 const std::uint64_t MAX_VARIANT_RESERVE = 1 << 16;
 
-CppBgenReader::CppBgenReader(std::string path, std::string sample_path, bool delay_parsing) {
+CppBgenReader::CppBgenReader(const std::string &path, const std::string &sample_path,
+                             bool delay_parsing) {
   is_stdin = (path == "/dev/stdin");
   // stdin is read from its descriptor rather than held as std::cin, so that the error
   // state and the buffered read-ahead belong to this reader alone
@@ -120,7 +121,7 @@ void CppBgenReader::parse_all_variants() {
 }
 
 /// drop a subset of variants passed in by indexes
-void CppBgenReader::drop_variants(std::vector<int> indices) {
+void CppBgenReader::drop_variants(const std::vector<int> &indices) {
   // check every index before dropping any, so a bad index leaves the variants as
   // they were
   for (auto idx : indices) {
