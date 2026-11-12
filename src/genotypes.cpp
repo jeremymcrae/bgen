@@ -263,7 +263,7 @@ void Genotypes::decompress() {
 /// @param max_ploidy maximum ploidy value across all samples
 /// @param n_alleles number of alleles for the variant
 /// @param phased whether the genotypes are phased
-/// @return integer for maximum number of possible probabilites per sample
+/// @return integer for maximum number of possible probabilities per sample
 std::uint32_t get_max_probs(int max_ploidy, int n_alleles, bool phased) {
   if (phased) {
     return n_alleles;
@@ -479,9 +479,9 @@ void Genotypes::materialise_ploidy() {
 ///
 /// Layout 1 genotype probabilities are simple to parse, they are just 16-bit ints
 /// one for each of the three possible genotypes. Missingness is encoded for a
-/// sample when all probabilties are zero.
+/// sample when all probabilities are zero.
 ///
-/// @return 1D float array of genotype probabilties (each from 0.0-1.0).
+/// @return 1D float array of genotype probabilities (each from 0.0-1.0).
 void Genotypes::probabilities_layout1(const char * data, float * probs, std::uint32_t nrows) {
   float factor = 1.0f / 32768;
   for (std::uint32_t offset=0; offset<nrows * max_probs; offset+=max_probs) {
@@ -625,14 +625,14 @@ static void fast_haplotype_probs(const char * data, float * probs, std::uint32_t
 
 /// parse probabilities for layout2
 ///
-/// This is a fairly complex function, due to how the probabilties are encoded.
-/// We need to extract probabilites per sample, but the final probability is
-/// inferred as the remainder after all other genotype probabilties are parsed.
-/// The number of bits used for encoding probabilties can differ between variants,
-/// so there's a fast method for parsing 8-bit encoded probabilties, since that
+/// This is a fairly complex function, due to how the probabilities are encoded.
+/// We need to extract probabilities per sample, but the final probability is
+/// inferred as the remainder after all other genotype probabilities are parsed.
+/// The number of bits used for encoding probabilities can differ between variants,
+/// so there's a fast method for parsing 8-bit encoded probabilities, since that
 /// is a common use case.
 ///
-/// @return 1D float array of genotype probabilties (each from 0.0-1.0).
+/// @return 1D float array of genotype probabilities (each from 0.0-1.0).
 void Genotypes::probabilities_layout2(const char * data, float * probs, std::uint32_t nrows) {
   if (constant_ploidy & (max_probs == 3) & (bit_depth == 8)) {
     // A fast path for one scenario: all samples have ploidy=2, with 8 bits per
@@ -725,7 +725,7 @@ void Genotypes::probabilities_layout2(const char * data, float * probs, std::uin
 
 /// parse genotype data for a single variant
 ///
-/// @return 1D float array of genotype probabilties (each from 0.0-1.0).
+/// @return 1D float array of genotype probabilities (each from 0.0-1.0).
 void Genotypes::probabilities(float * probs) {
   load_data_and_parse_header();
   
@@ -794,7 +794,7 @@ int Genotypes::find_minor_allele(float * dose) {
   std::uint64_t stride_limit = 10000;
   
   // To make sure we don't hit weird groupings of alleles in individuals, this
-  // picks samples uniformly thoughout the population, by using an appropriate
+  // picks samples uniformly throughout the population, by using an appropriate
   // step size.
   for (std::uint32_t idx2=0; idx2<increment; idx2++) {
     if (varies) {
@@ -979,7 +979,7 @@ void Genotypes::ref_dosage_fast(const char * data, float * dose) {
   }
 }
 
-/// calculate dosage of the reference (first) allele for all samples for unphased genotpes
+/// calculate dosage of the reference (first) allele for all samples for unphased genotypes
 ///
 /// The slow path, loops across samples. Figures out ploidy at each step,
 /// and the homozygous genotype for the minor allele. Can use any bit depth.
@@ -1044,7 +1044,7 @@ void Genotypes::ref_dosage_slow_unphased(const char * data, float * dose) {
   }
 }
 
-/// calculate dosage of the reference (first) allele for all samples for phased genotpes
+/// calculate dosage of the reference (first) allele for all samples for phased genotypes
 ///
 /// The slow path, loops across samples. Figures out ploidy at each step,
 /// and the homozygous genotype for the reference allele. Can use any bit depth.

@@ -130,14 +130,14 @@ cdef IStream wrap_stream(shared_ptr_istream ptr):
 cdef class OpenStatus:
     ''' class to share status of whether a bgen file is currently open
     
-    A BgenReader and the BgenVariant objects opened from it hold the same
+    A BgenReader and the BgenVar objects opened from it hold the same
     OpenStatus. When a bgen file is closed, the status changes for all loaded
     variants, in order to prevent reading more data from the closed file.
     
-    This may not work for pickled BgenVariant objects (after unpickling), as
-    the BgenReader object may have been closed after the BgenVariant was 
-    pickled. In order to allow pickled BgenVariants, as part of unpickling 
-    the BgenVariant, it creates a new OpenStatus object where status=True.
+    This may not work for pickled BgenVar objects (after unpickling), as
+    the BgenReader object may have been closed after the BgenVar was 
+    pickled. In order to allow pickled BgenVars, as part of unpickling 
+    the BgenVar, it creates a new OpenStatus object where status=True.
     '''
     cdef bint status
     def __cinit__(self):
@@ -155,7 +155,7 @@ cdef class OpenStatus:
 cdef dict COMPRESSION_FORMATS = {0: None, 1: 'zlib', 2: 'zstd'}
 
 cdef class BgenHeader:
-    ''' holds information about the Bgen file, obtained from the intial header.
+    ''' holds information about the Bgen file, obtained from the initial header.
     '''
     cdef readonly uint32_t offset
     cdef readonly uint32_t nvariants

@@ -20,7 +20,7 @@ class OpenStatus:
     def __reduce__(self) -> tuple[Any, ...]: ...
 
 class BgenHeader:
-    ''' holds information about the Bgen file, obtained from the intial header.
+    ''' holds information about the Bgen file, obtained from the initial header.
     '''
     def __new__(cls,
                 offset: int,

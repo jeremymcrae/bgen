@@ -60,7 +60,7 @@ class BgenWriter:
             chrom: chromosome the variant is on
             pos: nucleotide position of the variant
             alleles: list of allele strings. Duplicates are allowed, but warned about
-            genotypes: numpy array of genotype proabilities, ordered as per the
+            genotypes: numpy array of genotype probabilities, ordered as per the
                 bgen samples.
             ploidy: integer for constant ploidy, or numpy array of ploidy values per
                 sample, in same order as genotypes

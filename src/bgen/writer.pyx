@@ -265,7 +265,7 @@ cdef class BgenWriter:
             pos: nucleotide position of the variant
             alleles: list of allele strings. Duplicates are allowed, but warn, since
                 the minor allele cannot then say which one it means.
-            genotypes: numpy array of genotype proabilities, ordered as per the
+            genotypes: numpy array of genotype probabilities, ordered as per the
                 bgen samples.
             ploidy: integer for constant ploidy, or numpy array of ploidy values per 
                 sample, in same order as genotypes
