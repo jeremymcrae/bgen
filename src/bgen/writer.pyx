@@ -137,6 +137,10 @@ cdef class BgenWriter:
         if layout == 1 and compression == 'zstd':
             raise ValueError('layout 1 is not supported with zstd compression')
         
+        # a string is iterable, so would otherwise give one sample per character
+        if isinstance(samples, (str, bytes)):
+            raise ValueError('samples must be a list of sample IDs, not a single string')
+        
         self.n_samples = n_samples
         self.layout = layout
         self.compression = compression
@@ -281,6 +285,9 @@ cdef class BgenWriter:
         cdef string _rsid = rsid.encode('utf8')
         cdef string _chrom = chrom.encode('utf8')
 
+        # a string is iterable, so would otherwise give one allele per character
+        if isinstance(alleles, (str, bytes)):
+            raise ValueError('alleles must be a list of allele strings, not a single string')
         alleles = list(alleles)
         if len(alleles) == 0:
             raise ValueError('alleles must be a non-empty list')

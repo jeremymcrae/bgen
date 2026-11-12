@@ -1922,6 +1922,25 @@ class TestBgenWriter(unittest.TestCase):
             BgenWriter(missing, 3, samples=['a'])
         self.assertFalse(missing.exists())
 
+    def test_single_string_samples_or_alleles_are_rejected(self):
+        ''' a string is iterable, but is not a list of sample IDs or alleles
+        '''
+        path = self.tmpdir / 'strings.bgen'
+        for samples in ['abc', b'abc']:
+            with self.subTest(samples=samples):
+                with self.assertRaises(ValueError):
+                    BgenWriter(path, 3, samples=samples)
+                self.assertFalse(path.exists())
+
+        geno = np.full((3, 3), 1 / 3)
+        with BgenWriter(path, 3) as bfile:
+            for alleles in ['AC', b'AC']:
+                with self.subTest(alleles=alleles):
+                    with self.assertRaises(ValueError):
+                        bfile.add_variant('var1', 'rs1', 'chr1', 10, alleles, geno)
+        with BgenReader(path) as bfile:
+            self.assertEqual(len(list(bfile)), 0)
+
     def test_index_metadata_describes_the_bgen(self):
         ''' the index records the bgen's path, size, mtime and first bytes
         '''
