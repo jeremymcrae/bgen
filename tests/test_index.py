@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+import numpy as np
+
 
 from bgen import BgenReader, BgenWriter
 from bgen.index import Index
@@ -225,3 +227,44 @@ class TestBgenIndex(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 Index(path)
             self.assertFalse(path.exists())
+    
+    def _positions_bgen(self, tmp):
+        ''' a small bgen with its index, for comparing lookups by position '''
+        path = Path(tmp) / 'positions.bgen'
+        geno = np.full((2, 3), 1 / 3)
+        with BgenWriter(path, 2) as bfile:
+            for i, pos in enumerate([20, 10, 30, 10]):
+                bfile.add_variant(f'v{i}', f'rs{i}', '01', pos, ['A', 'C'], geno)
+        return path
+    
+    def test_position_lookups_match_without_an_index(self):
+        ''' an indexed bgen finds the same variants by position as an unindexed one
+
+        sqlite binds numpy scalars as blobs, which never equal a stored integer, and
+        cannot bind a python int beyond 64 bits at all
+        '''
+        keys = [10, np.int64(10), np.int32(10), np.uint32(10), np.float32(10.0), 10.0,
+                10.5, float('nan'), -1, 2 ** 40, 2 ** 63, '10', None]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._positions_bgen(tmp)
+            with BgenReader(path) as bfile:
+                indexed = [[x.varid for x in bfile.at_position(k)] for k in keys]
+            Path(str(path) + '.bgi').unlink()
+            with BgenReader(path, delay_parsing=False) as bfile:
+                unindexed = [[x.varid for x in bfile.at_position(k)] for k in keys]
+        self.assertEqual(indexed, unindexed)
+        self.assertEqual(indexed[1], ['v1', 'v3'])
+    
+    def test_fetch_bounds_from_numpy_and_huge_ints(self):
+        ''' region bounds behave the same whatever numeric type gives them '''
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._positions_bgen(tmp)
+            with BgenReader(path) as bfile:
+                fetched = lambda *args: sorted(x.varid for x in bfile.fetch('01', *args))
+                for start, stop in [(15, 25), (np.int64(15), np.int64(25)),
+                                    (np.float32(15), np.uint32(25)), (15.0, 25.0)]:
+                    with self.subTest(start=start, stop=stop):
+                        self.assertEqual(fetched(start, stop), ['v0'])
+                self.assertEqual(fetched(None, np.int64(0)), [])
+                self.assertEqual(fetched(-2 ** 70, 2 ** 70), ['v0', 'v1', 'v2', 'v3'])
+                self.assertEqual(fetched(2 ** 63), [])

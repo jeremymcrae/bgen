@@ -1,5 +1,6 @@
 
 from functools import cached_property
+import numbers
 import sqlite3
 import logging
 import os
@@ -7,6 +8,43 @@ from typing import Optional, Union
 
 import numpy as np
 from numpy.typing import NDArray
+
+# positions are unsigned 32-bit
+MAX_POSITION = 0xFFFFFFFF
+
+def _whole_number(value) -> Optional[int]:
+    ''' value as a python int, or None if it is not a whole number
+
+    numpy scalars are converted too, since sqlite binds them as blobs, which never
+    compare equal to a stored integer
+    '''
+    if isinstance(value, numbers.Integral):
+        return int(value)
+    if isinstance(value, numbers.Number):
+        try:
+            whole = int(value)
+        except (TypeError, ValueError, OverflowError):
+            # complex, nan or infinite
+            return None
+        return whole if whole == value else None
+    return None
+
+def _bound(value):
+    ''' a region bound as a python number which sqlite compares with positions
+
+    numpy scalars would otherwise bind as blobs, and an int beyond 64 bits cannot bind
+    at all. Positions are 32-bit, so clamping just outside that range changes nothing
+    '''
+    if isinstance(value, numbers.Integral):
+        value = int(value)
+    elif isinstance(value, numbers.Real):
+        value = float(value)
+    else:
+        return value
+    if value != value:
+        # nan, which no position satisfies
+        return value
+    return min(max(value, -1), MAX_POSITION + 1)
 
 class Index:
     def __init__(self, path: Union[str, os.PathLike[str]]) -> None:
@@ -53,10 +91,10 @@ class Index:
         params = [chrom]
         if start is not None:
             query += ' AND position >= ?'
-            params.append(start)
+            params.append(_bound(start))
         if stop is not None:
             query += ' AND position <= ?'
-            params.append(stop)
+            params.append(_bound(stop))
 
         for row in self._query(query, params):
             yield row[0]
@@ -89,6 +127,10 @@ class Index:
     def offset_by_pos(self, pos) -> list[int]:
         ''' get file offsets of the bgen variants at a given position
         '''
+        pos = _whole_number(pos)
+        if pos is None or not 0 <= pos <= MAX_POSITION:
+            # no stored position can equal this
+            return []
         query = "SELECT file_start_position FROM Variant WHERE position = ?"
         params = (pos, )
         return [x[0] for x in self._query(query, params)]
