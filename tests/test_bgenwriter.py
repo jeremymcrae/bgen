@@ -7,7 +7,6 @@ import logging
 import os
 import sqlite3
 import threading
-import time
 import sys
 import math
 
@@ -1294,8 +1293,6 @@ class TestBgenWriter(unittest.TestCase):
             geno = np.vstack([a, 1-a, b, 1-b]).T
             bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
                                 phased=1, bit_depth=8)
-
-        time.sleep(1)
 
         with BgenReader(path, delay_parsing=True) as bfile:
             for x in bfile:
