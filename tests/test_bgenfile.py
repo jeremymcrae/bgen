@@ -78,6 +78,13 @@ class TestBgenReader(unittest.TestCase):
         with self.assertRaises(ValueError):
             bfile.samples
 
+    def test_repr(self):
+        ''' the repr names the class and its paths
+        '''
+        path = self.folder / 'example.16bits.zstd.bgen'
+        with BgenReader(path) as bfile:
+            self.assertEqual(repr(bfile), f'BgenReader("{path}", "")')
+
     def test_samples_are_a_fresh_list_each_time(self):
         ''' changing the samples list does not change what the next access returns
         '''

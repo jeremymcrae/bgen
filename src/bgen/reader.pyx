@@ -483,7 +483,7 @@ cdef class BgenReader:
         self.delay_parsing = delay_parsing
         
         samp = '' if sample_path == '' else f', (samples={sample_path})'
-        logging.debug(f'opening BgenFile from {path}{samp}')
+        logging.debug(f'opening BgenReader from {path}{samp}')
         self.thisptr = new CppBgenReader(self.path, self.sample_path, self.delay_parsing)
         self.handle = wrap_stream(self.thisptr.handle)
         self.is_open = OpenStatus()
@@ -500,7 +500,7 @@ cdef class BgenReader:
             pass
     
     def __repr__(self):
-        return f'BgenFile("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
+        return f'BgenReader("{self.path.decode("utf8")}", "{self.sample_path.decode("utf8")}")'
     
     cdef int _check_open(self) except -1:
         ''' raise an error if the bgen file has been closed
