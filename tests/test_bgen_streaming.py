@@ -344,9 +344,8 @@ class TestBgenStream(unittest.TestCase):
     def test_bgen_streaming(self):
         ''' check that was can open a bgen file from stdin
         '''
-        # Save original stdin and stdout file descriptors
+        # Save the original stdin file descriptor
         original_stdin_fd = os.dup(sys.stdin.fileno())
-        original_stdout_fd = os.dup(sys.stdout.fileno())
         read_fd, write_fd = os.pipe()
         
         path = self.folder / 'example.16bits.zstd.bgen'
@@ -373,12 +372,9 @@ class TestBgenStream(unittest.TestCase):
                 
                 var2 = next(bfile)  # don't load any genotype probabilities for this variant
         finally:
-            # Restore original stdin and stdout file descriptors
+            # Restore the original stdin file descriptor
             os.dup2(original_stdin_fd, sys.stdin.fileno())
             os.close(original_stdin_fd)
-            sys.stdout = sys.__stdout__ # Use sys.__stdout__ to get the true original stdout
-            # Close the duplicated original file descriptors
-            os.close(original_stdout_fd)
         
         # can't get header for closed bgen file
         with self.assertRaises(ValueError):
@@ -391,9 +387,8 @@ class TestBgenStream(unittest.TestCase):
         g = self.gen_data[0]
         self.assertTrue(arrays_equal(g.probabilities, var1.probabilities, bit_depth=16))
         
-        # # in contrast, we shouldn't be able to load the genotype probabilities for the 
-        # # second variant, as these were not loaded while the bgen was open. It should raise
-        # # and error, but currently does not. I haven't figured out why not yet.
-        # with self.assertRaises(ValueError):
-        #     var2.probabilities
+        # a pipe cannot seek back, so each variant's data is read along with its header,
+        # which leaves the second variant readable too
+        g = self.gen_data[1]
+        self.assertTrue(arrays_equal(g.probabilities, var2.probabilities, bit_depth=16))
         
