@@ -29,6 +29,44 @@ def _whole_number(value) -> Optional[int]:
         return whole if whole == value else None
     return None
 
+# what a lookup key can match: nothing, one value to look up exactly, or whatever the
+# stored values say they equal, for a key whose == only it knows
+NO_MATCH, EXACT, COMPARE = range(3)
+
+def lookup_key(key, by_rsid):
+    ''' how to look up variants by a key, so that every lookup matches as == would
+
+    rsIDs are stored as strings, and positions as unsigned 32-bit integers. Comparing
+    other built in types against those can never succeed, whereas sqlite would convert
+    them, so that 1 matched the rsID '1'
+
+    Args:
+        key: rsID or position to look up
+        by_rsid: whether the key is an rsID, rather than a position
+
+    Returns:
+        tuple of NO_MATCH, EXACT or COMPARE, and the value to look up for EXACT
+    '''
+    if by_rsid:
+        if isinstance(key, str):
+            try:
+                key.encode('utf8')
+            except UnicodeEncodeError:
+                # a stored rsID is valid utf8, so cannot equal this
+                return NO_MATCH, None
+            return EXACT, key
+        if isinstance(key, (numbers.Number, bytes, type(None))):
+            return NO_MATCH, None
+        return COMPARE, key
+    if isinstance(key, numbers.Number):
+        pos = _whole_number(key)
+        if pos is None or not 0 <= pos <= MAX_POSITION:
+            return NO_MATCH, None
+        return EXACT, pos
+    if isinstance(key, (str, bytes, type(None))):
+        return NO_MATCH, None
+    return COMPARE, key
+
 def _bound(value):
     ''' a region bound as a python number which sqlite compares with positions
 
@@ -117,27 +155,32 @@ class Index:
         '''
         return int(self._load_offsets()[index])
         
+    def _offsets_matching(self, key, by_rsid) -> list[int]:
+        ''' file offsets of the variants whose rsID, or else position, equals a key
+        
+        In file order, as a bgen without an index gives them
+        '''
+        kind, value = lookup_key(key, by_rsid)
+        if kind == NO_MATCH:
+            return []
+        if kind == COMPARE:
+            values = self.rsids if by_rsid else self.positions
+            offsets = self._load_offsets()
+            return [int(offsets[i]) for i, x in enumerate(values) if x == key]
+        column = 'rsid' if by_rsid else 'position'
+        query = (f"SELECT file_start_position FROM Variant WHERE {column} = ? "
+                 "ORDER BY file_start_position")
+        return [x[0] for x in self._query(query, (value, ))]
+    
     def offset_by_rsid(self, rsid) -> list[int]:
         ''' get file offsets of the bgen variants with a given rsID
         '''
-        # in file order, as a bgen without an index gives them
-        query = ("SELECT file_start_position FROM Variant WHERE rsid = ? "
-                 "ORDER BY file_start_position")
-        params = (rsid, )
-        return [x[0] for x in self._query(query, params)]
+        return self._offsets_matching(rsid, True)
     
     def offset_by_pos(self, pos) -> list[int]:
         ''' get file offsets of the bgen variants at a given position
         '''
-        pos = _whole_number(pos)
-        if pos is None or not 0 <= pos <= MAX_POSITION:
-            # no stored position can equal this
-            return []
-        # in file order, as a bgen without an index gives them
-        query = ("SELECT file_start_position FROM Variant WHERE position = ? "
-                 "ORDER BY file_start_position")
-        params = (pos, )
-        return [x[0] for x in self._query(query, params)]
+        return self._offsets_matching(pos, False)
     
     @cached_property
     def rsids(self) -> list[str]:
