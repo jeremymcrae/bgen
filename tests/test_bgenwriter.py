@@ -1956,6 +1956,13 @@ class TestBgenWriter(unittest.TestCase):
                     var = next(iter(bfile))
                     self.assertEqual(var.probabilities.shape, (0, 3))
                     self.assertEqual(var.alt_dosage.shape, (0, ))
+                if layout == 2:
+                    # phased rows hold max_ploidy haplotypes of probabilities
+                    with BgenWriter(path, 0, compression=compression) as bfile:
+                        bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'],
+                                          np.empty((0, 4)), phased=True)
+                    with BgenReader(path) as bfile:
+                        self.assertEqual(next(iter(bfile)).probabilities.shape, (0, 4))
 
         with BgenWriter(path, 3) as bfile:
             with self.assertRaisesRegex(ValueError, 'must have 3 samples, not 0'):

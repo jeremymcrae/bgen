@@ -394,7 +394,10 @@ cdef class BgenVar:
         cdef uint32_t max_ploidy = self.thisptr.max_ploidy()
         cdef Range ploidy_range
         if phased:
-            if min_ploidy != max_ploidy or n_samples == 0:
+            if n_samples == 0:
+                # nothing to measure, so the widest stored ploidy sizes the rows
+                min_ploidy = max_ploidy
+            elif min_ploidy != max_ploidy:
                 # the bounds a bgen gives need not be tight, so measure the samples
                 ploidy = self.thisptr.ploidy()
                 ploidy_range = fast_range(ploidy, n_samples)
