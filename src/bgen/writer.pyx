@@ -123,7 +123,7 @@ cdef class BgenWriter:
         path = os.fspath(path)
         
         if compression not in [None, 'zstd', 'zlib']:
-            raise ValueError(f'compression type {compression} not one of zlib or zstd')
+            raise ValueError(f"compression type {compression} not one of None, 'zlib' or 'zstd'")
         
         cdef uint32_t compress_flag=0
         if compression == 'zlib':
