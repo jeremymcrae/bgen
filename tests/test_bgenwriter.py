@@ -1930,6 +1930,27 @@ class TestBgenWriter(unittest.TestCase):
         self.assertEqual(rows, [(str(path), st.st_size, int(st.st_mtime),
                                  path.read_bytes()[:1000])])
 
+    def test_index_supports_lookups(self):
+        ''' the index is built for lookups by region, position and rsID
+        '''
+        path = self.tmpdir / 'lookups.bgen'
+        geno = np.full((3, 3), 1 / 3)
+        with BgenWriter(path, 3) as bfile:
+            for i, (chrom, pos) in enumerate([('1', 10), ('1', 20), ('2', 10)]):
+                bfile.add_variant(f'v{i}', f'rs{i}', chrom, pos, ['A', 'C'], geno)
+
+        con = sqlite3.connect(Path(str(path) + '.bgi'))
+        indices = {x[0] for x in con.execute("SELECT name FROM sqlite_master "
+                                             "WHERE type='index' AND sql IS NOT NULL")}
+        con.close()
+        self.assertEqual(indices, {'pos_index', 'rsid_index'})
+
+        with BgenReader(path) as bfile:
+            self.assertEqual([x.rsid for x in bfile.fetch('1')], ['rs0', 'rs1'])
+            self.assertEqual([x.rsid for x in bfile.fetch('1', 15, 25)], ['rs1'])
+            self.assertEqual([x.rsid for x in bfile.at_position(10)], ['rs0', 'rs2'])
+            self.assertEqual([x.chrom for x in bfile.with_rsid('rs2')], ['2'])
+
     @unittest.skipUnless(hasattr(os, 'mkfifo'), 'needs fifos, which windows lacks')
     def test_writing_to_a_pipe_reports_a_useful_error(self):
         ''' a bgen needs a seekable output, and saying so beats an iostream error

@@ -69,9 +69,13 @@ class Indexer:
                 PRIMARY KEY (chromosome, position, rsid, allele1, allele2, file_start_position))
                 WITHOUT ROWID'''
         self.cur.execute(query)
+    
+    def create_indices(self):
+        ''' index the Variant table for lookups by position or rsID
         
-        # index the Variant table
-        self.cur.execute('CREATE INDEX chrom_index on Variant(chromosome)')
+        The primary key already serves lookups by chromosome. These are built once the
+        variants are in, which is quicker than updating them with every insert.
+        '''
         self.cur.execute('CREATE INDEX pos_index on Variant(position)')
         self.cur.execute('CREATE INDEX rsid_index on Variant(rsid)')
     
@@ -94,6 +98,7 @@ class Indexer:
 
     def close(self):
         try:
+            self.create_indices()
             self.add_metadata()
         finally:
             self.conn.commit()
