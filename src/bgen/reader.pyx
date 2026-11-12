@@ -1,7 +1,6 @@
 # cython: language_level=3, boundscheck=False, emit_linenums=True
 
 import logging
-import operator
 import os
 from pathlib import Path
 import sys
@@ -15,7 +14,7 @@ from libc.string cimport memcpy
 
 import numpy as np
 
-from bgen.index import Index
+from bgen.index import Index, lookup_key, NO_MATCH, EXACT
 
 # Random access needs to seek to a variant's offset, which a stream cannot do, so the
 # only way through a pipe is to iterate
@@ -710,45 +709,24 @@ cdef class BgenReader:
     cdef list _matching(self, key, bint by_rsid):
         ''' indices of the parsed variants whose rsID, or else position, equals a key
         
-        A string rsID, or a whole number position, is compared against the parsed
-        variants directly, rather than decoding every variant's value to compare in
-        python. The results match comparing the decoded values with ==
+        A key with a value to look up is compared against the parsed variants
+        directly, rather than decoding every variant's value to compare in python.
+        lookup_key decides which keys those are, as it does for the index
         '''
         cdef size_t n = self.thisptr.variants.size()
         cdef string rsid
         cdef uint32_t pos
-        if by_rsid:
-            if isinstance(key, str):
-                try:
-                    rsid = key.encode('utf8')
-                except UnicodeEncodeError:
-                    # a decoded rsID is always valid utf8, so it cannot match this
-                    return []
+        kind, value = lookup_key(key, by_rsid)
+        if kind == NO_MATCH:
+            return []
+        if kind == EXACT:
+            if by_rsid:
+                rsid = value.encode('utf8')
                 return [i for i in range(n) if self.thisptr.variants[i].rsid == rsid]
-            if isinstance(key, (bytes, int, float, type(None))):
-                # built in types which never equal a str
-                return []
-        else:
-            if isinstance(key, float):
-                # a float equals an integer position only when it is a whole number
-                if not key.is_integer():
-                    return []
-                key = int(key)
-            if isinstance(key, (str, bytes, type(None))):
-                # built in types which never equal an int
-                return []
-            try:
-                value = operator.index(key)
-            except TypeError:
-                value = None
-            if value is not None:
-                if not 0 <= value <= 0xFFFFFFFF:
-                    # positions are unsigned 32-bit, so cannot match this
-                    return []
-                pos = value
-                return [i for i in range(n) if self.thisptr.variants[i].pos == pos]
+            pos = value
+            return [i for i in range(n) if self.thisptr.variants[i].pos == pos]
         
-        # other keys compare as python objects, as they would with the decoded values
+        # a key with its own == compares against the decoded values
         values = self.rsids() if by_rsid else self.positions()
         return [i for i, x in enumerate(values) if x == key]
     

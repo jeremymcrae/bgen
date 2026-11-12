@@ -84,6 +84,7 @@ class TestBgenReader(unittest.TestCase):
             self.assertEqual(bfile.with_rsid('\ud800'), [])
             self.assertEqual(bfile.with_rsid(1), [])
             self.assertEqual(bfile.with_rsid(b'rs1'), [])
+            self.assertEqual(bfile.with_rsid(np.int64(1)), [])
             
             class Equal:
                 ''' a key which only its own == can compare '''
