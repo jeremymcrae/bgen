@@ -704,20 +704,33 @@ cdef class BgenReader:
     cdef list _matching(self, key, bint by_rsid):
         ''' indices of the parsed variants whose rsID, or else position, equals a key
         
-        A string rsID, or an integer position, is compared against the parsed variants
-        directly, rather than decoding every variant's value to compare in python
+        A string rsID, or a whole number position, is compared against the parsed
+        variants directly, rather than decoding every variant's value to compare in
+        python. The results match comparing the decoded values with ==
         '''
         cdef size_t i, n = self.thisptr.variants.size()
         cdef string rsid
         cdef uint32_t pos
-        if by_rsid and isinstance(key, str):
-            try:
-                rsid = key.encode('utf8')
-            except UnicodeEncodeError:
-                # a decoded rsID is always valid utf8, so it cannot match this
+        if by_rsid:
+            if isinstance(key, str):
+                try:
+                    rsid = key.encode('utf8')
+                except UnicodeEncodeError:
+                    # a decoded rsID is always valid utf8, so it cannot match this
+                    return []
+                return [i for i in range(n) if self.thisptr.variants[i].rsid == rsid]
+            if isinstance(key, (bytes, int, float, type(None))):
+                # built in types which never equal a str
                 return []
-            return [i for i in range(n) if self.thisptr.variants[i].rsid == rsid]
-        if not by_rsid:
+        else:
+            if isinstance(key, float):
+                # a float equals an integer position only when it is a whole number
+                if not key.is_integer():
+                    return []
+                key = int(key)
+            if isinstance(key, (str, bytes, type(None))):
+                # built in types which never equal an int
+                return []
             try:
                 value = operator.index(key)
             except TypeError:
