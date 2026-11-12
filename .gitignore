@@ -3,7 +3,6 @@ __pycache__/
 dist/
 build/
 .xtools/
-*zlib_build/
 src/bgen/*.cpp
 src/bgen/*.so
 benchmark.py

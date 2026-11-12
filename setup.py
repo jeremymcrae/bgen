@@ -9,7 +9,6 @@ import sys
 from Cython.Build import cythonize
 
 ROOT = Path(__file__).resolve().parent
-ZLIB_DIR = str(ROOT / 'zlib_build')
 
 EXTRA_COMPILE_ARGS = []
 # -ffp-contract=off avoids fused multiply-adds (e.g. on aarch64), so decoded floats are
@@ -24,14 +23,16 @@ elif sys.platform == "win32":
 def flatten(*lists):
     return [str(x) for sublist in lists for x in sublist]
 
-def build_zlib():
+def build_zlib(build_dir):
     ''' compile zlib-ng into a static library to link with
+    
+    Args:
+        build_dir: folder to build in, which also gets the generated zlib.h
     
     Returns:
         list holding the path to the static library
     '''
     source_dir = ROOT / 'src' / 'zlib-ng'
-    build_dir = Path(ZLIB_DIR)
     cmd = ['cmake', '-S', source_dir, '-B', build_dir,
         '-DZLIB_COMPAT=ON',
         '-DZLIB_ENABLE_TESTS=OFF',
@@ -117,8 +118,11 @@ class build_ext_subclass(build_ext):
             'zstd', lib_type='static')
         if not zstd.exists():
             raise RuntimeError(f'the zstd static library is missing from {zstd}')
-        zlib = build_zlib()
+        # built alongside the other temporary files, rather than in the source tree
+        zlib_dir = Path(self.build_temp) / 'zlib-ng'
+        zlib = build_zlib(zlib_dir)
         for ext in self.extensions:
+            ext.include_dirs.append(str(zlib_dir))
             ext.extra_objects = [str(zstd)] + zlib
         super().build_extensions()
 
@@ -133,7 +137,7 @@ extensions = [
             'src/streaming.cpp',
             'src/utils.cpp',
             'src/variant.cpp'],
-        include_dirs=['src', 'src/zstd/lib', ZLIB_DIR],
+        include_dirs=['src', 'src/zstd/lib'],
         language='c++'),
     Extension('bgen.writer',
         extra_compile_args=EXTRA_COMPILE_ARGS,
@@ -142,7 +146,7 @@ extensions = [
             'src/genotypes.cpp',
             'src/utils.cpp',
             ],
-        include_dirs=['src', 'src/zstd/lib', ZLIB_DIR],
+        include_dirs=['src', 'src/zstd/lib'],
         language='c++'),
     ]
 
