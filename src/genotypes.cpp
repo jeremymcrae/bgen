@@ -100,9 +100,14 @@ static void zlib_uncompress(char * input, std::uint32_t compressed_len,
   if (inflateInit(&infstream) != Z_OK) {
     throw std::runtime_error("cannot allocate a zlib decompression stream");
   }
-  inflate(&infstream, Z_NO_FLUSH);
+  int ret = inflate(&infstream, Z_FINISH);
   inflateEnd(&infstream);
   
+  // the stream only ends once its checksum has been verified
+  if (ret != Z_STREAM_END) {
+    throw std::invalid_argument("zlib decompression failed - the data is corrupt, or "
+                                "decompresses to more than its stated length");
+  }
   if (decompressed_len != infstream.total_out) {
     throw std::invalid_argument("zlib decompression gave data of wrong length");
   }

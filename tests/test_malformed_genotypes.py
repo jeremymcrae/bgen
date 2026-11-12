@@ -322,6 +322,24 @@ class TestMalformedGenotypes(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         var.probabilities
 
+    def test_zlib_checksum_mismatch(self):
+        ''' a zlib block whose data decompresses in full but fails its checksum is rejected
+        '''
+        for layout in [1, 2]:
+            with self.subTest(layout=layout):
+                path = write_bgen(self.tmpdir / 'a.bgen', 20, compression='zlib',
+                                  layout=layout)
+                # the adler32 checksum ends the zlib stream, and so the variant
+                with BgenReader(path) as bfile:
+                    checksum = next(iter(bfile)).next_variant_offset - 4
+                (value, ) = struct.unpack_from('<I', path.read_bytes(), checksum)
+                patched(path, [(checksum, '<I', value ^ 1)])
+
+                with BgenReader(path) as bfile:
+                    var = next(iter(bfile))
+                    with self.assertRaises(ValueError):
+                        var.probabilities
+
     def test_block_too_short_for_decompressed_length(self):
         ''' a compressed block shorter than its own length field is rejected
 
