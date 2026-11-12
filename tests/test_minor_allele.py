@@ -82,12 +82,7 @@ class TestMinorAllele(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.tmpdir = Path(self.tmp.name)
-
-    def tearDown(self):
-        try:
-            self.tmp.cleanup()
-        except:
-            pass
+        self.addCleanup(self.tmp.cleanup)
 
     def write(self, path, geno, ploidy=2):
         ''' write a single variant bgen and hand back the parsed variant
