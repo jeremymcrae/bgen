@@ -1,9 +1,10 @@
 # bgen code
-include src/bgen/*.cpp
 include src/bgen/*.py
 include src/bgen/*.pyi
 include src/bgen/*.pyx
 include src/bgen/py.typed
+# cython generates these while building, so a copy here could be stale
+exclude src/bgen/*.cpp
 include src/*.h
 include src/*.cpp
 recursive-include src/zstd/lib/ *.h
