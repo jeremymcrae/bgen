@@ -1,5 +1,6 @@
 
 
+import contextlib
 from pathlib import Path
 import unittest
 import tempfile
@@ -42,6 +43,26 @@ def probs_close(orig, updat, bit_depth):
     # error is sufficiently low, of if they differ by less than 1 part in 10 million
     matched = matched | (delta <= max_delta) | (delta < 1e-7)
     return matched.all()
+
+@contextlib.contextmanager
+def collect_logs():
+    ''' gather the messages logged within the block
+
+    Unlike assertLogs, this allows none, and assertNoLogs needs python 3.10
+    '''
+    messages = []
+
+    class Collect(logging.Handler):
+        def emit(self, record):
+            messages.append(record.getMessage())
+
+    handler = Collect()
+    logger = logging.getLogger()
+    logger.addHandler(handler)
+    try:
+        yield messages
+    finally:
+        logger.removeHandler(handler)
 
 class TestBgenWriter(unittest.TestCase):
     ''' class to make sure bgen.BgenWriter works correctly
@@ -258,23 +279,12 @@ class TestBgenWriter(unittest.TestCase):
     def _collect_warnings(self, geno, bit_depth, **kwargs):
         ''' write a variant and return the bit_depth warnings it logged
         '''
-        messages = []
-
-        class Collect(logging.Handler):
-            def emit(self, record):
-                messages.append(record.getMessage())
-
-        path = self.tmpdir / f'warn_{bit_depth}_{len(messages)}_{id(geno)}.bgen'
-        handler = Collect()
-        logger = logging.getLogger()
-        logger.addHandler(handler)
-        try:
+        path = self.tmpdir / f'warn_{bit_depth}_{id(geno)}.bgen'
+        with collect_logs() as messages:
             with BgenWriter(path, geno.shape[0],
                             samples=[f's{i}' for i in range(geno.shape[0])]) as bfile:
                 bfile.add_variant('var1', 'rs1', 'chr1', 10, ['A', 'C'], geno,
                                   bit_depth=bit_depth, **kwargs)
-        finally:
-            logger.removeHandler(handler)
         return [x for x in messages if 'bit_depth' in x]
 
     def test_coarse_bit_depth_warns(self):
@@ -913,21 +923,10 @@ class TestBgenWriter(unittest.TestCase):
     def _read_warnings(self, path, prop):
         ''' read every variant via prop and return the malformed-bgen warnings logged
         '''
-        messages = []
-
-        class Collect(logging.Handler):
-            def emit(self, record):
-                messages.append(record.getMessage())
-
-        handler = Collect()
-        logger = logging.getLogger()
-        logger.addHandler(handler)
-        try:
+        with collect_logs() as messages:
             with BgenReader(path, delay_parsing=True) as bfile:
                 for var in bfile:
                     getattr(var, prop)
-        finally:
-            logger.removeHandler(handler)
         return [x for x in messages if 'malformed' in x]
 
     def test_reading_probabilities_above_maximum_warns(self):
@@ -1077,20 +1076,10 @@ class TestBgenWriter(unittest.TestCase):
         with BgenReader(path, delay_parsing=True) as bfile:
             variants = list(bfile)
             variants[2].probabilities          # trips the flag
-            messages = []
-
-            class Collect(logging.Handler):
-                def emit(self, record):
-                    messages.append(record.getMessage())
-
-            handler = Collect()
-            logging.getLogger().addHandler(handler)
-            try:
+            with collect_logs() as messages:
                 for _ in range(3):
                     variants[0].probabilities
                     variants[4].probabilities
-            finally:
-                logging.getLogger().removeHandler(handler)
             self.assertEqual([x for x in messages if 'malformed' in x], [],
                              'a valid variant warned after a malformed one was read')
 
@@ -1841,21 +1830,9 @@ class TestBgenWriter(unittest.TestCase):
         for alleles in [['A', 'C'], ['a', 'A'], ['GT', 'GA']]:
             with self.subTest(alleles=alleles):
                 path = self.tmpdir / 'distinct.bgen'
-                # assertNoLogs needs python 3.10, so collect the records directly
-                messages = []
-
-                class Collect(logging.Handler):
-                    def emit(self, record):
-                        messages.append(record.getMessage())
-
-                handler = Collect()
-                logger = logging.getLogger()
-                logger.addHandler(handler)
-                try:
+                with collect_logs() as messages:
                     with BgenWriter(path, 2, samples=['a', 'b']) as bfile:
                         bfile.add_variant('var1', 'rs1', 'chr1', 10, alleles, geno)
-                finally:
-                    logger.removeHandler(handler)
                 self.assertEqual([x for x in messages if 'duplicate' in x], [])
                 with BgenReader(path) as bfile:
                     self.assertEqual(list(next(iter(bfile)).alleles), alleles)
