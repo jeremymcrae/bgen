@@ -12,6 +12,9 @@ class Index:
     def __init__(self, path: Union[str, os.PathLike[str]]) -> None:
         logging.debug(f'opening bgen index: {path}')
         self.path = str(path)
+        # sqlite would otherwise create an empty database at a missing path
+        if not os.path.isfile(self.path):
+            raise FileNotFoundError(f'bgen index not found: {self.path}')
         self.conn = sqlite3.connect(self.path)
         
         self._offsets: Optional[NDArray[np.uint64]] = None

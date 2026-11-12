@@ -217,3 +217,11 @@ class TestBgenIndex(unittest.TestCase):
                     expected = list(values)
                     values.append(None)
                     self.assertEqual(getattr(bfile, name)(), expected)
+    
+    def test_missing_index_is_not_created(self):
+        ''' opening an index which does not exist fails, rather than making one '''
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'missing.bgen.bgi'
+            with self.assertRaises(FileNotFoundError):
+                Index(path)
+            self.assertFalse(path.exists())
