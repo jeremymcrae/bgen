@@ -4,6 +4,7 @@
 #include <cstring>
 #include <cmath>
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
@@ -274,10 +275,27 @@ static void zlib_compress(const std::uint8_t * input, std::size_t input_len,
   output.resize(strm.total_out);
 }
 
+// get a zstd compression context to reuse across variants, which avoids allocating one
+// per call. It is thread_local, as in borrow_zstd_dctx
+static ZSTD_CCtx * borrow_zstd_cctx() {
+  struct Deleter {
+    void operator()(ZSTD_CCtx * ctx) const { ZSTD_freeCCtx(ctx); }
+  };
+  static thread_local std::unique_ptr<ZSTD_CCtx, Deleter> ctx;
+  if (!ctx) {
+    ctx.reset(ZSTD_createCCtx());
+    if (!ctx) {
+      throw std::runtime_error("cannot allocate a zstd compression context");
+    }
+  }
+  return ctx.get();
+}
+
 // compress a char array with zstd
 static void zstd_compress(const std::uint8_t * input, std::size_t input_len,
                           std::vector<char> &output) {
-  std::size_t total_out = ZSTD_compress(&output[0], output.size(), input, input_len, 3);
+  std::size_t total_out = ZSTD_compressCCtx(borrow_zstd_cctx(), &output[0], output.size(),
+                                            input, input_len, 3);
 
   if (ZSTD_isError(total_out)) {
     throw(std::invalid_argument("zstd compression encountered an error"));
