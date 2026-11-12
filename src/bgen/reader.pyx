@@ -43,12 +43,12 @@ cdef extern from 'utils.h' namespace 'bgen':
 cdef extern from 'variant.h' namespace 'bgen':
     cdef cppclass Variant:
         # declare class constructor and methods
-        Variant(shared_ptr_istream handle, uint64_t offset, int layout, int compression, int expected_n, bool is_stdin) except +
+        Variant(shared_ptr_istream handle, uint64_t offset, int layout, int compression, uint32_t expected_n, bool is_stdin) except +
         void minor_allele_dosage(float * dosage) except +
         void alt_dosage(float * dosage) except +
         string get_minor_allele() except +
         void probs_1d(float * dosage) except +
-        int probs_per_sample() except +
+        uint32_t probs_per_sample() except +
         bool phased() except +
         int min_ploidy() except +
         int max_ploidy() except +
@@ -200,7 +200,8 @@ cdef class BgenVar:
     '''
     cdef Variant * thisptr
     cdef IStream handle
-    cdef int _layout, _compression, expected_n
+    cdef int _layout, _compression
+    cdef uint32_t expected_n
     cdef bool is_stdin
     cdef OpenStatus is_open
     def __cinit__(self,
@@ -208,7 +209,7 @@ cdef class BgenVar:
                   uint64_t offset,
                   int layout,
                   int compression,
-                  int expected_n,
+                  uint32_t expected_n,
                   bool is_stdin,
                   OpenStatus is_open,
                   ):
@@ -384,7 +385,7 @@ cdef class BgenVar:
         ''' get the allelic probabilities for a variant
         '''
         self.__check_closed()
-        cdef int cols = self.thisptr.probs_per_sample()
+        cdef uint32_t cols = self.thisptr.probs_per_sample()
         cdef uint32_t n_samples = self.expected_n
         cdef uint64_t size = <uint64_t> n_samples * cols
         cdef uint8_t * ploidy = NULL

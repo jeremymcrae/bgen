@@ -36,7 +36,7 @@ static void read_checked_string(std::istream & handle, std::string & value) {
 ///  @param layout bgen layout version (1 or 2)
 ///  @param compression compression scheme (0=no compression, 1=zlib, 2=zstd)
 ///  @param expected_n number of samples for variant
-Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset, int layout, int compression, int expected_n, bool is_stdin) : handle(std::move(_handle)) {
+Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset, int layout, int compression, std::uint32_t expected_n, bool is_stdin) : handle(std::move(_handle)) {
   offset = varoffset;
   if (!is_stdin) {
     handle->clear();
@@ -53,7 +53,7 @@ Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset,
     n_samples = expected_n;
   }
   
-  if ((int) n_samples != expected_n) {
+  if (n_samples != expected_n) {
     throw std::invalid_argument("number of samples doesn't match");
   }
   
@@ -88,7 +88,7 @@ Variant::Variant(std::shared_ptr<std::istream> _handle, std::uint64_t varoffset,
   next_variant_offset = geno_offset + length;
 }
 
-int Variant::probs_per_sample() {
+std::uint32_t Variant::probs_per_sample() {
   geno.load_data_and_parse_header();
   return geno.max_probs;
 }

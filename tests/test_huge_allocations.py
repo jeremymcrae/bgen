@@ -228,10 +228,21 @@ class TestHugeAllocations(unittest.TestCase):
         ''' a dosage array is not sized from a sample count the variant cannot back
         '''
         path = self._drop_sample_ids(self._write(self.tmpdir / 'dose.bgen'))
-        for claim in [500_000_000, 2_000_000_000]:
+        for claim in [500_000_000, 2_000_000_000, 0xFFFFFFF0]:
             with self.subTest(claim=claim):
                 bad = self._claim(path, 12, claim, f'dose{claim}.bgen')
                 self._assert_rejected(run_capped(bad, 'dosage'))
+
+    def test_sample_count_above_int_max_is_read(self):
+        ''' a sample count above INT_MAX reaches the variant intact, and is then rejected
+        '''
+        path = self._drop_sample_ids(self._write(self.tmpdir / 'wide.bgen'))
+        bad = self._claim(path, 12, 0xFFFFFFF0, 'wide_claim.bgen')
+        with BgenReader(bad, delay_parsing=True) as bfile:
+            var = next(iter(bfile))
+            self.assertEqual(var.n_samples, 0xFFFFFFF0)
+            with self.assertRaises(ValueError):
+                var.probabilities
 
     @unittest.skipIf(sys.platform == 'win32', 'needs resource, to measure peak memory')
     def test_overstated_header_length_is_not_allocated(self):
