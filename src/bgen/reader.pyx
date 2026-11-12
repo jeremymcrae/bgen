@@ -82,11 +82,11 @@ cdef extern from 'header.h' namespace 'bgen':
 cdef extern from 'reader.h' namespace 'bgen':
     cdef cppclass CppBgenReader:
         # declare class constructor and methods
-        CppBgenReader(string path, string sample_path, bool delay_parsing) except +
+        CppBgenReader(const string &path, const string &sample_path, bool delay_parsing) except +
         void close_stream() except +
         uint64_t first_variant_offset()
         void parse_all_variants() except +
-        void drop_variants(vector[int] indices) except +
+        void drop_variants(const vector[int] &indices) except +
         
         # declare public attributes
         shared_ptr_istream handle
