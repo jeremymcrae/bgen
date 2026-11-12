@@ -390,7 +390,7 @@ void Genotypes::parse_header() {
     idx += sizeof(std::uint32_t);
     std::uint16_t allele_check = load<std::uint16_t>(&uncompressed[idx]);
     idx += sizeof(std::uint16_t);
-    if (nn_samples != (std::uint32_t) n_samples) {
+    if (nn_samples != n_samples) {
       throw std::invalid_argument("number of samples doesn't match!");
     }
     if (allele_check != n_alleles) {
@@ -415,7 +415,7 @@ void Genotypes::parse_header() {
   if (layout == 2) {
     phased = (bool) load<std::uint8_t>(&uncompressed[idx]);
     idx += sizeof(std::uint8_t);
-    bit_depth = (int) load<std::uint8_t>(&uncompressed[idx]);
+    bit_depth = load<std::uint8_t>(&uncompressed[idx]);
     if ((bit_depth < 1) | (bit_depth > 32)) {
       throw std::invalid_argument("probabilities bit depth out of bounds");
     }
@@ -483,7 +483,7 @@ void Genotypes::materialise_ploidy() {
 ///
 /// @return 1D float array of genotype probabilties (each from 0.0-1.0).
 void Genotypes::probabilities_layout1(const char * data, float * probs, std::uint32_t nrows) {
-  float factor = 1.0 / 32768;
+  float factor = 1.0f / 32768;
   for (std::uint32_t offset=0; offset<nrows * max_probs; offset+=max_probs) {
     probs[offset] = load<std::uint16_t>(data) * factor;
     probs[offset + 1] = load<std::uint16_t>(data + 2) * factor;
@@ -676,7 +676,7 @@ void Genotypes::probabilities_layout2(const char * data, float * probs, std::uin
       if (varies) {
         n_probs = ploidy_probs[ploidy[row]] - 1;
       }
-      float remainder = 1.0;
+      float remainder = 1.0f;
       for (std::uint32_t x=0; x<n_probs; x++) {
         float prob = next_value(data, bit_idx, bit_depth, probs_mask) * factor;
         remainder -= prob;
