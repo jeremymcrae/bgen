@@ -1,4 +1,5 @@
 
+from fractions import Fraction
 from pathlib import Path
 import tempfile
 import unittest
@@ -334,3 +335,31 @@ class TestBgenIndex(unittest.TestCase):
                     with self.subTest(name=name):
                         with self.assertRaisesRegex(ValueError, 'truncated'):
                             lookup()
+    
+    def test_fetch_rejects_bounds_and_chromosomes_sqlite_would_misread(self):
+        ''' text bounds raise, rather than sqlite ranking them above every position
+
+        An integer chromosome is converted to text, as sqlite converts a python int, so a
+        numpy integer finds the same variants.
+        '''
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'chrom.bgen'
+            geno = np.full((2, 3), 1 / 3)
+            with BgenWriter(path, 2) as bfile:
+                for i, pos in enumerate([10, 2000, 30000]):
+                    bfile.add_variant(f'v{i}', f'rs{i}', '1', pos, ['A', 'C'], geno)
+            with BgenReader(path) as bfile:
+                fetched = lambda *args: [x.varid for x in bfile.fetch(*args)]
+                for chrom in ['1', 1, np.int64(1)]:
+                    with self.subTest(chrom=chrom):
+                        self.assertEqual(fetched(chrom), ['v0', 'v1', 'v2'])
+                for chrom in [1.0, b'1', None]:
+                    with self.subTest(chrom=chrom):
+                        with self.assertRaises(TypeError):
+                            fetched(chrom)
+                for stop in ['1000', '10kb']:
+                    with self.subTest(stop=stop):
+                        with self.assertRaises(TypeError):
+                            fetched('1', None, stop)
+                self.assertEqual(fetched('1', None, Fraction(10 ** 400, 3)),
+                                 ['v0', 'v1', 'v2'])

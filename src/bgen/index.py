@@ -71,18 +71,33 @@ def _bound(value):
     ''' a region bound as a python number which sqlite compares with positions
 
     numpy scalars would otherwise bind as blobs, and an int beyond 64 bits cannot bind
-    at all. Positions are 32-bit, so clamping just outside that range changes nothing
+    at all. Positions are 32-bit, so clamping just outside that range changes nothing,
+    and clamping before converting keeps a huge fraction from overflowing a float
     '''
-    if isinstance(value, numbers.Integral):
-        value = int(value)
-    elif isinstance(value, numbers.Real):
-        value = float(value)
-    else:
-        return value
+    if not isinstance(value, numbers.Real):
+        # sqlite ranks text above every number, so a bound like '10kb' would
+        # silently take in the whole chromosome
+        raise TypeError(f'region bounds must be numbers, not {type(value).__name__}')
     if value != value:
         # nan, which no position satisfies
-        return value
-    return min(max(value, -1), MAX_POSITION + 1)
+        return float(value)
+    if value < -1:
+        return -1
+    if value > MAX_POSITION + 1:
+        return MAX_POSITION + 1
+    return int(value) if isinstance(value, numbers.Integral) else float(value)
+
+def _chromosome(chrom) -> str:
+    ''' a chromosome as the string it is stored as
+
+    An integer is converted, as sqlite would convert a python int, so that a numpy
+    integer works too, rather than binding as a blob which matches nothing
+    '''
+    if isinstance(chrom, str):
+        return chrom
+    if isinstance(chrom, numbers.Integral):
+        return str(int(chrom))
+    raise TypeError(f'chromosome must be a string, not {type(chrom).__name__}')
 
 class Index:
     def __init__(self, path: Union[str, os.PathLike[str]]) -> None:
@@ -126,7 +141,7 @@ class Index:
         # only bound the ends which are given, since comparing a position against a
         # NULL bound is never true in sqlite
         query = 'SELECT file_start_position FROM Variant WHERE chromosome=?'
-        params = [chrom]
+        params = [_chromosome(chrom)]
         if start is not None:
             query += ' AND position >= ?'
             params.append(_bound(start))
