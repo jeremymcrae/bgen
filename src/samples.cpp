@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
-#include <sstream>
 #include <stdexcept>
 
 #include "samples.h"
@@ -74,66 +73,43 @@ Samples::Samples(std::istream * handle, std::uint32_t n_samples,
 
 /// initialize from external sample file
 Samples::Samples(std::string path, std::uint32_t n_samples) {
-  // binary, so the offsets below are the offsets on disk. In text mode windows folds
-  // \r\n into \n, so the read asks for more than the translated stream can supply
+  // binary, so a windows line ending stays on the line, and is dropped with the other
+  // columns below
   std::ifstream handle(path, std::ios::in | std::ios::binary);
   if (!handle) {
     throw std::invalid_argument("error with sample file: '" + path + "'");
   }
   
-  // read first two header lines
-  std::string header;
-  std::getline(handle, header, '\n');
-  std::string types;
-  std::getline(handle, types, '\n');
+  // skip the two header lines
+  std::string line;
+  std::getline(handle, line, '\n');
+  std::getline(handle, line, '\n');
   
-  // find the file length post header, then read it all in to memory
-  std::string lines;
-  if (handle) {
-    // Only measure when both header lines were there, since tellg() returns -1 on a
-    // failed stream. Leaving lines empty lets the sample count check report it
-    auto pos = handle.tellg();
-    handle.seekg(0, std::ios::end);
-    auto end_pos = handle.tellg();
-    if ((pos >= 0) && (end_pos > pos)) {
-      std::uint64_t fsize = (std::uint64_t) (end_pos - pos);
-      lines.resize(fsize);
-      handle.seekg(pos);
-      if (!handle.read(&lines[0], fsize)) {
-        throw std::invalid_argument("error reading sample file: '" + path + "'");
-      }
-    }
-  }
-  
-  // As above, the count cannot be trusted to size the allocation. Every ID needs at
-  // least a character and a line ending, so the text read from the sample file
-  // bounds how many it can hold
-  samples.reserve(std::min<std::size_t>(n_samples, lines.size() / 2));
-  std::istringstream iss(lines);
+  // as above, the count cannot be trusted to size the allocation
+  samples.reserve(std::min((std::uint64_t) n_samples, MAX_ID_RESERVE));
   
   // run through all lines and get the first column as sample_id
-  std::uint32_t idx = 0;
-  std::string line;
-  while (std::getline(iss, line, '\n')) {
+  while (std::getline(handle, line, '\n')) {
     // the .sample format is whitespace delimited, so take the first column, which also
     // drops any carriage return a windows file left on the end of the line
     std::string id = line.substr(0, line.find_first_of(" \t\r"));
     
-    // skip empty lines. Reading in binary leaves a lone \r as the whole of a blank
-    // windows line, and std::getline() on win32 at end of file can produce a string of
-    // null characters, so test the extracted ID rather than the raw line
+    // skip empty lines, which includes the lone \r of a blank windows line, and lines
+    // starting with a null character
     if ((id.size() == 0) || (id[0] == 0)) {
       continue;
     }
     
-    if (idx >= n_samples) {
+    if (samples.size() >= n_samples) {
       throw std::invalid_argument("inconsistent number of samples");
     }
-    samples.push_back(id);
-    idx += 1;
+    samples.push_back(std::move(id));
+  }
+  if (handle.bad()) {
+    throw std::invalid_argument("error reading sample file: '" + path + "'");
   }
   
-  if (idx != n_samples) {
+  if (samples.size() != n_samples) {
     throw std::invalid_argument("inconsistent number of samples");
   }
 }
