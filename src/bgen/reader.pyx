@@ -14,7 +14,7 @@ from libc.string cimport memcpy
 
 import numpy as np
 
-from bgen.index import Index, lookup_key, NO_MATCH, EXACT
+from bgen.index import Index, lookup_key
 
 # Random access needs to seek to a variant's offset, which a stream cannot do, so the
 # only way through a pipe is to iterate
@@ -708,27 +708,21 @@ cdef class BgenReader:
     
     cdef list _matching(self, key, bint by_rsid):
         ''' indices of the parsed variants whose rsID, or else position, equals a key
-        
-        A key with a value to look up is compared against the parsed variants
-        directly, rather than decoding every variant's value to compare in python.
-        lookup_key decides which keys those are, as it does for the index
+
+        Compared against the parsed variants directly, rather than decoding every
+        variant's value into python, using the same lookup_key rules as the index
         '''
+        value = lookup_key(key, by_rsid)
+        if value is None:
+            return []
         cdef size_t n = self.thisptr.variants.size()
         cdef string rsid
         cdef uint32_t pos
-        kind, value = lookup_key(key, by_rsid)
-        if kind == NO_MATCH:
-            return []
-        if kind == EXACT:
-            if by_rsid:
-                rsid = value.encode('utf8')
-                return [i for i in range(n) if self.thisptr.variants[i].rsid == rsid]
-            pos = value
-            return [i for i in range(n) if self.thisptr.variants[i].pos == pos]
-        
-        # a key with its own == compares against the decoded values
-        values = self.rsids() if by_rsid else self.positions()
-        return [i for i, x in enumerate(values) if x == key]
+        if by_rsid:
+            rsid = value.encode('utf8')
+            return [i for i in range(n) if self.thisptr.variants[i].rsid == rsid]
+        pos = value
+        return [i for i in range(n) if self.thisptr.variants[i].pos == pos]
     
     def with_rsid(self, rsid):
         ''' get BgenVar from file given an rsID

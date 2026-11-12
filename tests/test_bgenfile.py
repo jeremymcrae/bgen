@@ -85,13 +85,6 @@ class TestBgenReader(unittest.TestCase):
             self.assertEqual(bfile.with_rsid(1), [])
             self.assertEqual(bfile.with_rsid(b'rs1'), [])
             self.assertEqual(bfile.with_rsid(np.int64(1)), [])
-            
-            class Equal:
-                ''' a key which only its own == can compare '''
-                def __eq__(self, other):
-                    return other == 'rs2'
-            
-            self.assertEqual([x.varid for x in bfile.with_rsid(Equal())], ['v2'])
             for pos in [10, np.int64(10), 10.0, np.float64(10.0), np.float32(10.0)]:
                 with self.subTest(pos=pos):
                     self.assertEqual([x.varid for x in bfile.at_position(pos)],

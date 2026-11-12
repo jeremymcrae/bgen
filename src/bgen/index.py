@@ -29,43 +29,26 @@ def _whole_number(value) -> Optional[int]:
         return whole if whole == value else None
     return None
 
-# what a lookup key can match: nothing, one value to look up exactly, or whatever the
-# stored values say they equal, for a key whose == only it knows
-NO_MATCH, EXACT, COMPARE = range(3)
+def lookup_key(key, by_rsid: bool) -> Optional[Union[str, int]]:
+    ''' value to look up for an rsID or position key, or None if it cannot match
 
-def lookup_key(key, by_rsid):
-    ''' how to look up variants by a key, so that every lookup matches as == would
-
-    rsIDs are stored as strings, and positions as unsigned 32-bit integers. Comparing
-    other built in types against those can never succeed, whereas sqlite would convert
-    them, so that 1 matched the rsID '1'
-
-    Args:
-        key: rsID or position to look up
-        by_rsid: whether the key is an rsID, rather than a position
-
-    Returns:
-        tuple of NO_MATCH, EXACT or COMPARE, and the value to look up for EXACT
+    rsIDs are stored as UTF-8 strings, and positions as unsigned 32-bit integers.
+    Non-matching types return None rather than reaching sqlite, which would convert
+    an integer to text (so 1 matched the rsID '1') or bind numpy scalars as blobs.
     '''
     if by_rsid:
-        if isinstance(key, str):
-            try:
-                key.encode('utf8')
-            except UnicodeEncodeError:
-                # a stored rsID is valid utf8, so cannot equal this
-                return NO_MATCH, None
-            return EXACT, key
-        if isinstance(key, (numbers.Number, bytes, type(None))):
-            return NO_MATCH, None
-        return COMPARE, key
-    if isinstance(key, numbers.Number):
-        pos = _whole_number(key)
-        if pos is None or not 0 <= pos <= MAX_POSITION:
-            return NO_MATCH, None
-        return EXACT, pos
-    if isinstance(key, (str, bytes, type(None))):
-        return NO_MATCH, None
-    return COMPARE, key
+        if not isinstance(key, str):
+            return None
+        try:
+            key.encode('utf8')
+        except UnicodeEncodeError:
+            # a stored rsID is valid utf8, so cannot equal this
+            return None
+        return key
+    pos = _whole_number(key)
+    if pos is None or not 0 <= pos <= MAX_POSITION:
+        return None
+    return pos
 
 def _bound(value):
     ''' a region bound as a python number which sqlite compares with positions
@@ -175,13 +158,9 @@ class Index:
         
         In file order, as a bgen without an index gives them
         '''
-        kind, value = lookup_key(key, by_rsid)
-        if kind == NO_MATCH:
+        value = lookup_key(key, by_rsid)
+        if value is None:
             return []
-        if kind == COMPARE:
-            values = self.rsids if by_rsid else self.positions
-            offsets = self._load_offsets()
-            return [int(offsets[i]) for i, x in enumerate(values) if x == key]
         column = 'rsid' if by_rsid else 'position'
         query = (f"SELECT file_start_position FROM Variant WHERE {column} = ? "
                  "ORDER BY file_start_position")
